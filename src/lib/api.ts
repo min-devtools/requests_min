@@ -81,21 +81,21 @@ export const api = {
   reqWrite: (collectionId: string, relPath: string, request: Request) => mutated(invoke<void>("req_write", { collectionId, relPath, request })),
   reqDelete: (collectionId: string, relPath: string) => mutated(invoke<void>("req_delete", { collectionId, relPath })),
   reqMove: (collectionId: string, from: string, to: string) => mutated(invoke<void>("req_move", { collectionId, from, to })),
-  envList: (collectionId: string) => invoke<string[]>("env_list", { collectionId }),
-  envRead: (collectionId: string, env: string) => invoke<Record<string, string>>("env_read", { collectionId, env }),
-  envWrite: (collectionId: string, env: string, vars: Record<string, string>) => mutated(invoke<void>("env_write", { collectionId, env, vars })),
-  envDelete: (collectionId: string, env: string) => mutated(invoke<void>("env_delete", { collectionId, env })),
-  secretRead: (collectionId: string, env: string) => invoke<Record<string, string>>("secret_read", { collectionId, env }),
-  secretWrite: (collectionId: string, env: string, vars: Record<string, string>) => invoke<void>("secret_write", { collectionId, env, vars }),
-  httpRequest: (collectionId: string, env: string | null, request: Request) =>
-    invoke<HttpResponse>("http_request", { collectionId, env, request }),
+  envList: () => invoke<string[]>("env_list"),
+  envRead: (env: string) => invoke<Record<string, string>>("env_read", { env }),
+  envWrite: (env: string, vars: Record<string, string>) => mutated(invoke<void>("env_write", { env, vars })),
+  envDelete: (env: string) => mutated(invoke<void>("env_delete", { env })),
+  secretRead: (env: string) => invoke<Record<string, string>>("secret_read", { env }),
+  secretWrite: (env: string, vars: Record<string, string>) => invoke<void>("secret_write", { env, vars }),
+  httpRequest: (env: string | null, request: Request) =>
+    invoke<HttpResponse>("http_request", { env, request }),
   wsConnect: (sessionId: string, url: string, headers: KV[]) => invoke<void>("ws_connect", { sessionId, url, headers }),
   wsSend: (sessionId: string, text: string) => invoke<void>("ws_send", { sessionId, text }),
   wsClose: (sessionId: string) => invoke<void>("ws_close", { sessionId }),
   grpcDescribe: (endpoint: string | null, protoFiles: string[], insecure: boolean) =>
     invoke<GrpcCatalog>("grpc_describe", { endpoint, protoFiles, insecure }),
-  grpcUnary: (collectionId: string, env: string | null, part: GrpcPart) =>
-    invoke<GrpcResponse>("grpc_unary", { collectionId, env, part }),
+  grpcUnary: (env: string | null, part: GrpcPart) =>
+    invoke<GrpcResponse>("grpc_unary", { env, part }),
   importCurl: (text: string) => invoke<Request>("import_curl", { text }),
   importPostman: (text: string) => invoke<CollectionDraft>("import_postman", { text }),
   importOpenapi: (text: string) => invoke<CollectionDraft>("import_openapi", { text }),

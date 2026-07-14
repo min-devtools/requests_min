@@ -1,21 +1,43 @@
 import { useEffect, useMemo, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { Icon } from "../../ui/Icon";
 import { ToolButton } from "../../ui/ToolButton";
 import { KvEditor } from "../../ui/KvEditor";
 import { JsonEditor } from "../../ui/JsonEditor";
 import { JsonView } from "../../ui/JsonView";
 import { JsonResponseViewer } from "../../ui/JsonResponseViewer";
+import { EnvInput } from "../../ui/EnvInput";
+import { Combobox } from "../../ui/Combobox";
 import { startResize } from "../ResizeHandles";
 import { useApp } from "../../store";
 import {
   api, emptyGrpc, emptyHttp, emptyWs, onWsEvent,
-  type GrpcCatalog, type Request,
+  type GrpcCatalog, type KV, type Request,
 } from "../../lib/api";
+
+// URL <-> Params two-way sync (Postman-style). Params are canonical for send (backend
+// appends them to the base url); the URL bar is a derived view. Raw (no encoding) so
+// {{vars}} stay readable — the backend encodes at send.
+const splitUrl = (url: string) => {
+  const q = url.indexOf("?");
+  return q === -1 ? { base: url, query: "" } : { base: url.slice(0, q), query: url.slice(q + 1) };
+};
+const queryToParams = (query: string): KV[] =>
+  query === "" ? [] : query.split("&").map((seg) => {
+    const eq = seg.indexOf("=");
+    return eq === -1 ? { key: seg, value: "", enabled: true } : { key: seg.slice(0, eq), value: seg.slice(eq + 1), enabled: true };
+  });
+const paramsToQuery = (params: KV[]): string =>
+  params.filter((p) => p.enabled !== false && (p.key || p.value)).map((p) => `${p.key}=${p.value}`).join("&");
+const fullUrl = (base: string, params: KV[]): string => {
+  const q = paramsToQuery(params);
+  return q ? `${splitUrl(base).base}?${q}` : base;
+};
 
 function buildCurl(request: Request): string {
   if (!request.http) return "";
   const h = request.http;
-  const parts = [`curl -X ${h.method} '${h.url}'`];
+  const parts = [`curl -X ${h.method} '${fullUrl(h.url, h.params)}'`];
   for (const kv of h.headers) if (kv.enabled !== false && kv.key) parts.push(`-H '${kv.key}: ${kv.value}'`);
   if (h.auth.type === "bearer" && h.auth.token) parts.push(`-H 'Authorization: Bearer ${h.auth.token}'`);
   if (h.body.type === "json" && h.body.content) parts.push(`-d '${h.body.content.replace(/'/g, "'\\''")}'`);
@@ -28,13 +50,26 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
   const updateRequestTab = useApp((s) => s.updateRequestTab);
   const showToast = useApp((s) => s.showToast);
   const [editorTab, setEditorTab] = useState<"body" | "headers" | "auth" | "params" | "metadata">("body");
+  const [urlDraft, setUrlDraft] = useState<string | null>(null); // local while typing the URL, so it isn't reformatted mid-edit
   const [responseTab, setResponseTab] = useState<"pretty" | "headers" | "raw">("pretty");
   const [catalog, setCatalog] = useState<GrpcCatalog | null>(null);
   const [describing, setDescribing] = useState(false);
   const [wsLog, setWsLog] = useState<{ dir: "out" | "in" | "sys"; text: string }[]>([]);
   const [wsConnected, setWsConnected] = useState(false);
   const [wsDraft, setWsDraft] = useState("");
+  const [variableNames, setVariableNames] = useState<string[]>([]);
   const wsSid = useMemo(() => `ws-${tabId}`, [tabId]);
+  const env = useApp((s) => s.activeEnv);
+  const envVersion = useApp((s) => s.envVersion);
+  const requestHorizontal = useApp((s) => s.requestHorizontal);
+  const toggleRequestLayout = useApp((s) => s.toggleRequestLayout);
+
+  useEffect(() => {
+    if (!env) { setVariableNames([]); return; }
+    Promise.all([api.envRead(env), api.secretRead(env)])
+      .then(([vars, secrets]) => setVariableNames([...new Set([...Object.keys(vars), ...Object.keys(secrets)])]))
+      .catch(() => setVariableNames([]));
+  }, [env, envVersion]);
 
   useEffect(() => {
     const p = onWsEvent(wsSid, (e) => {
@@ -61,12 +96,13 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
     });
   };
 
-  const describe = async () => {
+  const describe = async (selectedFiles?: string[]) => {
     if (!request.grpc) return;
     setDescribing(true);
     try {
-      const endpoint = request.grpc.protoSource === "reflection" ? request.grpc.endpoint : null;
-      const files = request.grpc.protoSource === "files" ? request.grpc.protoFiles : [];
+      const usingFiles = selectedFiles !== undefined || request.grpc.protoSource === "files";
+      const endpoint = usingFiles ? null : request.grpc.endpoint;
+      const files = selectedFiles ?? (usingFiles ? request.grpc.protoFiles : []);
       const c = await api.grpcDescribe(endpoint, files, request.grpc.insecure);
       setCatalog(c);
       showToast("Described", `${c.services.length} service(s) found.`);
@@ -74,6 +110,21 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
       showToast("Describe failed", String(err), "err");
     } finally {
       setDescribing(false);
+    }
+  };
+
+  const importProtoFiles = async () => {
+    try {
+      const selected = await open({
+        multiple: true,
+        filters: [{ name: "Protocol Buffers", extensions: ["proto"] }],
+      });
+      if (!selected || !request.grpc) return;
+      const files = Array.isArray(selected) ? selected : [selected];
+      update({ grpc: { ...request.grpc, protoSource: "files", protoFiles: files } });
+      await describe(files);
+    } catch (err) {
+      showToast("Import failed", String(err), "err");
     }
   };
 
@@ -99,9 +150,10 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
 
   const grpc = request.grpc;
   const selectedService = catalog?.services.find((s) => s.name === grpc?.service);
+  const horizontal = requestHorizontal && request.protocol !== "ws";
 
   return (
-    <section className={`content request-screen protocol-${request.protocol} ${active ? "active" : ""}`}>
+    <section className={`content request-screen protocol-${request.protocol} ${horizontal ? "layout-cols" : ""} ${active ? "active" : ""}`}>
       <div className="protocol-rail">
         <button type="button" className={`protocol-pill ${request.protocol === "http" ? "active" : ""}`} onClick={() => setProtocol("http")}>
           <span className="status-dot" /> REST
@@ -110,7 +162,7 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
           <span className="status-dot orange" /> gRPC
         </button>
         <button type="button" className={`protocol-pill ${request.protocol === "ws" ? "active" : ""}`} onClick={() => setProtocol("ws")}>
-          <span className="status-dot orange" /> WebSocket
+          <span className="status-dot purple" /> WebSocket
         </button>
         <span className="protocol-spacer" />
         <input
@@ -119,6 +171,11 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
           value={request.name}
           onChange={(e) => update({ name: e.target.value })}
         />
+        {request.protocol !== "ws" && (
+          <button type="button" className="tool-btn icon-only" title={requestHorizontal ? "Stack response below (rows)" : "Response beside editor (columns)"} aria-label="Toggle response layout" onClick={toggleRequestLayout}>
+            <Icon name={requestHorizontal ? "rows" : "panel-right"} />
+          </button>
+        )}
       </div>
 
       {request.protocol === "http" && request.http && (
@@ -127,8 +184,19 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
             <select className={`method-select method-${request.http.method.toLowerCase()}`} value={request.http.method} onChange={(e) => update({ http: { ...request.http!, method: e.target.value } })}>
               {["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].map((m) => <option key={m}>{m}</option>)}
             </select>
-            <input className="query-path-input" value={request.http.url} onChange={(e) => update({ http: { ...request.http!, url: e.target.value } })} placeholder="{{baseUrl}}/v1/resource" />
+            <EnvInput className="query-path-input"
+              value={urlDraft ?? fullUrl(request.http.url, request.http.params)}
+              onChange={(text) => {
+                // typing/pasting a query in the URL splits it live into the Params tab (and vice-versa, since the value is derived from params)
+                setUrlDraft(text);
+                const { base, query } = splitUrl(text);
+                update({ http: { ...request.http!, url: base, params: queryToParams(query) } });
+              }}
+              onBlur={() => setUrlDraft(null)}
+              placeholder="{{baseUrl}}/v1/resource" variableNames={variableNames} />
             <ToolButton className="request-copy" onClick={() => navigator.clipboard?.writeText(buildCurl(request)).then(() => showToast("Copied", "cURL command copied."))}><Icon name="copy" /> Copy cURL</ToolButton>
+            {/* pinned to the bottom edge of the head row; overlay, never a grid child (see .request-screen rows) */}
+            <div className={`req-progress ${rt.running ? "on" : ""}`}><span /></div>
           </div>
           <section className="editor-pane">
             <div className="editor-tabs">
@@ -136,23 +204,25 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
               <button type="button" className={editorTab === "headers" ? "active" : ""} onClick={() => setEditorTab("headers")}><Icon name="activity" size={13} /> Headers <span className="tab-count">{request.http.headers.length}</span></button>
               <button type="button" className={editorTab === "params" ? "active" : ""} onClick={() => setEditorTab("params")}><Icon name="key" size={13} /> Params <span className="tab-count">{request.http.params.length}</span></button>
               <button type="button" className={editorTab === "auth" ? "active" : ""} onClick={() => setEditorTab("auth")}><Icon name="key" size={13} /> Auth</button>
-              <span className="editor-meta"><span>{request.http.insecure ? "TLS verify off" : "TLS verify on"}</span></span>
-            </div>
-            {editorTab === "body" && (
-              <div className="body-editor">
+              {editorTab === "body" && (
                 <div className="body-type-tabs">
                   {(["none", "json", "text", "form"] as const).map((t) => (
                     <button key={t} type="button" className={request.http!.body.type === t ? "active" : ""}
                       onClick={() => update({ http: { ...request.http!, body: { ...request.http!.body, type: t } } })}>{t}</button>
                   ))}
                 </div>
+              )}
+            </div>
+            {editorTab === "body" && (
+              <div className="body-editor">
                 {request.http.body.type === "form" ? (
                   <KvEditor items={request.http.body.fields ?? []} onChange={(fields) => update({ http: { ...request.http!, body: { ...request.http!.body, fields } } })} />
                 ) : request.http.body.type !== "none" ? (
-                  <JsonEditor
-                    value={request.http.body.content ?? ""}
-                    onChange={(content) => update({ http: { ...request.http!, body: { ...request.http!.body, content } } })}
-                    language={request.http.body.type === "json" ? "json" : "plaintext"}
+                    <JsonEditor
+                      value={request.http.body.content ?? ""}
+                      onChange={(content) => update({ http: { ...request.http!, body: { ...request.http!.body, content } } })}
+                      language={request.http.body.type === "json" ? "json" : "plaintext"}
+                      variableNames={variableNames}
                   />
                 ) : <div className="empty-note">No body for this request.</div>}
               </div>
@@ -171,7 +241,7 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                   </select>
                 </div>
                 {request.http.auth.type === "bearer" && (
-                  <div className="form-row"><label>Token</label><input value={request.http.auth.token ?? ""} onChange={(e) => update({ http: { ...request.http!, auth: { ...request.http!.auth, token: e.target.value } } })} placeholder="{{accessToken}}" /></div>
+                  <div className="form-row"><label>Token</label><EnvInput value={request.http.auth.token ?? ""} onChange={(token) => update({ http: { ...request.http!, auth: { ...request.http!.auth, token } } })} placeholder="{{accessToken}}" variableNames={variableNames} /></div>
                 )}
                 {request.http.auth.type === "basic" && (
                   <>
@@ -200,43 +270,45 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
       {request.protocol === "grpc" && grpc && (
         <>
           <div className="request-head">
-            <select className="method-select" style={{ width: 100 }} value={grpc.protoSource} onChange={(e) => update({ grpc: { ...grpc, protoSource: e.target.value as any } })}>
+            <select className="method-select grpc-source-select" value={grpc.protoSource} onChange={(e) => update({ grpc: { ...grpc, protoSource: e.target.value as any } })}>
               <option value="reflection">reflection</option>
               <option value="files">.proto files</option>
             </select>
             {grpc.protoSource === "reflection" ? (
-              <input className="query-path-input" value={grpc.endpoint} onChange={(e) => update({ grpc: { ...grpc, endpoint: e.target.value } })} placeholder="{{grpcHost}}:50051" />
+              <EnvInput className="query-path-input" value={grpc.endpoint} onChange={(endpoint) => update({ grpc: { ...grpc, endpoint } })} placeholder="{{grpcHost}}:50051" variableNames={variableNames} />
             ) : (
-              <input className="query-path-input" value={grpc.protoFiles.join(", ")} onChange={(e) => update({ grpc: { ...grpc, protoFiles: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) } })} placeholder="/abs/path/a.proto, /abs/path/b.proto" />
-            )}
-            <ToolButton onClick={describe} disabled={describing}>{describing ? "Describing…" : "Describe"}</ToolButton>
+                <input className="query-path-input" value={grpc.protoFiles.join(", ")} onChange={(e) => update({ grpc: { ...grpc, protoFiles: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) } })} placeholder="/abs/path/a.proto, /abs/path/b.proto" />
+              )}
+            {grpc.protoSource === "files" && <ToolButton onClick={() => void importProtoFiles()}>Import .proto</ToolButton>}
+            <ToolButton onClick={() => void describe()} disabled={describing}>{describing ? "Describing…" : "Describe"}</ToolButton>
           </div>
           <section className="editor-pane">
             <div className="editor-tabs">
               <button type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")}><Icon name="braces" size={13} /> Message</button>
               <button type="button" className={editorTab === "metadata" ? "active" : ""} onClick={() => setEditorTab("metadata")}><Icon name="key" size={13} /> Metadata <span className="tab-count">{grpc.metadata.length}</span></button>
-              <span className="editor-meta"><span>{grpc.service && grpc.method ? `${grpc.service}/${grpc.method}` : "no method selected"}</span></span>
+              {catalog && (
+                <div className="grpc-method-pickers">
+                  <Combobox
+                    value={grpc.service}
+                    options={catalog.services.map((service) => service.name)}
+                    placeholder="Select service..."
+                    onChange={(service) => update({ grpc: { ...grpc, service, method: "" } })}
+                  />
+                  <Combobox
+                    value={grpc.method}
+                    options={selectedService?.methods.map((method) => method.name) ?? []}
+                    placeholder="Select method..."
+                    disabled={!selectedService}
+                    onChange={(method) => {
+                      const selectedMethod = selectedService?.methods.find((item) => item.name === method);
+                      update({ grpc: { ...grpc, method, message: selectedMethod?.inputTemplate ?? grpc.message } });
+                    }}
+                  />
+                </div>
+              )}
             </div>
             {editorTab === "body" && (
-              <div style={{ minHeight: 0, display: "grid", gridTemplateRows: catalog ? "auto 1fr" : "1fr" }}>
-                {catalog && (
-                  <div style={{ display: "flex", gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--line)" }}>
-                    <select className="method-select" style={{ width: 180 }} value={grpc.service} onChange={(e) => update({ grpc: { ...grpc, service: e.target.value, method: "" } })}>
-                      <option value="">select service…</option>
-                      {catalog.services.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
-                    </select>
-                    <select className="method-select" style={{ width: 180 }} value={grpc.method} disabled={!selectedService}
-                      onChange={(e) => {
-                        const m = selectedService?.methods.find((x) => x.name === e.target.value);
-                        update({ grpc: { ...grpc, method: e.target.value, message: m?.inputTemplate ?? grpc.message } });
-                      }}>
-                      <option value="">select method…</option>
-                      {selectedService?.methods.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-                    </select>
-                  </div>
-                )}
-                <JsonEditor value={grpc.message} onChange={(message) => update({ grpc: { ...grpc, message } })} />
-              </div>
+              <JsonEditor value={grpc.message} onChange={(message) => update({ grpc: { ...grpc, message } })} variableNames={variableNames} />
             )}
             {editorTab === "metadata" && <KvEditor items={grpc.metadata} onChange={(metadata) => update({ grpc: { ...grpc, metadata } })} keyPlaceholder="metadata key" />}
           </section>
@@ -246,7 +318,7 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
       {request.protocol === "ws" && request.ws && (
         <>
           <div className="request-head">
-            <input className="query-path-input" value={request.ws.url} onChange={(e) => update({ ws: { ...request.ws!, url: e.target.value } })} placeholder="wss://{{wsHost}}/socket" />
+            <EnvInput className="query-path-input" value={request.ws.url} onChange={(url) => update({ ws: { ...request.ws!, url } })} placeholder="wss://{{wsHost}}/socket" variableNames={variableNames} />
             {!wsConnected ? <ToolButton variant="primary" onClick={wsConnect}>Connect</ToolButton> : <ToolButton variant="danger" onClick={wsClose}>Disconnect</ToolButton>}
           </div>
           <section className="editor-pane" style={{ gridTemplateRows: "39px 1fr auto" }}>
@@ -269,8 +341,8 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
 
       {request.protocol !== "ws" && (
         <>
-          <div className="bottom-resizer" title="Resize response" onPointerDown={(event) => startResize(event, "request")} />
-          <section className="response">
+          <div className="bottom-resizer" title="Resize response" onPointerDown={(event) => startResize(event, horizontal ? "request-x" : "request")} />
+          <section className={`response ${rt.running ? "loading" : ""}`}>
             <div className="response-head">
               <strong>Response</strong>
               {rt.response && "status" in rt.response && (
@@ -280,9 +352,9 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
               {rt.error && <span className="response-status err">{rt.error}</span>}
               <span className="response-meta">
                 {rt.response && <span>{rt.response.timeMs}ms</span>}
-                <button type="button" className={responseTab === "pretty" ? "active" : ""} onClick={() => setResponseTab("pretty")}>Pretty</button>
-                <button type="button" className={responseTab === "raw" ? "active" : ""} onClick={() => setResponseTab("raw")}>Raw</button>
-                <button type="button" className={responseTab === "headers" ? "active" : ""} onClick={() => setResponseTab("headers")}>Headers</button>
+                <button type="button" className={responseTab === "pretty" ? "active" : ""} onClick={() => setResponseTab("pretty")}><Icon name="braces" size={13} /> Pretty</button>
+                <button type="button" className={responseTab === "raw" ? "active" : ""} onClick={() => setResponseTab("raw")}><Icon name="code" size={13} /> Raw</button>
+                <button type="button" className={responseTab === "headers" ? "active" : ""} onClick={() => setResponseTab("headers")}><Icon name="list" size={13} /> Headers</button>
               </span>
             </div>
             <div className="response-body">

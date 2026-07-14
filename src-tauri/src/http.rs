@@ -88,11 +88,11 @@ pub struct HttpResponse {
 }
 
 #[tauri::command]
-pub async fn http_request(collection_id: String, env: Option<String>, request: Request) -> Result<HttpResponse, String> {
+pub async fn http_request(env: Option<String>, request: Request) -> Result<HttpResponse, String> {
     let part = request.http.ok_or("not an http request")?;
     let root = root_dir();
     let (env_vars, secret_vars) = match &env {
-        Some(e) => (read_env(&root, &collection_id, e)?, read_secrets(&root, &collection_id, e)?),
+        Some(e) => (read_env(&root, e)?, read_secrets(&root, e)?),
         None => (HashMap::new(), HashMap::new()),
     };
     let ctx = build_ctx(env_vars, secret_vars);

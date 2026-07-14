@@ -1,36 +1,38 @@
 :root {
-  --accent: #ff5f5f;
+  /* Default dark = Bearded Arc (shared with elastic_min); light theme carries the #7A3EED purple */
+  --accent: var(--blue);
   --font-body-default: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono-default: "Berkeley Mono", ui-monospace, Menlo, Consolas, monospace;
   --font-body: var(--font-body-default);
   --font-mono: var(--font-mono-default);
 
-  --app-bg: #08090c;
-  --window: #111216;
-  --pane: #15171c;
-  --pane-2: #191b21;
-  --pane-3: #20232a;
-  --line: rgba(255, 255, 255, 0.075);
-  --line-2: rgba(255, 255, 255, 0.11);
-  --text: #f4f5f7;
-  --text-2: #a4a8b2;
-  --text-3: #717680;
-  --blue: #5aa7ff;
-  --blue-2: #1f6feb;
-  --green: #58d68d;
-  --orange: #f7b267;
-  --red: #ff6b75;
-  --purple: #b794f4;
+  --app-bg: #1c2433;
+  --window: #181f2c;
+  --pane: #1c2433;
+  --pane-2: #253043;
+  --pane-3: #2a364d;
+  --line: rgba(17, 22, 31, 0.55);
+  --line-2: rgba(17, 22, 31, 0.9);
+  --text: #d0d7e4;
+  --text-2: #afbbd2;
+  --text-3: #4a5e84;
+  /* brand purple: #7a3eed for filled surfaces (buttons), lighter tint where it's text on dark */
+  --blue: #8196b5;
+  --blue-2: #69C3FF;
+  --green: #3CEC85;
+  --orange: #FF955C;
+  --red: #E35535;
+  --purple: #F38CEC;
   --row: rgba(255, 255, 255, 0.025);
   --row-alt: rgba(255, 255, 255, 0.04);
-  --glass: rgba(26, 28, 34, 0.78);
+  --glass: rgba(24, 31, 44, 0.82);
   --shadow: 0 18px 60px color-mix(in oklab, var(--surface-app), transparent 45%);
   --left-w: 258px;
   --right-w: 328px;
   --query-top: 48vh;
   --request-top: 48%;
-  --editor-bg: #0d0f14;
-  --editor-fg: #d7dce5;
+  --editor-bg: #1c2433;
+  --editor-fg: #d0d7e4;
   --surface-app: var(--app-bg);
   --surface-window: var(--window);
   --surface-panel: var(--pane);
@@ -63,7 +65,7 @@
 }
 
 body.light {
-  --accent: #8b5cf6;
+  --accent: #7A3EED;
   --app-bg: #f9f8fa;
   --window: #f9f8fa;
   --pane: #ffffff;
@@ -74,16 +76,24 @@ body.light {
   --text: #3b2e4c;
   --text-2: #8c7c9e;
   --text-3: #b1a6bd;
-  --blue: #8b5cf6;
-  --blue-2: #7150c9;
+  --blue: #7A3EED;
+  --blue-2: #7A3EED;
   --green: #10b981;
   --orange: #d97706;
   --red: #f43f5e;
-  --purple: #8b5cf6;
+  --purple: #7A3EED;
   --row: #ffffff;
   --row-alt: #f9f8fa;
   --glass: rgba(255, 255, 255, 0.78);
   --shadow: none;
   --editor-bg: #ffffff;
   --editor-fg: #3b2e4c;
+  /* Syntax colors tuned for contrast on white editor-bg (WCAG AA ~4.5:1+),
+     not the accent palette above which is too light on white. */
+  --syntax-key: #7c3aed;
+  --syntax-string: #047857;
+  --syntax-number: #1d4ed8;
+  --syntax-boolean: #be185d;
+  --syntax-null: #be123c;
+  --syntax-punctuation: #6b5f79;
 }

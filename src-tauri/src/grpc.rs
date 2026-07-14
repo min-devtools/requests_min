@@ -239,10 +239,10 @@ async fn build_pool(part: &GrpcPart, endpoint: &str) -> Result<DescriptorPool, S
 }
 
 #[tauri::command]
-pub async fn grpc_unary(collection_id: String, env: Option<String>, part: GrpcPart) -> Result<GrpcResponse, String> {
+pub async fn grpc_unary(env: Option<String>, part: GrpcPart) -> Result<GrpcResponse, String> {
     let root = root_dir();
     let (env_vars, secret_vars) = match &env {
-        Some(e) => (read_env(&root, &collection_id, e)?, read_secrets(&root, &collection_id, e)?),
+        Some(e) => (read_env(&root, e)?, read_secrets(&root, e)?),
         None => (HashMap::new(), HashMap::new()),
     };
     let ctx = build_ctx(env_vars, secret_vars);

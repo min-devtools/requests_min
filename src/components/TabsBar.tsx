@@ -4,7 +4,10 @@ import { RequestContextMenu } from "./RequestContextMenu";
 import { useApp } from "../store";
 
 export function TabsBar() {
-  const { tabs, activeTabId, activateTab, closeTab, requestTabs, newRequestTab, renameTab, reorderTab } = useApp();
+  const {
+    tabs, activeTabId, activateTab, closeTab, requestTabs, newRequestTab, renameTab, reorderTab,
+    openDialog, openConfirm, showToast, renameRequest, duplicateRequest, deleteRequest,
+  } = useApp();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
@@ -38,9 +41,10 @@ export function TabsBar() {
             onDragOver={(e) => { if (dragId && dragId !== tab.id) { e.preventDefault(); setOverId(tab.id); } }}
             onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData("application/x-requestsmin-tab") || dragId; if (id && id !== tab.id) reorderTab(id, tab.id); setDragId(null); setOverId(null); }}
           >
+            {dirty && <span className="tab-dirty-dot" title="Unsaved changes" />}
             {rt ? <span className={`tab-method method-tag ${method}`}>{method}</span> : <Icon name={tab.icon} className={dirty ? "soft-orange" : undefined} />}
-            {editingId === tab.id ? <input ref={inputRef} className="tab-title-input" value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") commit(); if (e.key === "Escape") setEditingId(null); }} /> : <span className="tab-title">{tab.title}{dirty ? " •" : ""}</span>}
-            <span className="tab-close" title={`Close ${tab.title}`} onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}>
+            {editingId === tab.id ? <input ref={inputRef} className="tab-title-input" value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") commit(); if (e.key === "Escape") setEditingId(null); }} /> : <span className="tab-title">{tab.title}</span>}
+            <span className="tab-close" title={`Close ${tab.title}`} aria-label={`Close ${tab.title}`} onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}>
               <Icon name="x" size={13} />
             </span>
           </button>
@@ -49,15 +53,32 @@ export function TabsBar() {
       <button type="button" className="tab-add" title="New request (⌘N)" onClick={() => newRequestTab()}><Icon name="plus" /><span>Request</span></button>
       {requestMenu && (() => {
         const request = requestTabs[requestMenu.tabId];
-        return request?.collectionId && request.relPath ? <RequestContextMenu
-          collectionId={request.collectionId}
-          relPath={request.relPath}
-          title={request.request.name}
+        if (!request?.collectionId || !request.relPath) return null;
+        const { collectionId, relPath } = request;
+        const name = request.request.name;
+        const rename = async () => {
+          const next = await openDialog({ title: "Rename request", defaultValue: name, confirmLabel: "Rename" });
+          if (next == null || next.trim() === name) return;
+          try { await renameRequest(collectionId, relPath, next.trim()); } catch (error) { showToast("Rename failed", String(error), "err"); }
+        };
+        const duplicate = async () => {
+          try { await duplicateRequest(collectionId, relPath, `${name} copy`); showToast("Request duplicated", name); }
+          catch (error) { showToast("Duplicate failed", String(error), "err"); }
+        };
+        const del = async () => {
+          if (!await openConfirm({ title: "Delete request", message: `Delete "${name}"? This cannot be undone.`, danger: true, confirmLabel: "Delete" })) return;
+          try { await deleteRequest(collectionId, relPath); showToast("Request deleted", name); }
+          catch (error) { showToast("Delete failed", String(error), "err"); }
+        };
+        return <RequestContextMenu
           x={requestMenu.x}
           y={requestMenu.y}
           onOpen={() => activateTab(requestMenu.tabId)}
+          onRename={() => void rename()}
+          onDuplicate={() => void duplicate()}
+          onDelete={() => void del()}
           onClose={() => setRequestMenu(null)}
-        /> : null;
+        />;
       })()}
     </nav>
   );

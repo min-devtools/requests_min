@@ -19,7 +19,7 @@ export function KvEditor({ items, onChange, keyPlaceholder = "key", valuePlaceho
           <input type="checkbox" className="row-check" checked={it.enabled !== false} onChange={(e) => set(i, { enabled: e.target.checked })} />
           <input className="path-input" placeholder={keyPlaceholder} value={it.key} onChange={(e) => set(i, { key: e.target.value })} />
           <input className="path-input" placeholder={valuePlaceholder} value={it.value} onChange={(e) => set(i, { value: e.target.value })} />
-          <button type="button" className="tool-btn icon-only" onClick={() => remove(i)} title="Remove"><Icon name="x" size={13} /></button>
+          <button type="button" className="tool-btn icon-only" onClick={() => remove(i)} title="Remove" aria-label="Remove"><Icon name="x" size={13} /></button>
         </div>
       ))}
       <button type="button" className="kv-add" onClick={add}><Icon name="plus" /> Add {keyPlaceholder}</button>

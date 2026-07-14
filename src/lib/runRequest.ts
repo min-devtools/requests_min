@@ -8,8 +8,7 @@ export async function runActiveRequest() {
   const rt = s.requestTabs[tab.id];
   if (!rt || rt.running) return;
 
-  const collectionId = rt.collectionId ?? "";
-  const env = rt.collectionId ? s.activeEnvByCollection[rt.collectionId] ?? null : null;
+  const env = s.activeEnv;
 
   if (rt.request.protocol === "ws") {
     s.showToast("WebSocket", "Use the connect / send controls in the request editor.", "warn");
@@ -20,11 +19,11 @@ export async function runActiveRequest() {
   try {
     if (rt.request.protocol === "grpc") {
       if (!rt.request.grpc) throw new Error("missing gRPC part");
-      const response = await api.grpcUnary(collectionId, env, rt.request.grpc);
+      const response = await api.grpcUnary(env, rt.request.grpc);
       s.updateRequestTab(tab.id, { running: false, response });
       s.addHistory({ collectionId: rt.collectionId, request: structuredClone(rt.request), status: response.statusCode, timeMs: response.timeMs, error: null });
     } else {
-      const response = await api.httpRequest(collectionId, env, rt.request);
+      const response = await api.httpRequest(env, rt.request);
       s.updateRequestTab(tab.id, { running: false, response });
       s.addHistory({ collectionId: rt.collectionId, request: structuredClone(rt.request), status: String(response.status), timeMs: response.timeMs, error: null });
     }

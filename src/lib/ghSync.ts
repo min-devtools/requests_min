@@ -2,7 +2,7 @@ import { api, setOnMutate, type GhStatus } from "./api";
 import { useApp } from "../store";
 
 export const DEFAULT_REPO = "requests_min_collections";
-const PUSH_DEBOUNCE_MS = 3000;
+const PUSH_DEBOUNCE_MS = 5 * 60 * 1000; // 5 min — avoid hammering GitHub on every edit
 
 // Pure: pick sync direction. Never pull over never-synced local data — gh_pull
 // deletes local files missing from remote, and that loss is unrecoverable.
@@ -16,6 +16,7 @@ let timer: number | undefined;
 let pushing = false;
 
 export function schedulePush() {
+  useApp.getState().setSyncDirty(true);
   window.clearTimeout(timer);
   timer = window.setTimeout(() => void pushNow(), PUSH_DEBOUNCE_MS);
 }
@@ -26,11 +27,18 @@ async function pushNow() {
   try {
     const status = await api.ghStatus();
     if (status.connected && status.repo) await api.ghPush(null);
+    useApp.getState().setSyncDirty(false);
   } catch (err) {
     useApp.getState().showToast("Auto sync failed", String(err), "err");
   } finally {
     pushing = false;
   }
+}
+
+/** Manual "sync now" — flush the pending debounce immediately. */
+export async function syncNow() {
+  window.clearTimeout(timer);
+  await pushNow();
 }
 
 export async function startAutoSync() {

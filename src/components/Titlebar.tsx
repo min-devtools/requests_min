@@ -11,6 +11,10 @@ export function Titlebar() {
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const rt = activeTab?.kind === "request" ? requestTabs[activeTabId] : null;
   const dirty = rt ? JSON.stringify(rt.request) !== rt.original : false;
+  const save = () => {
+    if (activeTab?.kind === "environments") window.dispatchEvent(new Event("requestsmin:save-environment"));
+    else void saveActiveRequest();
+  };
 
   return (
     <header className="titlebar" data-tauri-drag-region>
@@ -26,19 +30,19 @@ export function Titlebar() {
         <kbd>⌘K</kbd>
       </button>
       <div className="toolbar">
-        <ToolButton iconOnly variant="primary" title="Send request (⌘↵)" disabled={!rt || rt.running || rt.request.protocol === "ws"} onClick={runActiveRequest}>
+        <ToolButton iconOnly variant="primary" title="Send request (⌘↵)" aria-label="Send request" disabled={!rt || rt.running || rt.request.protocol === "ws"} onClick={runActiveRequest}>
           <Icon name="send" />
         </ToolButton>
         <ToolButton iconOnly title="New request (⌘N)" aria-label="New request" onClick={() => newRequestTab()}>
           <Icon name="plus" />
         </ToolButton>
-        <ToolButton iconOnly variant="danger" title="Cancel request" disabled={!rt?.running} onClick={() => rt && updateRequestTab(activeTabId, { running: false })}>
+        <ToolButton iconOnly variant="danger" title="Cancel request" aria-label="Cancel request" disabled={!rt?.running} onClick={() => rt && updateRequestTab(activeTabId, { running: false })}>
           <Icon name="x" />
         </ToolButton>
-        <ToolButton iconOnly title="Refresh collections" onClick={() => void reloadCollections().then(() => showToast("Refreshed", "Collections reloaded from disk."))}>
+        <ToolButton iconOnly title="Refresh collections" aria-label="Refresh collections" onClick={() => void reloadCollections().then(() => showToast("Refreshed", "Collections reloaded from disk."))}>
           <Icon name="refresh" />
         </ToolButton>
-        <ToolButton iconOnly title="Save request (⌘S)" disabled={!dirty} onClick={saveActiveRequest}>
+        <ToolButton iconOnly title={activeTab?.kind === "environments" ? "Save environment (⌘S)" : "Save request (⌘S)"} aria-label={activeTab?.kind === "environments" ? "Save environment" : "Save request"} disabled={activeTab?.kind === "environments" ? false : !dirty} onClick={save}>
           <Icon name="save" />
         </ToolButton>
         <ToolButton iconOnly title="Toggle theme" aria-label="Toggle theme" onClick={toggleTheme}>

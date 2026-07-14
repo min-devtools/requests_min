@@ -6,20 +6,23 @@ import { useApp } from "../store";
 import { api, type GhStatus } from "../lib/api";
 
 export function Inspector() {
-  const { tabs, activeTabId, requestTabs, activeCollectionId, activeEnvByCollection, collections, showToast } = useApp();
+  const { tabs, activeTabId, requestTabs, activeEnv, setActiveEnv, showToast, envVersion } = useApp();
   const [vars, setVars] = useState<Record<string, string>>({});
+  const [envs, setEnvs] = useState<string[]>([]);
   const [gh, setGh] = useState<GhStatus | null>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const rt = activeTab?.kind === "request" ? requestTabs[activeTabId] : null;
-  const collectionId = rt?.collectionId ?? activeCollectionId;
-  const env = collectionId ? activeEnvByCollection[collectionId] : null;
-  const collection = collections.find((c) => c.id === collectionId);
+  const env = activeEnv;
 
   useEffect(() => {
-    if (!collectionId || !env) { setVars({}); return; }
-    api.envRead(collectionId, env).then(setVars).catch(() => setVars({}));
-  }, [collectionId, env]);
+    api.envList().then(setEnvs).catch(() => setEnvs([]));
+  }, [activeTabId, envVersion]);
+
+  useEffect(() => {
+    if (!env) { setVars({}); return; }
+    api.envRead(env).then(setVars).catch(() => setVars({}));
+  }, [env, envVersion]);
 
   useEffect(() => { api.ghStatus().then(setGh).catch(() => setGh(null)); }, [activeTabId]);
 
@@ -30,9 +33,8 @@ export function Inspector() {
         <div className="stack">
           <section className="panel">
             <h3>Active environment</h3>
-            {!collection && <div className="empty-note">Select a collection to see its environment.</div>}
-            {collection && <Kv label="Collection">{collection.name}</Kv>}
-            {collection && <Kv label="Environment">{env ?? "none selected"}</Kv>}
+            <div className="kv"><span>Environment</span><select className="method-select" value={env ?? ""} onChange={(event) => setActiveEnv(event.target.value || null)}><option value="">none selected</option>{envs.map((name) => <option key={name} value={name}>{name}</option>)}</select></div>
+            {envs.length === 0 && <div className="empty-note">No environments yet. Create one in the Environments tab.</div>}
             {env && Object.keys(vars).length === 0 && <div className="empty-note">No variables set.</div>}
             {Object.entries(vars).map(([k, v]) => (
               <Kv key={k} label={k}>{v || "(empty)"}</Kv>
@@ -54,7 +56,7 @@ export function Inspector() {
 
           <section className="panel">
             <h3>GitHub sync</h3>
-            <Kv label="Repo">{gh?.repo ?? "not configured"}</Kv>
+            <Kv label="Repo">{gh?.repo ? gh.repo.split("/").pop() : "not configured"}</Kv>
             <Kv label="Login">{gh?.login ?? "—"}</Kv>
             <Kv label="Last SHA">{gh?.lastSha ? gh.lastSha.slice(0, 7) : "—"}</Kv>
             <ToolButton

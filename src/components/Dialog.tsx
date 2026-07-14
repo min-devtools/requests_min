@@ -16,6 +16,17 @@ export function Dialog() {
     }
   }, [dialog]);
 
+  // Confirm dialogs have no input to catch keys, so bind Enter/Escape globally.
+  useEffect(() => {
+    if (dialog?.kind !== "confirm") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Enter") { e.preventDefault(); closeDialog("1"); }
+      if (e.key === "Escape") { e.preventDefault(); closeDialog(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dialog, closeDialog]);
+
   if (!dialog) return null;
 
   const cancel = () => closeDialog(null);

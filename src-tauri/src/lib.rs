@@ -27,6 +27,7 @@ async fn list_fonts() -> Result<Vec<String>, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .manage(ws::WsState::default())
         .invoke_handler(tauri::generate_handler![
             ping, list_fonts,

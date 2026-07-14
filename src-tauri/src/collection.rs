@@ -54,6 +54,7 @@ pub fn root_dir() -> PathBuf {
         .unwrap_or_else(|_| dirs::home_dir().expect("no home dir").join("RequestsMin"))
 }
 pub fn collections_dir() -> PathBuf { root_dir().join("collections") }
+pub fn environments_dir() -> PathBuf { root_dir().join("environments") }
 
 fn sort_value(v: &serde_json::Value) -> serde_json::Value {
     match v {
@@ -214,13 +215,12 @@ pub fn move_request(root: &Path, id: &str, from: &str, to: &str) -> Result<(), S
     std::fs::rename(&src, &dst).map_err(|e| e.to_string())
 }
 
-fn env_path(root: &Path, id: &str, env: &str) -> Result<PathBuf, String> {
-    let dir = col_path(root, id).join("environments");
-    safe_join(&dir, &format!("{env}.json"))
+fn env_path(root: &Path, env: &str) -> Result<PathBuf, String> {
+    safe_join(&root.join("environments"), &format!("{env}.json"))
 }
 
-pub fn list_envs(root: &Path, id: &str) -> Result<Vec<String>, String> {
-    let dir = col_path(root, id).join("environments");
+pub fn list_envs(root: &Path) -> Result<Vec<String>, String> {
+    let dir = root.join("environments");
     let mut out = Vec::new();
     let rd = match std::fs::read_dir(&dir) { Ok(r) => r, Err(_) => return Ok(out) };
     for entry in rd.flatten() {
@@ -231,20 +231,20 @@ pub fn list_envs(root: &Path, id: &str) -> Result<Vec<String>, String> {
     Ok(out)
 }
 
-pub fn read_env(root: &Path, id: &str, env: &str) -> Result<HashMap<String, String>, String> {
-    let p = env_path(root, id, env)?;
+pub fn read_env(root: &Path, env: &str) -> Result<HashMap<String, String>, String> {
+    let p = env_path(root, env)?;
     let text = match std::fs::read_to_string(&p) { Ok(t) => t, Err(_) => return Ok(HashMap::new()) };
     let val: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     Ok(serde_json::from_value(val.get("vars").cloned().unwrap_or_default()).unwrap_or_default())
 }
 
-pub fn write_env(root: &Path, id: &str, env: &str, vars: &HashMap<String, String>) -> Result<(), String> {
-    let p = env_path(root, id, env)?;
+pub fn write_env(root: &Path, env: &str, vars: &HashMap<String, String>) -> Result<(), String> {
+    let p = env_path(root, env)?;
     write_sorted_json(&p, &serde_json::json!({ "vars": vars }))
 }
 
-pub fn delete_env(root: &Path, id: &str, env: &str) -> Result<(), String> {
-    let p = env_path(root, id, env)?;
+pub fn delete_env(root: &Path, env: &str) -> Result<(), String> {
+    let p = env_path(root, env)?;
     if p.exists() { std::fs::remove_file(&p).map_err(|e| e.to_string())?; }
     Ok(())
 }
@@ -270,13 +270,13 @@ pub fn req_delete(collection_id: String, rel_path: String) -> Result<(), String>
 #[tauri::command]
 pub fn req_move(collection_id: String, from: String, to: String) -> Result<(), String> { move_request(&root_dir(), &collection_id, &from, &to) }
 #[tauri::command]
-pub fn env_list(collection_id: String) -> Result<Vec<String>, String> { list_envs(&root_dir(), &collection_id) }
+pub fn env_list() -> Result<Vec<String>, String> { list_envs(&root_dir()) }
 #[tauri::command]
-pub fn env_read(collection_id: String, env: String) -> Result<HashMap<String, String>, String> { read_env(&root_dir(), &collection_id, &env) }
+pub fn env_read(env: String) -> Result<HashMap<String, String>, String> { read_env(&root_dir(), &env) }
 #[tauri::command]
-pub fn env_write(collection_id: String, env: String, vars: HashMap<String, String>) -> Result<(), String> { write_env(&root_dir(), &collection_id, &env, &vars) }
+pub fn env_write(env: String, vars: HashMap<String, String>) -> Result<(), String> { write_env(&root_dir(), &env, &vars) }
 #[tauri::command]
-pub fn env_delete(collection_id: String, env: String) -> Result<(), String> { delete_env(&root_dir(), &collection_id, &env) }
+pub fn env_delete(env: String) -> Result<(), String> { delete_env(&root_dir(), &env) }
 
 #[cfg(test)]
 mod tests {
@@ -352,11 +352,10 @@ mod tests {
     #[test]
     fn env_crud() {
         let dir = tempfile::tempdir().unwrap();
-        let meta = create_collection(dir.path(), "c").unwrap();
         let mut vars = std::collections::HashMap::new();
         vars.insert("baseUrl".into(), "http://localhost".into());
-        write_env(dir.path(), &meta.id, "dev", &vars).unwrap();
-        assert_eq!(read_env(dir.path(), &meta.id, "dev").unwrap()["baseUrl"], "http://localhost");
-        assert_eq!(list_envs(dir.path(), &meta.id).unwrap(), vec!["dev"]);
+        write_env(dir.path(), "dev", &vars).unwrap();
+        assert_eq!(read_env(dir.path(), "dev").unwrap()["baseUrl"], "http://localhost");
+        assert_eq!(list_envs(dir.path()).unwrap(), vec!["dev"]);
     }
 }

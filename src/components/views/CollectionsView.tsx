@@ -8,7 +8,7 @@ import { api, type ReqEntry } from "../../lib/api";
 export function CollectionsView({ active }: { active: boolean }) {
   const {
     collections, reloadCollections, activeCollectionId, setActiveCollection, newRequestTab,
-    openRequestTab, openDialog, openConfirm, showToast, reqListVersion, renameRequest, duplicateRequest,
+    openRequestTab, openDialog, openConfirm, showToast, reqListVersion, renameRequest, duplicateRequest, deleteRequest,
   } = useApp();
   const [requests, setRequests] = useState<ReqEntry[]>([]);
   const [menu, setMenu] = useState<{ request: ReqEntry; x: number; y: number } | null>(null);
@@ -54,6 +54,11 @@ export function CollectionsView({ active }: { active: boolean }) {
     try { await duplicateRequest(collection.id, request.relPath, name.trim()); showToast("Request duplicated", name.trim()); }
     catch (error) { showToast("Duplicate failed", String(error), "err"); }
   };
+  const deleteReq = async (request: ReqEntry) => {
+    if (!collection || !await openConfirm({ title: "Delete request", message: `Delete "${request.name}"? This cannot be undone.`, danger: true, confirmLabel: "Delete" })) return;
+    try { await deleteRequest(collection.id, request.relPath); showToast("Request deleted", request.name); }
+    catch (error) { showToast("Delete failed", String(error), "err"); }
+  };
 
   return <section className={`content collections-view ${active ? "active" : ""}`}>
     <header className="page-head">
@@ -74,6 +79,6 @@ export function CollectionsView({ active }: { active: boolean }) {
         </button>)}
       </section>}
     </div>
-    {collection && menu && <RequestContextMenu collectionId={collection.id} relPath={menu.request.relPath} title={menu.request.name} x={menu.x} y={menu.y} onOpen={() => void openRequestTab(collection.id, menu.request.relPath)} onRename={() => void rename(menu.request)} onDuplicate={() => void duplicate(menu.request)} onClose={() => setMenu(null)} />}
+    {collection && menu && <RequestContextMenu x={menu.x} y={menu.y} onOpen={() => void openRequestTab(collection.id, menu.request.relPath)} onRename={() => void rename(menu.request)} onDuplicate={() => void duplicate(menu.request)} onDelete={() => void deleteReq(menu.request)} onClose={() => setMenu(null)} />}
   </section>;
 }

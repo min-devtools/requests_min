@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { api, emptyRequest, type CollectionMeta, type GrpcResponse, type HttpResponse, type Request } from "./lib/api";
 import type { IconName } from "./ui/Icon";
 import { changeFontSize, clampFontSize, DEFAULT_FONT_SIZE } from "./lib/fontScale";
+import { isThemeId } from "./lib/themes";
 
 export type TabKind = "welcome" | "request" | "collections" | "environments" | "history" | "import-export" | "github-sync" | "ai-import" | "settings";
 
@@ -71,6 +72,8 @@ interface AppState {
   toggleRight: () => void;
   workspaceNavCollapsed: boolean;
   toggleWorkspaceNav: () => void;
+  requestHorizontal: boolean; // response beside the editor (Postman-style) vs below it
+  toggleRequestLayout: () => void;
   commandOpen: boolean;
   setCommandOpen: (v: boolean) => void;
 
@@ -86,10 +89,14 @@ interface AppState {
   reloadCollections: () => Promise<void>;
   activeCollectionId: string | null;
   setActiveCollection: (id: string | null) => void;
-  activeEnvByCollection: Record<string, string | null>;
-  setActiveEnv: (collectionId: string, env: string | null) => void;
+  activeEnv: string | null;
+  setActiveEnv: (env: string | null) => void;
   reqListVersion: number;
   bumpReqList: () => void;
+  envVersion: number;
+  bumpEnv: () => void;
+  syncDirty: boolean; // local collection edits not yet pushed to GitHub
+  setSyncDirty: (v: boolean) => void;
 
   tabs: TabDef[];
   activeTabId: string;
@@ -103,6 +110,7 @@ interface AppState {
   deleteRequest: (collectionId: string, relPath: string) => Promise<void>;
   renameRequest: (collectionId: string, relPath: string, name: string) => Promise<void>;
   duplicateRequest: (collectionId: string, relPath: string, name: string) => Promise<void>;
+  moveRequest: (fromCollectionId: string, relPath: string, toCollectionId: string) => Promise<void>;
   renameTab: (id: string, title: string) => void;
   reorderTab: (id: string, beforeId: string | null) => void;
   history: HistoryEntry[];
@@ -118,7 +126,10 @@ const storedHistory = (): HistoryEntry[] => {
 };
 
 export const useApp = create<AppState>((set, get) => ({
-  theme: localStorage.getItem("requestsmin:theme") ?? "dark",
+  theme: (() => {
+    const stored = localStorage.getItem("requestsmin:theme");
+    return stored && isThemeId(stored) ? stored : "dark";
+  })(),
   setTheme: (theme) => {
     localStorage.setItem("requestsmin:theme", theme);
     set({ theme });
@@ -172,6 +183,12 @@ export const useApp = create<AppState>((set, get) => ({
     localStorage.setItem("requestsmin:workspace-nav-collapsed", workspaceNavCollapsed ? "1" : "0");
     return { workspaceNavCollapsed };
   }),
+  requestHorizontal: localStorage.getItem("requestsmin:request-horizontal") === "1",
+  toggleRequestLayout: () => set((s) => {
+    const requestHorizontal = !s.requestHorizontal;
+    localStorage.setItem("requestsmin:request-horizontal", requestHorizontal ? "1" : "0");
+    return { requestHorizontal };
+  }),
   commandOpen: false,
   setCommandOpen: (v) => set({ commandOpen: v }),
 
@@ -204,11 +221,18 @@ export const useApp = create<AppState>((set, get) => ({
   },
   activeCollectionId: null,
   setActiveCollection: (id) => set({ activeCollectionId: id }),
-  activeEnvByCollection: {},
-  setActiveEnv: (collectionId, env) =>
-    set((s) => ({ activeEnvByCollection: { ...s.activeEnvByCollection, [collectionId]: env } })),
+  activeEnv: localStorage.getItem("requestsmin:active-env"),
+  setActiveEnv: (env) => {
+    if (env) localStorage.setItem("requestsmin:active-env", env);
+    else localStorage.removeItem("requestsmin:active-env");
+    set({ activeEnv: env });
+  },
   reqListVersion: 0,
   bumpReqList: () => set((s) => ({ reqListVersion: s.reqListVersion + 1 })),
+  envVersion: 0,
+  bumpEnv: () => set((s) => ({ envVersion: s.envVersion + 1 })),
+  syncDirty: false,
+  setSyncDirty: (v) => set({ syncDirty: v }),
 
   tabs: [{ id: WELCOME_ID, kind: "welcome", title: "Welcome", icon: "sparkles" }],
   activeTabId: WELCOME_ID,
@@ -315,6 +339,24 @@ export const useApp = create<AppState>((set, get) => ({
     let suffix = 2;
     while (existing.has(target)) target = `${folder}${safeName}-${suffix++}.json`;
     await api.reqWrite(collectionId, target, { ...request, name });
+    get().bumpReqList();
+  },
+  moveRequest: async (fromCollectionId, relPath, toCollectionId) => {
+    if (fromCollectionId === toCollectionId) return;
+    const request = await api.reqRead(fromCollectionId, relPath);
+    const base = relPath.slice(relPath.lastIndexOf("/") + 1).replace(/\.json$/, "");
+    const existing = new Set((await api.reqList(toCollectionId)).map((entry) => entry.relPath));
+    let target = `${base}.json`;
+    let suffix = 2;
+    while (existing.has(target)) target = `${base}-${suffix++}.json`;
+    await api.reqWrite(toCollectionId, target, request);
+    await api.reqDelete(fromCollectionId, relPath);
+    set((state) => ({
+      requestTabs: Object.fromEntries(Object.entries(state.requestTabs).map(([id, tab]) =>
+        tab.collectionId === fromCollectionId && tab.relPath === relPath
+          ? [id, { ...tab, collectionId: toCollectionId, relPath: target }]
+          : [id, tab])),
+    }));
     get().bumpReqList();
   },
   renameTab: (id, title) => set((s) => {

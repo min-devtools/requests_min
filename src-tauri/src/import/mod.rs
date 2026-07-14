@@ -100,7 +100,7 @@ mod tests {
         write_request(dir.path(), &meta.id, "users/get.json", &req).unwrap();
         let mut sec = std::collections::HashMap::new();
         sec.insert("token".into(), "LEAKME".into());
-        write_secrets(dir.path(), &meta.id, "dev", &sec).unwrap();
+        write_secrets(dir.path(), "dev", &sec).unwrap();
         let out = postman::export(dir.path(), &meta.id).unwrap();
         assert!(out.contains("get users"));
         assert!(!out.contains("LEAKME"));

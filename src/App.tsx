@@ -65,7 +65,12 @@ export default function App() {
       if (mod && key === "k") { e.preventDefault(); setCommandOpen(true); }
       if (mod && key === "n") { e.preventDefault(); newRequestTab(); }
       if (mod && e.key === "Enter") { e.preventDefault(); void runActiveRequest(); }
-      if (mod && key === "s") { e.preventDefault(); void saveActiveRequest(); }
+      if (mod && key === "s") {
+        e.preventDefault();
+        const activeTab = useApp.getState().tabs.find((tab) => tab.id === useApp.getState().activeTabId);
+        if (activeTab?.kind === "environments") window.dispatchEvent(new Event("requestsmin:save-environment"));
+        else void saveActiveRequest();
+      }
       if (mod && key === "b") { e.preventDefault(); toggleLeft(); }
       if (mod && key === "r") { e.preventDefault(); toggleRight(); }
       if (mod && e.key === ",") { e.preventDefault(); openTab("settings"); }
@@ -95,10 +100,10 @@ export default function App() {
         <PanelResizeHandles />
       </main>
       <Statusbar />
-      <button type="button" className={`tool-btn panel-toggle panel-corner left ${leftCollapsed ? "" : "active"}`} title="Toggle sidebar (⌘B)" onClick={toggleLeft}>
+      <button type="button" className={`tool-btn panel-toggle panel-corner left ${leftCollapsed ? "" : "active"}`} title="Toggle sidebar (⌘B)" aria-label="Toggle sidebar" onClick={toggleLeft}>
         <Icon name="panel-left" />
       </button>
-      <button type="button" className={`tool-btn panel-toggle panel-corner right ${rightCollapsed ? "" : "active"}`} title="Toggle inspector (⌘R)" onClick={toggleRight}>
+      <button type="button" className={`tool-btn panel-toggle panel-corner right ${rightCollapsed ? "" : "active"}`} title="Toggle inspector (⌘R)" aria-label="Toggle inspector" onClick={toggleRight}>
         <Icon name="panel-right" />
       </button>
       <CommandPalette />

@@ -1,4 +1,4 @@
-use crate::collection::{collections_dir, root_dir};
+use crate::collection::{collections_dir, environments_dir, root_dir};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -175,16 +175,19 @@ pub async fn gh_push(app: AppHandle, message: Option<String>) -> Result<String, 
     if rs != 200 { return Err(format!("cannot read branch {branch} ({rs})")); }
     let base_sha = rv.pointer("/object/sha").and_then(|s| s.as_str()).ok_or("no base sha")?.to_string();
 
-    // blobs
-    let entries = collect_tree_entries(&collections_dir())?;
-    if entries.is_empty() { return Err("no local collections to push".into()); }
+    // blobs — collections/ and global environments/ are both pushed (secrets stay local)
+    let mut entries: Vec<TreeEntry> = collect_tree_entries(&collections_dir())?.into_iter()
+        .map(|e| TreeEntry { path: format!("collections/{}", e.path), content: e.content }).collect();
+    entries.extend(collect_tree_entries(&environments_dir())?.into_iter()
+        .map(|e| TreeEntry { path: format!("environments/{}", e.path), content: e.content }));
+    if entries.is_empty() { return Err("nothing local to push".into()); }
     let mut tree = Vec::new();
     for e in &entries {
         let b64 = base64::engine::general_purpose::STANDARD.encode(e.content.as_bytes());
         let blob = post_json(&c, &tok, &format!("{base}/git/blobs"),
             serde_json::json!({ "content": b64, "encoding": "base64" })).await?;
         let sha = blob.get("sha").and_then(|s| s.as_str()).ok_or("no blob sha")?;
-        tree.push(serde_json::json!({ "path": format!("collections/{}", e.path), "mode": "100644", "type": "blob", "sha": sha }));
+        tree.push(serde_json::json!({ "path": e.path, "mode": "100644", "type": "blob", "sha": sha }));
     }
 
     // tree (full, no base_tree) → commit → move ref
@@ -202,7 +205,8 @@ pub async fn gh_push(app: AppHandle, message: Option<String>) -> Result<String, 
 }
 
 fn any_local_change_since(ts: u64) -> bool {
-    WalkDir::new(collections_dir()).into_iter().flatten()
+    [collections_dir(), environments_dir()].into_iter()
+        .flat_map(|d| WalkDir::new(d).into_iter().flatten())
         .filter(|e| e.file_type().is_file())
         .any(|e| e.metadata().ok()
             .and_then(|m| m.modified().ok())
@@ -243,7 +247,7 @@ pub async fn gh_pull(app: AppHandle, force: bool) -> Result<PullResult, String> 
     let mut remote_paths: HashSet<String> = HashSet::new();
     for item in &items {
         if item.get("type").and_then(|t| t.as_str()) != Some("blob") { continue; }
-        let path = match item.get("path").and_then(|p| p.as_str()) { Some(p) if p.starts_with("collections/") => p, _ => continue };
+        let path = match item.get("path").and_then(|p| p.as_str()) { Some(p) if p.starts_with("collections/") || p.starts_with("environments/") => p, _ => continue };
         let sha = item.get("sha").and_then(|s| s.as_str()).ok_or("no blob sha in tree")?;
         let (bs, bv) = get_json(&c, &tok, &format!("{base}/git/blobs/{sha}")).await?;
         if bs != 200 { return Err(format!("cannot read blob ({bs})")); }
@@ -255,10 +259,12 @@ pub async fn gh_pull(app: AppHandle, force: bool) -> Result<PullResult, String> 
         remote_paths.insert(path.to_string());
     }
 
-    // delete local files under collections/ that no longer exist remotely
-    for e in WalkDir::new(collections_dir()).into_iter().flatten().filter(|e| e.file_type().is_file()) {
-        let rel = e.path().strip_prefix(&root).map_err(|x| x.to_string())?.to_string_lossy().replace('\\', "/");
-        if !remote_paths.contains(&rel) { let _ = std::fs::remove_file(e.path()); }
+    // delete local files under collections/ and environments/ that no longer exist remotely
+    for dir in [collections_dir(), environments_dir()] {
+        for e in WalkDir::new(dir).into_iter().flatten().filter(|e| e.file_type().is_file()) {
+            let rel = e.path().strip_prefix(&root).map_err(|x| x.to_string())?.to_string_lossy().replace('\\', "/");
+            if !remote_paths.contains(&rel) { let _ = std::fs::remove_file(e.path()); }
+        }
     }
 
     store_set(&app, "last_sha", &remote_sha)?;

@@ -8,21 +8,36 @@ function restoreLayoutSizes() {
   const left = Number(localStorage.getItem("requestsmin:left-w"));
   const right = Number(localStorage.getItem("requestsmin:right-w"));
   const requestTop = Number(localStorage.getItem("requestsmin:request-top"));
+  const requestLeft = Number(localStorage.getItem("requestsmin:request-left"));
   if (left) document.body.style.setProperty("--left-w", `${left}px`);
   if (right) document.body.style.setProperty("--right-w", `${right}px`);
   if (requestTop) document.body.style.setProperty("--request-top", `${requestTop}px`);
+  if (requestLeft) document.body.style.setProperty("--request-left", `${requestLeft}px`);
 }
 
-export function startResize(event: React.PointerEvent, axis: "left" | "right" | "request") {
+export function startResize(event: React.PointerEvent, axis: "left" | "right" | "request" | "request-x") {
   event.preventDefault();
-  const container = document.querySelector(axis === "request" ? ".request-screen.active" : ".main");
-  document.body.classList.add(axis === "request" ? "resizing-y" : "resizing");
+  const requestAxis = axis === "request" || axis === "request-x";
+  const container = document.querySelector(requestAxis ? ".request-screen.active" : ".main");
+  document.body.classList.add(axis === "request-x" ? "resizing-x" : requestAxis ? "resizing-y" : "resizing");
   (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+  // delta-based resize: anchor to the editor pane's actual size + pointer movement,
+  // so a click without drag doesn't snap to (clientY - grid top), which includes
+  // the ~90px name+head rows above the editor and causes a jump
+  const startY = event.clientY;
+  const startX = event.clientX;
+  const editorPane = container?.querySelector(".editor-pane") as HTMLElement | null;
+  const startTop = editorPane ? editorPane.getBoundingClientRect().height : 0;
+  const startLeft = editorPane ? editorPane.getBoundingClientRect().width : 0;
   const move = (e: PointerEvent) => {
     if (!container) return;
     const rect = container.getBoundingClientRect();
-    if (axis === "request") {
-      const next = clamp(e.clientY - rect.top, 220, Math.max(220, rect.height - 267));
+    if (axis === "request-x") {
+      const next = clamp(startLeft + (e.clientX - startX), 240, Math.max(240, rect.width - 247));
+      document.body.style.setProperty("--request-left", `${Math.round(next)}px`);
+      localStorage.setItem("requestsmin:request-left", String(Math.round(next)));
+    } else if (axis === "request") {
+      const next = clamp(startTop + (e.clientY - startY), 220, Math.max(220, rect.height - 267));
       document.body.style.setProperty("--request-top", `${Math.round(next)}px`);
       localStorage.setItem("requestsmin:request-top", String(Math.round(next)));
     } else if (axis === "left") {
@@ -38,7 +53,7 @@ export function startResize(event: React.PointerEvent, axis: "left" | "right" | 
     }
   };
   const stop = () => {
-    document.body.classList.remove("resizing", "resizing-y");
+    document.body.classList.remove("resizing", "resizing-y", "resizing-x");
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", stop);
     window.removeEventListener("pointercancel", stop);

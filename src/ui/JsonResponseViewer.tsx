@@ -62,7 +62,7 @@ export function JsonResponseViewer({ value }: { value: string }) {
 
   return <div className="json-response-viewer">
     <div className="json-response-tools">
-      <button type="button" title="Search in response (⌘F)" onClick={openSearch}><Icon name="search" size={13} /></button>
+      <button type="button" title="Search in response (⌘F)" aria-label="Search in response" onClick={openSearch}><Icon name="search" size={13} /></button>
       <input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => event.key === "Enter" && addPath()} placeholder="value.$.a or value[0].a" />
       <button type="button" onClick={addPath}>Add path</button>
       <button type="button" className={normalize && active.length > 0 ? "active" : ""} disabled={paths.length === 0} title="Show only the enabled paths, merged; earlier paths win conflicts" onClick={() => setNormalize((v) => !v)}>Normalize</button>
@@ -70,7 +70,7 @@ export function JsonResponseViewer({ value }: { value: string }) {
     </div>
     {paths.length > 0 && <div className="json-response-paths">
       {paths.map((path) => <button key={path} type="button" className={enabled.has(path) && normalize ? "active" : ""} title="Toggle this path" onClick={() => togglePath(path)}>
-        {path}<span className="path-remove" title="Remove path" onClick={(event) => { event.stopPropagation(); removePath(path); }}>×</span>
+        {path}<span className="path-remove" title="Remove path" aria-label="Remove path" onClick={(event) => { event.stopPropagation(); removePath(path); }}>×</span>
       </button>)}
     </div>}
     <div className="json-response-editor">

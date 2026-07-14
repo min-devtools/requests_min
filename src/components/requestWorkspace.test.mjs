@@ -13,6 +13,14 @@ test("request tabs show the request method instead of a protocol icon", async ()
   assert.match(tabs, /rt \? <span className={`tab-method method-tag \$\{method\}`}>\{method\}<\/span> : <Icon name=\{tab\.icon\}/);
 });
 
+test("HTTP body types share the main editor tab row and omit the TLS status label", async () => {
+  const view = await readFile(new URL("components/views/RequestView.tsx", root), "utf8");
+
+  assert.doesNotMatch(view, /TLS verify/);
+  assert.match(view, /editorTab === "body" && \(\s*<div className="body-type-tabs">/);
+  assert.doesNotMatch(view, /<div className="body-editor">\s*<div className="body-type-tabs">/);
+});
+
 test("shared JSON editors expose format, minify, and validate actions", async () => {
   const editor = await readFile(new URL("ui/JsonEditor.tsx", root), "utf8");
 
@@ -31,8 +39,8 @@ test("response dock resizer persists a bounded vertical split", async () => {
     readFile(new URL("styles/requestsmin.css", root), "utf8"),
   ]);
 
-  assert.match(view, /onPointerDown=\{\(event\) => startResize\(event, "request"\)\}/);
-  assert.match(handles, /axis: "left" \| "right" \| "request"/);
+  assert.match(view, /startResize\(event, horizontal \? "request-x" : "request"\)/);
+  assert.match(handles, /axis: "left" \| "right" \| "request" \| "request-x"/);
   assert.match(handles, /requestsmin:request-top/);
   assert.match(handles, /--request-top/);
   assert.match(styles, /minmax\(220px, var\(--request-top\)\)/);
@@ -125,6 +133,14 @@ test("responses use the shared theme-aware JSON view", async () => {
   assert.match(format, /syntax-key/);
 });
 
+test("response view tabs include distinct icons", async () => {
+  const view = await readFile(new URL("components/views/RequestView.tsx", root), "utf8");
+
+  assert.match(view, /<Icon name="braces" size=\{13\} \/> Pretty/);
+  assert.match(view, /<Icon name="code" size=\{13\} \/> Raw/);
+  assert.match(view, /<Icon name="list" size=\{13\} \/> Headers/);
+});
+
 test("JSON responses use Monaco scope folding and path projection Normalize", async () => {
   const [view, viewer, normalize] = await Promise.all([
     readFile(new URL("components/views/RequestView.tsx", root), "utf8"),
@@ -155,6 +171,48 @@ test("release bundle uses a valid identifier and excludes test-only gRPC helpers
   assert.doesNotMatch(config, /"identifier": "[^"]+\.app"/);
   assert.match(grpc, /#\[cfg\(test\)\]\npub fn message_to_bytes/);
   assert.match(grpc, /#\[cfg\(test\)\]\npub fn bytes_to_json/);
+});
+
+test("gRPC imports multiple proto files, describes them immediately, and uses readable selectors", async () => {
+  const [view, styles, cargo, backend, capability] = await Promise.all([
+    readFile(new URL("components/views/RequestView.tsx", root), "utf8"),
+    readFile(new URL("styles/requestsmin.css", root), "utf8"),
+    readFile(new URL("../src-tauri/Cargo.toml", root), "utf8"),
+    readFile(new URL("../src-tauri/src/lib.rs", root), "utf8"),
+    readFile(new URL("../src-tauri/capabilities/default.json", root), "utf8"),
+  ]);
+
+  assert.match(view, /import \{ open \} from "@tauri-apps\/plugin-dialog"/);
+  assert.match(view, /multiple: true/);
+  assert.match(view, /extensions: \["proto"\]/);
+  assert.match(view, /await describe\(files\)/);
+  assert.match(view, />Import \.proto</);
+  assert.match(view, /grpc-source-select/);
+  assert.match(view, /grpc-method-pickers/);
+  assert.match(styles, /\.grpc-source-select/);
+  assert.match(styles, /\.grpc-method-pickers/);
+  assert.match(cargo, /tauri-plugin-dialog/);
+  assert.match(backend, /tauri_plugin_dialog::init/);
+  assert.match(capability, /dialog:allow-open/);
+});
+
+test("gRPC service and method use searchable comboboxes on the editor tab row", async () => {
+  const [view, combobox, styles] = await Promise.all([
+    readFile(new URL("components/views/RequestView.tsx", root), "utf8"),
+    readFile(new URL("ui/Combobox.tsx", root), "utf8"),
+    readFile(new URL("styles/requestsmin.css", root), "utf8"),
+  ]);
+
+  assert.match(view, /<div className="grpc-method-pickers">/);
+  assert.match(view, /<Combobox[\s\S]*placeholder="Select service/);
+  assert.match(view, /<Combobox[\s\S]*placeholder="Select method/);
+  assert.doesNotMatch(view, /grpc-catalog-row/);
+  assert.match(combobox, /role="combobox"/);
+  assert.match(combobox, /aria-autocomplete="list"/);
+  assert.match(combobox, /toLowerCase\(\)\.includes/);
+  assert.match(combobox, /event\.key === "ArrowDown"/);
+  assert.match(combobox, /event\.key === "Enter"/);
+  assert.match(styles, /\.grpc-method-pickers/);
 });
 
 test("GitHub setup defaults to requests_min_collections and initializes first sync", async () => {
