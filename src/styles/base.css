@@ -1,0 +1,19 @@
+* { box-sizing: border-box; }
+
+html { font-size: var(--ui-font-size, 13px); }
+html, body, #root { height: 100%; margin: 0; background: var(--app-bg); }
+
+body {
+  overflow: hidden;
+  color: var(--text);
+  font: 450 1rem/1.45 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+input, textarea { user-select: text; cursor: text; }
+
+button, input, textarea, select { font: inherit; }
+
+button { color: inherit; cursor: pointer; }

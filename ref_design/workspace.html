@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>RequestsMin · Orders API</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-frame" id="app-frame" data-od-id="request-workspace">
+    <header class="titlebar" data-od-id="app-titlebar">
+      <a class="brand" href="index.html" data-od-id="brand-home"><span class="brand-mark"></span> RequestsMin</a>
+      <button type="button" class="search" id="command-open" data-od-id="command-search">Search requests, collections, commands <b>⌘ K</b></button>
+      <div class="toolbar" data-od-id="top-toolbar">
+        <button type="button" class="tool-btn icon" id="toggle-bottom" data-od-id="toggle-bottom-dock" aria-label="Toggle response dock">▤</button>
+        <button type="button" class="tool-btn" id="vim-toggle" data-od-id="vim-toggle">Vim: Off</button>
+        <button type="button" class="tool-btn" id="save-request" data-od-id="save-request">Save</button>
+        <button type="button" class="tool-btn primary" id="run-request" data-od-id="run-request">Send <span>⌘↵</span></button>
+      </div>
+    </header>
+
+    <main class="main request-main" aria-label="Request workspace">
+      <aside class="sidebar" data-od-id="collection-sidebar">
+        <div class="side-top">
+          <input type="search" class="side-search" id="request-filter" placeholder="Filter requests..." data-od-id="request-filter">
+        </div>
+        <div class="side-scroll">
+          <div class="group">
+            <div class="group-title">Workspace <span class="badge green">synced</span></div>
+            <a class="nav-item active" href="workspace.html"><span class="dot blue"></span><span>Orders service</span><span class="badge">4</span></a>
+            <a class="nav-item" href="collections.html"><span>⌘</span><span>Collections</span></a>
+            <a class="nav-item" href="environments.html"><span>◈</span><span>Environments</span></a>
+            <a class="nav-item" href="ai-import.html"><span>✦</span><span>AI import</span></a>
+            <a class="nav-item" href="settings.html"><span>⚙</span><span>Settings</span></a>
+          </div>
+          <div class="group">
+            <div class="group-title">Orders API <span class="badge">4</span></div>
+            <button type="button" class="nav-item request-nav active"><span class="dot"></span><span>Create order</span><span class="badge">POST</span></button>
+            <button type="button" class="nav-item request-nav"><span class="dot orange"></span><span>List orders</span><span class="badge">GET</span></button>
+            <button type="button" class="nav-item request-nav"><span>◇</span><span>Order stream</span><span class="badge">WS</span></button>
+            <button type="button" class="nav-item request-nav"><span>◌</span><span>Billing invoice</span><span class="badge">RPC</span></button>
+          </div>
+          <div class="group">
+            <div class="group-title">GitHub</div>
+            <button type="button" class="nav-item" id="sync-github"><span>⌘</span><span>min/api-collections</span><span class="badge green">main</span></button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="dock-resizer dock-resizer-left" id="resize-left" data-od-id="resize-left-dock" role="separator" aria-label="Resize collections dock"></div>
+
+      <section class="workspace" aria-label="Request editor">
+        <nav class="tabs" data-od-id="workspace-tabs">
+          <button type="button" class="tab active"><span>Create order</span><span class="x">×</span></button>
+          <button type="button" class="tab"><span>List orders</span><span class="x">×</span></button>
+          <button type="button" class="tab"><span>Order stream</span><span class="x">×</span></button>
+          <button type="button" class="tab tab-add">＋</button>
+        </nav>
+
+        <section class="content request-screen" data-od-id="request-editor">
+          <div class="protocol-rail" data-od-id="protocol-switcher">
+            <button type="button" class="protocol-pill active" data-protocol="REST"><span class="status-dot"></span> REST</button>
+            <button type="button" class="protocol-pill" data-protocol="gRPC"><span class="status-dot orange"></span> gRPC</button>
+            <button type="button" class="protocol-pill" data-protocol="WebSocket"><span class="status-dot orange"></span> WebSocket</button>
+            <span class="protocol-spacer"></span>
+            <span class="protocol-note">Collection stored in github.com/min/api-collections</span>
+          </div>
+
+          <div class="request-head" data-od-id="request-builder">
+            <select class="method" id="method-select" data-od-id="request-method"><option>POST</option><option>GET</option><option>PUT</option><option>DELETE</option></select>
+            <input type="text" class="path" id="request-path" value="{{baseUrl}}/v1/orders" data-od-id="request-path">
+            <button type="button" class="tool-btn" id="format-json" data-od-id="format-request">Format</button>
+            <button type="button" class="tool-btn" id="copy-curl" data-od-id="copy-curl">Copy cURL</button>
+          </div>
+
+          <section class="editor-pane" data-od-id="request-body-panel">
+            <div class="editor-tabs">
+              <button type="button" class="active">Body</button>
+              <button type="button">Headers <span class="badge">2</span></button>
+              <button type="button">Auth</button>
+              <button type="button">Tests</button>
+              <span class="editor-meta"><span id="json-state">JSON valid</span><span id="vim-state">Normal</span></span>
+            </div>
+            <textarea id="request-body" class="json-editor" spellcheck="false" data-od-id="request-body"></textarea>
+          </section>
+
+          <div class="bottom-resizer" id="resize-bottom" data-od-id="resize-response-dock" role="separator" aria-label="Resize response dock"></div>
+
+          <section class="response" data-od-id="response-panel">
+            <div class="response-head">
+              <div class="response-title"><strong>Response</strong><span class="result-ok" id="response-status">201 Created</span></div>
+              <div class="response-tabs" data-od-id="response-format-tabs">
+                <button type="button" class="active" data-view="pretty">Pretty</button>
+                <button type="button" data-view="table">Table</button>
+                <button type="button" data-view="raw">Raw</button>
+                <button type="button" data-view="headers">Headers</button>
+                <button type="button" data-view="timeline">Timeline</button>
+              </div>
+              <span class="result-meta"><span id="response-time">186 ms</span><span>1.2 KB</span><button type="button" class="tool-btn" id="copy-response">Copy</button></span>
+            </div>
+            <div class="response-tools" data-od-id="response-tools">
+              <input type="search" class="path-input" id="response-filter" placeholder="Filter response values..." data-od-id="response-filter">
+              <input type="text" class="path-input path-input-wide" id="json-path-input" value="id,status,total,currency" data-od-id="json-path-input">
+              <button type="button" class="tool-btn" id="format-response" data-od-id="format-response">Format</button>
+              <button type="button" class="tool-btn" id="apply-paths" data-od-id="apply-json-paths">Normalize</button>
+              <button type="button" class="tool-btn" id="clear-filter" data-od-id="clear-response-filter">Clear</button>
+            </div>
+            <div class="response-body" id="response-body" data-od-id="response-body"></div>
+          </section>
+        </section>
+      </section>
+
+      <div class="dock-resizer dock-resizer-right" id="resize-right" data-od-id="resize-right-dock" role="separator" aria-label="Resize inspector dock"></div>
+
+      <aside class="inspector" data-od-id="request-inspector">
+        <div class="inspector-head">Request context</div>
+        <div class="inspector-scroll">
+          <div class="stack">
+            <section class="panel">
+              <h3>Active environment</h3>
+              <div class="kv"><span>Name</span><code>Development</code></div>
+              <div class="kv"><span>baseUrl</span><code>http://localhost:8080</code></div>
+              <div class="kv"><span>token</span><code>••••••••••••2d7a</code></div>
+              <a class="tool-btn" href="environments.html">Open environments</a>
+            </section>
+            <section class="panel">
+              <h3>Variables resolved</h3>
+              <div class="kv"><span class="variable">{{baseUrl}}</span><code>localhost:8080</code></div>
+              <div class="kv"><span class="variable">{{orderId}}</span><code>ord_01HZY8C9J</code></div>
+              <div class="kv"><span class="variable">{{accessToken}}</span><code>Bearer ••••2d7a</code></div>
+            </section>
+            <section class="panel">
+              <h3>Request lifecycle</h3>
+              <div class="kv"><span>Pre-script</span><code>set orderId</code></div>
+              <div class="kv"><span>Auth</span><code>Bearer token</code></div>
+              <div class="kv"><span>Tests</span><code>status == 201</code></div>
+            </section>
+            <section class="panel">
+              <h3>Collection sync</h3>
+              <div class="kv"><span>Remote</span><code>github.com/min/api-collections</code></div>
+              <div class="kv"><span>Branch</span><code>main · clean</code></div>
+              <button type="button" class="tool-btn" id="pull-collection">Pull latest</button>
+            </section>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="statusbar" data-od-id="statusbar">
+      <div><span>● Development</span></div>
+      <div><span id="status-text">POST /v1/orders</span><span>Ln 1, Col 1</span></div>
+      <div><span id="vim-status">Vim off</span><span>UTF-8</span></div>
+    </footer>
+
+    <button type="button" class="dock-corner-toggle dock-corner-toggle-left" id="toggle-left" data-od-id="toggle-left-dock" aria-label="Toggle collections dock" title="Toggle collections dock (⌘B)">
+      <span>☰</span><kbd>⌘B</kbd>
+    </button>
+    <button type="button" class="dock-corner-toggle dock-corner-toggle-right" id="toggle-right" data-od-id="toggle-right-dock" aria-label="Toggle inspector dock" title="Toggle inspector dock (⌘R)">
+      <kbd>⌘R</kbd><span>◨</span>
+    </button>
+  </div>
+
+  <div class="command hidden" id="command">
+    <div class="palette">
+      <input type="search" id="command-input" placeholder="Type a command or request name...">
+      <button type="button" class="cmd" data-command="new"><span>＋</span><span>New request</span><kbd>⌘N</kbd></button>
+      <button type="button" class="cmd" data-command="collections"><span>⌘</span><span>Open Collections</span><kbd>⌘1</kbd></button>
+      <button type="button" class="cmd" data-command="env"><span>◈</span><span>Switch environment</span><kbd>⌘2</kbd></button>
+      <button type="button" class="cmd" data-command="ai"><span>✦</span><span>Generate from folder</span><kbd>⌘I</kbd></button>
+      <button type="button" class="cmd" data-command="settings"><span>⚙</span><span>Open Settings</span><kbd>⌘,</kbd></button>
+    </div>
+  </div>
+  <div class="toast hidden" id="toast"></div>
+  <script src="workspace.js"></script>
+</body>
+</html>

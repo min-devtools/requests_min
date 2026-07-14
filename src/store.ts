@@ -1,0 +1,346 @@
+import { create } from "zustand";
+import { api, emptyRequest, type CollectionMeta, type GrpcResponse, type HttpResponse, type Request } from "./lib/api";
+import type { IconName } from "./ui/Icon";
+import { changeFontSize, clampFontSize, DEFAULT_FONT_SIZE } from "./lib/fontScale";
+
+export type TabKind = "welcome" | "request" | "collections" | "environments" | "history" | "import-export" | "github-sync" | "ai-import" | "settings";
+
+export interface TabDef { id: string; kind: TabKind; title: string; icon: IconName }
+
+const TAB_META: Record<Exclude<TabKind, "request">, { title: string; icon: IconName }> = {
+  welcome: { title: "Welcome", icon: "sparkles" },
+  collections: { title: "Collections", icon: "database" },
+  environments: { title: "Environments", icon: "key" },
+  history: { title: "Request History", icon: "history" },
+  "import-export": { title: "Import / Export", icon: "copy" },
+  "github-sync": { title: "GitHub Sync", icon: "github" },
+  "ai-import": { title: "AI import", icon: "wand" },
+  settings: { title: "Settings", icon: "settings" },
+};
+
+export interface RequestTabState {
+  collectionId: string | null;
+  relPath: string | null;
+  request: Request;
+  original: string;
+  response: HttpResponse | GrpcResponse | null;
+  running: boolean;
+  error: string | null;
+}
+
+export interface ToastState { title: string; body?: string; kind?: "ok" | "warn" | "err" }
+export interface HistoryEntry {
+  id: string;
+  timestamp: number;
+  collectionId: string | null;
+  request: Request;
+  status: string;
+  timeMs: number | null;
+  error: string | null;
+}
+
+export type DialogRequest =
+  | { kind: "prompt"; title: string; message?: string; defaultValue?: string; confirmLabel?: string; resolve: (v: string | null) => void }
+  | { kind: "confirm"; title: string; message?: string; confirmLabel?: string; danger?: boolean; resolve: (v: string | null) => void };
+
+let tabCounter = 0;
+const nextId = (prefix: string) => `${prefix}-${++tabCounter}-${Date.now().toString(36)}`;
+
+const requestIcon = (r: Request): IconName => (r.protocol === "grpc" ? "grpc" : r.protocol === "ws" ? "ws" : "request");
+
+interface AppState {
+  theme: string;
+  setTheme: (theme: string) => void;
+  toggleTheme: () => void;
+  compact: boolean;
+  toggleCompact: () => void;
+  uiFontSize: number;
+  changeUiFontSize: (direction: -1 | 1) => void;
+  resetUiFontSize: () => void;
+  uiFont: string;
+  editorFont: string;
+  setUiFont: (font: string) => void;
+  setEditorFont: (font: string) => void;
+  aiEndpoint: string;
+  aiModel: string;
+  aiApiKey: string;
+  setAiSettings: (settings: { endpoint: string; model: string; apiKey: string }) => void;
+  leftCollapsed: boolean;
+  rightCollapsed: boolean;
+  toggleLeft: () => void;
+  toggleRight: () => void;
+  workspaceNavCollapsed: boolean;
+  toggleWorkspaceNav: () => void;
+  commandOpen: boolean;
+  setCommandOpen: (v: boolean) => void;
+
+  toast: ToastState | null;
+  showToast: (title: string, body?: string, kind?: ToastState["kind"]) => void;
+
+  dialog: DialogRequest | null;
+  openDialog: (req: Omit<Extract<DialogRequest, { kind: "prompt" }>, "resolve" | "kind">) => Promise<string | null>;
+  openConfirm: (req: Omit<Extract<DialogRequest, { kind: "confirm" }>, "resolve" | "kind">) => Promise<boolean>;
+  closeDialog: (value: string | null) => void;
+
+  collections: CollectionMeta[];
+  reloadCollections: () => Promise<void>;
+  activeCollectionId: string | null;
+  setActiveCollection: (id: string | null) => void;
+  activeEnvByCollection: Record<string, string | null>;
+  setActiveEnv: (collectionId: string, env: string | null) => void;
+  reqListVersion: number;
+  bumpReqList: () => void;
+
+  tabs: TabDef[];
+  activeTabId: string;
+  requestTabs: Record<string, RequestTabState>;
+  openTab: (kind: Exclude<TabKind, "request">) => void;
+  openRequestTab: (collectionId: string, relPath: string) => Promise<void>;
+  newRequestTab: (protocol?: Request["protocol"], collectionId?: string | null) => void;
+  updateRequestTab: (tabId: string, patch: Partial<RequestTabState>) => void;
+  activateTab: (id: string) => void;
+  closeTab: (id: string) => void;
+  deleteRequest: (collectionId: string, relPath: string) => Promise<void>;
+  renameRequest: (collectionId: string, relPath: string, name: string) => Promise<void>;
+  duplicateRequest: (collectionId: string, relPath: string, name: string) => Promise<void>;
+  renameTab: (id: string, title: string) => void;
+  reorderTab: (id: string, beforeId: string | null) => void;
+  history: HistoryEntry[];
+  addHistory: (entry: Omit<HistoryEntry, "id" | "timestamp">) => void;
+  clearHistory: () => void;
+}
+
+const WELCOME_ID = "welcome";
+
+const storedHistory = (): HistoryEntry[] => {
+  try { return JSON.parse(localStorage.getItem("requestsmin:history") ?? "[]") as HistoryEntry[]; }
+  catch { return []; }
+};
+
+export const useApp = create<AppState>((set, get) => ({
+  theme: localStorage.getItem("requestsmin:theme") ?? "dark",
+  setTheme: (theme) => {
+    localStorage.setItem("requestsmin:theme", theme);
+    set({ theme });
+  },
+  toggleTheme: () => set((s) => {
+    const theme = s.theme === "light" ? "dark" : "light";
+    localStorage.setItem("requestsmin:theme", theme);
+    return { theme };
+  }),
+  compact: localStorage.getItem("requestsmin:compact") === "1",
+  toggleCompact: () => set((s) => {
+    localStorage.setItem("requestsmin:compact", s.compact ? "0" : "1");
+    return { compact: !s.compact };
+  }),
+  uiFontSize: clampFontSize(Number(localStorage.getItem("requestsmin:font-size")) || DEFAULT_FONT_SIZE),
+  changeUiFontSize: (direction) => set((s) => {
+    const uiFontSize = changeFontSize(s.uiFontSize, direction);
+    localStorage.setItem("requestsmin:font-size", String(uiFontSize));
+    return { uiFontSize };
+  }),
+  resetUiFontSize: () => {
+    localStorage.setItem("requestsmin:font-size", String(DEFAULT_FONT_SIZE));
+    set({ uiFontSize: DEFAULT_FONT_SIZE });
+  },
+  uiFont: localStorage.getItem("requestsmin:ui-font") ?? "",
+  editorFont: localStorage.getItem("requestsmin:editor-font") ?? "",
+  setUiFont: (uiFont) => {
+    localStorage.setItem("requestsmin:ui-font", uiFont);
+    set({ uiFont });
+  },
+  setEditorFont: (editorFont) => {
+    localStorage.setItem("requestsmin:editor-font", editorFont);
+    set({ editorFont });
+  },
+  aiEndpoint: localStorage.getItem("requestsmin:ai-endpoint") ?? "https://api.openai.com/v1",
+  aiModel: localStorage.getItem("requestsmin:ai-model") ?? "gpt-4.1",
+  aiApiKey: localStorage.getItem("requestsmin:ai-api-key") ?? "",
+  setAiSettings: ({ endpoint, model, apiKey }) => {
+    localStorage.setItem("requestsmin:ai-endpoint", endpoint);
+    localStorage.setItem("requestsmin:ai-model", model);
+    localStorage.setItem("requestsmin:ai-api-key", apiKey);
+    set({ aiEndpoint: endpoint, aiModel: model, aiApiKey: apiKey });
+  },
+  leftCollapsed: false,
+  rightCollapsed: false,
+  toggleLeft: () => set((s) => ({ leftCollapsed: !s.leftCollapsed })),
+  toggleRight: () => set((s) => ({ rightCollapsed: !s.rightCollapsed })),
+  workspaceNavCollapsed: localStorage.getItem("requestsmin:workspace-nav-collapsed") === "1",
+  toggleWorkspaceNav: () => set((s) => {
+    const workspaceNavCollapsed = !s.workspaceNavCollapsed;
+    localStorage.setItem("requestsmin:workspace-nav-collapsed", workspaceNavCollapsed ? "1" : "0");
+    return { workspaceNavCollapsed };
+  }),
+  commandOpen: false,
+  setCommandOpen: (v) => set({ commandOpen: v }),
+
+  toast: null,
+  showToast: (title, body, kind = "ok") => {
+    set({ toast: { title, body, kind } });
+    window.clearTimeout((window as any).__toastTimer);
+    (window as any).__toastTimer = window.setTimeout(() => set({ toast: null }), 2600);
+  },
+
+  dialog: null,
+  openDialog: (req) =>
+    new Promise((resolve) => {
+      set({ dialog: { ...req, kind: "prompt", resolve } });
+    }),
+  openConfirm: (req) =>
+    new Promise((resolve) => {
+      set({ dialog: { ...req, kind: "confirm", resolve: (v: string | null) => resolve(v === "1") } });
+    }),
+  closeDialog: (value) => {
+    const d = get().dialog;
+    set({ dialog: null });
+    d?.resolve(value);
+  },
+
+  collections: [],
+  reloadCollections: async () => {
+    const collections = await api.colList();
+    set({ collections });
+  },
+  activeCollectionId: null,
+  setActiveCollection: (id) => set({ activeCollectionId: id }),
+  activeEnvByCollection: {},
+  setActiveEnv: (collectionId, env) =>
+    set((s) => ({ activeEnvByCollection: { ...s.activeEnvByCollection, [collectionId]: env } })),
+  reqListVersion: 0,
+  bumpReqList: () => set((s) => ({ reqListVersion: s.reqListVersion + 1 })),
+
+  tabs: [{ id: WELCOME_ID, kind: "welcome", title: "Welcome", icon: "sparkles" }],
+  activeTabId: WELCOME_ID,
+  requestTabs: {},
+
+  openTab: (kind) => {
+    const existing = get().tabs.find((t) => t.kind === kind);
+    if (existing) {
+      set({ activeTabId: existing.id });
+      return;
+    }
+    const meta = TAB_META[kind];
+    const tab: TabDef = { id: nextId(kind), kind, title: meta.title, icon: meta.icon };
+    set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
+  },
+
+  openRequestTab: async (collectionId, relPath) => {
+    const existing = get().tabs.find(
+      (t) => t.kind === "request" && get().requestTabs[t.id]?.collectionId === collectionId && get().requestTabs[t.id]?.relPath === relPath,
+    );
+    if (existing) {
+      set({ activeTabId: existing.id });
+      return;
+    }
+    const request = await api.reqRead(collectionId, relPath);
+    const id = nextId("req");
+    const state: RequestTabState = {
+      collectionId, relPath, request, original: JSON.stringify(request),
+      response: null, running: false, error: null,
+    };
+    const tab: TabDef = { id, kind: "request", title: request.name, icon: requestIcon(request) };
+    set((s) => ({
+      tabs: [...s.tabs, tab],
+      requestTabs: { ...s.requestTabs, [id]: state },
+      activeTabId: id,
+    }));
+  },
+
+  newRequestTab: (protocol = "http", collectionId = null) => {
+    const request = emptyRequest(protocol);
+    const id = nextId("req");
+    const state: RequestTabState = {
+      collectionId: collectionId ?? get().activeCollectionId,
+      relPath: null, request, original: "",
+      response: null, running: false, error: null,
+    };
+    const tab: TabDef = { id, kind: "request", title: request.name, icon: requestIcon(request) };
+    set((s) => ({ tabs: [...s.tabs, tab], requestTabs: { ...s.requestTabs, [id]: state }, activeTabId: id }));
+  },
+
+  updateRequestTab: (tabId, patch) => {
+    set((s) => {
+      const cur = s.requestTabs[tabId];
+      if (!cur) return {};
+      const next = { ...cur, ...patch };
+      const tabs = s.tabs.map((t) => (t.id === tabId ? { ...t, title: next.request.name, icon: requestIcon(next.request) } : t));
+      return { requestTabs: { ...s.requestTabs, [tabId]: next }, tabs };
+    });
+  },
+
+  activateTab: (id) => set({ activeTabId: id }),
+  closeTab: (id) => {
+    set((s) => {
+      const index = s.tabs.findIndex((t) => t.id === id);
+      if (index < 0) return {};
+      const tabs = s.tabs.filter((t) => t.id !== id);
+      const requestTabs = { ...s.requestTabs };
+      delete requestTabs[id];
+      const activeTabId = s.activeTabId === id ? tabs[Math.min(index, tabs.length - 1)]?.id ?? WELCOME_ID : s.activeTabId;
+      return { tabs: tabs.length ? tabs : [{ id: WELCOME_ID, kind: "welcome", title: "Welcome", icon: "sparkles" }], requestTabs, activeTabId };
+    });
+  },
+  deleteRequest: async (collectionId, relPath) => {
+    await api.reqDelete(collectionId, relPath);
+    for (const tab of get().tabs) {
+      const requestTab = get().requestTabs[tab.id];
+      if (requestTab?.collectionId === collectionId && requestTab.relPath === relPath) get().closeTab(tab.id);
+    }
+    get().bumpReqList();
+  },
+  renameRequest: async (collectionId, relPath, name) => {
+    const request = await api.reqRead(collectionId, relPath);
+    const next = { ...request, name };
+    await api.reqWrite(collectionId, relPath, next);
+    set((state) => {
+      const requestTabs = { ...state.requestTabs };
+      const tabs = state.tabs.map((tab) => {
+        const current = requestTabs[tab.id];
+        if (current?.collectionId !== collectionId || current.relPath !== relPath) return tab;
+        requestTabs[tab.id] = { ...current, request: next, original: JSON.stringify(next) };
+        return { ...tab, title: name };
+      });
+      return { tabs, requestTabs };
+    });
+    get().bumpReqList();
+  },
+  duplicateRequest: async (collectionId, relPath, name) => {
+    const request = await api.reqRead(collectionId, relPath);
+    const safeName = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "request";
+    const slash = relPath.lastIndexOf("/");
+    const folder = slash >= 0 ? `${relPath.slice(0, slash + 1)}` : "";
+    const existing = new Set((await api.reqList(collectionId)).map((entry) => entry.relPath));
+    let target = `${folder}${safeName}.json`;
+    let suffix = 2;
+    while (existing.has(target)) target = `${folder}${safeName}-${suffix++}.json`;
+    await api.reqWrite(collectionId, target, { ...request, name });
+    get().bumpReqList();
+  },
+  renameTab: (id, title) => set((s) => {
+    const clean = title.trim();
+    if (!clean) return {};
+    const requestTabs = s.requestTabs[id]
+      ? { ...s.requestTabs, [id]: { ...s.requestTabs[id], request: { ...s.requestTabs[id].request, name: clean } } }
+      : s.requestTabs;
+    return { tabs: s.tabs.map((t) => t.id === id ? { ...t, title: clean } : t), requestTabs };
+  }),
+  reorderTab: (id, beforeId) => set((s) => {
+    const tab = s.tabs.find((t) => t.id === id);
+    if (!tab) return {};
+    const tabs = s.tabs.filter((t) => t.id !== id);
+    const index = beforeId ? tabs.findIndex((t) => t.id === beforeId) : tabs.length;
+    tabs.splice(index < 0 ? tabs.length : index, 0, tab);
+    return { tabs };
+  }),
+  history: storedHistory(),
+  addHistory: (entry) => set((s) => {
+    const history = [{ ...entry, id: nextId("history"), timestamp: Date.now() }, ...s.history].slice(0, 100);
+    localStorage.setItem("requestsmin:history", JSON.stringify(history));
+    return { history };
+  }),
+  clearHistory: () => {
+    localStorage.removeItem("requestsmin:history");
+    set({ history: [] });
+  },
+}));

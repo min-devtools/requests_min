@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>RequestsMin · Settings</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-frame" data-od-id="settings-workspace">
+    <header class="titlebar" data-od-id="app-titlebar">
+      <a class="brand" href="index.html" data-od-id="brand-home"><span class="brand-mark"></span> RequestsMin</a>
+      <button type="button" class="search" data-od-id="settings-search">Search settings, shortcuts, integrations <b>⌘ ,</b></button>
+      <div class="toolbar" data-od-id="settings-toolbar">
+        <button type="button" class="tool-btn" id="reset-settings" data-od-id="reset-settings">Reset</button>
+        <button type="button" class="tool-btn primary" id="save-settings" data-od-id="save-settings">Save settings</button>
+      </div>
+    </header>
+
+    <main class="main" aria-label="Settings workspace">
+      <aside class="sidebar" data-od-id="settings-sidebar">
+        <div class="side-top">
+          <input type="search" class="side-search" id="settings-filter" placeholder="Filter settings..." data-od-id="settings-filter">
+        </div>
+        <div class="side-scroll">
+          <div class="group">
+            <div class="group-title">Workspace</div>
+            <a class="nav-item" href="workspace.html"><span class="dot blue"></span><span>Orders service</span></a>
+            <a class="nav-item" href="collections.html"><span>⌘</span><span>Collections</span></a>
+            <a class="nav-item" href="environments.html"><span>◈</span><span>Environments</span></a>
+            <a class="nav-item" href="ai-import.html"><span>✦</span><span>AI import</span></a>
+            <a class="nav-item active" href="settings.html"><span>⚙</span><span>Settings</span></a>
+          </div>
+          <div class="group">
+            <div class="group-title">Settings</div>
+            <button type="button" class="nav-item settings-jump active" data-target="appearance"><span>◐</span><span>Appearance</span></button>
+            <button type="button" class="nav-item settings-jump" data-target="editor"><span>⌨</span><span>Editor</span></button>
+            <button type="button" class="nav-item settings-jump" data-target="github"><span>⌘</span><span>GitHub sync</span></button>
+            <button type="button" class="nav-item settings-jump" data-target="ai"><span>✦</span><span>AI import</span></button>
+            <button type="button" class="nav-item settings-jump" data-target="shortcuts"><span>⇧</span><span>Shortcuts</span></button>
+          </div>
+        </div>
+      </aside>
+
+      <section class="workspace" aria-label="Settings editor">
+        <nav class="tabs" data-od-id="settings-tabs">
+          <button type="button" class="tab active"><span>Workspace settings</span><span class="x">×</span></button>
+          <button type="button" class="tab"><span>Keyboard map</span><span class="x">×</span></button>
+          <button type="button" class="tab tab-add">＋</button>
+        </nav>
+
+        <section class="content settings-screen" data-od-id="settings-screen">
+          <div class="settings-head">
+            <div>
+              <div class="eyebrow">Workspace settings</div>
+              <h1>Appearance, editor, sync, and AI behavior</h1>
+              <p>Control the API workspace without leaving the developer flow.</p>
+            </div>
+            <span class="badge green" id="settings-state">Saved</span>
+          </div>
+
+          <div class="settings-layout">
+            <div class="settings-stack">
+              <section class="settings-card" id="appearance" data-od-id="settings-appearance">
+                <h2>Appearance</h2>
+                <div class="settings-row" data-setting-row>
+                  <div><b>Theme</b><span>Dark native workspace, tuned for long request sessions.</span></div>
+                  <select data-setting-control aria-label="Theme"><option>Dark developer</option><option>System</option><option>Light preview</option></select>
+                </div>
+                <div class="settings-row" data-setting-row>
+                  <div><b>Compact density</b><span>Tighter request rows, response tables, and dock spacing.</span></div>
+                  <label class="switch"><input type="checkbox" checked data-setting-control><span></span></label>
+                </div>
+                <div class="settings-row" data-setting-row>
+                  <div><b>Status color</b><span>Use restrained accents for protocols, validation, and sync state.</span></div>
+                  <select data-setting-control aria-label="Status color"><option>Controlled blue</option><option>Muted monochrome</option><option>High contrast</option></select>
+                </div>
+              </section>
+
+              <section class="settings-card" id="editor" data-od-id="settings-editor">
+                <h2>Query editor</h2>
+                <div class="settings-row" data-setting-row>
+                  <div><b>Vim input</b><span>Enable modal editing for request bodies and JSON response views.</span></div>
+                  <label class="switch"><input type="checkbox" checked data-setting-control><span></span></label>
+                </div>
+                <div class="settings-row" data-setting-row>
+                  <div><b>Format on send</b><span>Format request JSON before sending when the body is valid.</span></div>
+                  <label class="switch"><input type="checkbox" data-setting-control><span></span></label>
+                </div>
+                <div class="settings-row" data-setting-row>
+                  <div><b>Default response view</b><span>Choose the first response surface after a request completes.</span></div>
+                  <select data-setting-control aria-label="Default response view"><option>Pretty JSON</option><option>Table</option><option>Raw</option><option>Headers</option><option>Timeline</option></select>
+                </div>
+              </section>
+
+              <section class="settings-card" id="github" data-od-id="settings-github">
+                <h2>GitHub collections</h2>
+                <div class="settings-row" data-setting-row>
+                  <div><b>Repository</b><span>Collections are stored as versioned request files.</span></div>
+                  <input type="text" value="min/api-collections" data-setting-control aria-label="Collection repository">
+                </div>
+                <div class="settings-row" data-setting-row>
+                  <div><b>Auto pull on launch</b><span>Fetch remote collection changes when RequestsMin opens.</span></div>
+                  <label class="switch"><input type="checkbox" checked data-setting-control><span></span></label>
+                </div>
+                <div class="settings-row" data-setting-row>
+                  <div><b>Commit mode</b><span>Require review before pushing generated requests.</span></div>
+                  <select data-setting-control aria-label="Commit mode"><option>Review before push</option><option>Auto commit drafts</option><option>Manual only</option></select>
+                </div>
+              </section>
+
+              <section class="settings-card" id="ai" data-od-id="settings-ai">
+                <h2>AI import</h2>
+                <div class="settings-row" data-setting-row>
+                  <div><b>Local folder scan</b><span>Detect REST handlers, proto files, WebSocket routes, and env hints.</span></div>
+                  <label class="switch"><input type="checkbox" checked data-setting-control><span></span></label>
+                </div>
+                <div class="settings-row" data-setting-row>
+                  <div><b>Provider endpoint</b><span>OpenAI-compatible endpoint used for collection generation.</span></div>
+                  <input type="text" value="https://api.openai.com/v1" data-setting-control aria-label="AI endpoint">
+                </div>
+                <div class="settings-row" data-setting-row>
+                  <div><b>Model</b><span>Any chat model served by the endpoint.</span></div>
+                  <input type="text" value="gpt-4.1" data-setting-control aria-label="AI model">
+                </div>
+              </section>
+            </div>
+
+            <aside class="settings-summary" data-od-id="settings-summary">
+              <section class="panel">
+                <h3>Dock shortcuts</h3>
+                <div class="shortcut-row"><span>Toggle left dock</span><kbd>⌘B</kbd></div>
+                <div class="shortcut-row"><span>Toggle right dock</span><kbd>⌘R</kbd></div>
+                <div class="shortcut-row"><span>Command palette</span><kbd>⌘K</kbd></div>
+                <div class="shortcut-row"><span>Send request</span><kbd>⌘↵</kbd></div>
+              </section>
+              <section class="panel">
+                <h3>Response defaults</h3>
+                <div class="kv"><span>View</span><code>Pretty JSON</code></div>
+                <div class="kv"><span>Normalize paths</span><code>id,status,total,currency</code></div>
+                <div class="kv"><span>Filter mode</span><code>value contains</code></div>
+              </section>
+              <section class="panel">
+                <h3>Sync status</h3>
+                <div class="kv"><span>Remote</span><code>github.com/min/api-collections</code></div>
+                <div class="kv"><span>Branch</span><code>main · clean</code></div>
+                <div class="kv"><span>Last pull</span><code>2 min ago</code></div>
+              </section>
+            </aside>
+          </div>
+        </section>
+      </section>
+
+      <aside class="inspector" data-od-id="settings-inspector">
+        <div class="inspector-head">Setting detail</div>
+        <div class="inspector-scroll">
+          <div class="stack">
+            <section class="panel">
+              <h3>Current scope</h3>
+              <div class="kv"><span>Workspace</span><code>orders-service</code></div>
+              <div class="kv"><span>Environment</span><code>Development</code></div>
+              <div class="kv"><span>Persistence</span><code>local profile</code></div>
+            </section>
+            <section class="panel">
+              <h3>Guardrails</h3>
+              <div class="kv"><span>Secrets</span><code>masked in UI</code></div>
+              <div class="kv"><span>AI drafts</span><code>review required</code></div>
+              <div class="kv"><span>GitHub push</span><code>manual approval</code></div>
+            </section>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="statusbar" data-od-id="settings-statusbar">
+      <div><span>● Settings</span></div>
+      <div><span id="settings-status-text">Workspace settings ready</span><span>Local profile</span></div>
+      <div><span>RequestsMin</span><span>UTF-8</span></div>
+    </footer>
+  </div>
+  <div class="toast hidden" id="toast"></div>
+  <script>
+    const toast = (text) => {
+      const el = document.getElementById('toast');
+      el.textContent = text;
+      el.classList.remove('hidden');
+      clearTimeout(window.toastTimer);
+      window.toastTimer = setTimeout(() => el.classList.add('hidden'), 2200);
+    };
+    const state = document.getElementById('settings-state');
+    const statusText = document.getElementById('settings-status-text');
+    document.querySelectorAll('[data-setting-control]').forEach((control) => {
+      control.addEventListener('input', () => {
+        state.textContent = 'Unsaved';
+        state.classList.remove('green');
+        statusText.textContent = 'Settings changed';
+      });
+    });
+    document.getElementById('save-settings').addEventListener('click', () => {
+      state.textContent = 'Saved';
+      state.classList.add('green');
+      statusText.textContent = 'Settings saved locally';
+      toast('Settings saved.');
+    });
+    document.getElementById('reset-settings').addEventListener('click', () => {
+      state.textContent = 'Saved';
+      state.classList.add('green');
+      statusText.textContent = 'Defaults restored';
+      toast('Settings reset to RequestsMin defaults.');
+    });
+    document.getElementById('settings-filter').addEventListener('input', (event) => {
+      const query = event.target.value.toLowerCase();
+      document.querySelectorAll('[data-setting-row]').forEach((row) => {
+        row.hidden = !row.textContent.toLowerCase().includes(query);
+      });
+    });
+    document.querySelectorAll('.settings-jump').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.settings-jump').forEach((item) => item.classList.toggle('active', item === button));
+        const screen = document.querySelector('.settings-screen');
+        const target = document.getElementById(button.dataset.target);
+        screen.scrollTo({ top: target.offsetTop - 16, behavior: 'smooth' });
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+import { useEffect } from "react";
+import { Titlebar } from "./components/Titlebar";
+import { Sidebar } from "./components/Sidebar";
+import { TabsBar } from "./components/TabsBar";
+import { Inspector } from "./components/Inspector";
+import { Statusbar } from "./components/Statusbar";
+import { CommandPalette } from "./components/CommandPalette";
+import { Toast } from "./components/Toast";
+import { Dialog } from "./components/Dialog";
+import { PanelResizeHandles } from "./components/ResizeHandles";
+import { WelcomeView } from "./components/views/WelcomeView";
+import { RequestView } from "./components/views/RequestView";
+import { CollectionsView } from "./components/views/CollectionsView";
+import { EnvironmentsView } from "./components/views/EnvironmentsView";
+import { AiImportView } from "./components/views/AiImportView";
+import { SettingsView } from "./components/views/SettingsView";
+import { HistoryView } from "./components/views/HistoryView";
+import { ImportExportView } from "./components/views/ImportExportView";
+import { GithubSyncView } from "./components/views/GithubSyncView";
+import { useApp, type TabDef } from "./store";
+import { runActiveRequest, saveActiveRequest } from "./lib/runRequest";
+import { Icon } from "./ui/Icon";
+import { retintMonaco } from "./lib/monaco";
+import { themeBase } from "./lib/themes";
+import { startAutoSync } from "./lib/ghSync";
+
+function renderView(tab: TabDef, active: boolean) {
+  switch (tab.kind) {
+    case "welcome": return <WelcomeView key={tab.id} active={active} />;
+    case "request": return <RequestView key={tab.id} tabId={tab.id} active={active} />;
+    case "collections": return <CollectionsView key={tab.id} active={active} />;
+    case "environments": return <EnvironmentsView key={tab.id} active={active} />;
+    case "history": return <HistoryView key={tab.id} active={active} />;
+    case "import-export": return <ImportExportView key={tab.id} active={active} />;
+    case "github-sync": return <GithubSyncView key={tab.id} active={active} />;
+    case "ai-import": return <AiImportView key={tab.id} active={active} />;
+    case "settings": return <SettingsView key={tab.id} active={active} />;
+  }
+}
+
+export default function App() {
+  const {
+    tabs, activeTabId, theme, compact, uiFontSize, uiFont, editorFont, leftCollapsed, rightCollapsed,
+    toggleLeft, toggleRight, setCommandOpen, newRequestTab, openTab, closeTab,
+  } = useApp();
+
+  useEffect(() => {
+    document.body.dataset.theme = theme;
+    document.body.classList.toggle("light", themeBase(theme) === "light");
+    document.body.classList.toggle("compact", compact);
+    document.body.classList.toggle("left-collapsed", leftCollapsed);
+    document.body.classList.toggle("right-collapsed", rightCollapsed);
+    document.documentElement.style.setProperty("--ui-font-size", `${uiFontSize}px`);
+    document.documentElement.style.setProperty("--font-body", uiFont ? `"${uiFont}", var(--font-body-default)` : "var(--font-body-default)");
+    document.documentElement.style.setProperty("--font-mono", editorFont ? `"${editorFont}", var(--font-mono-default)` : "var(--font-mono-default)");
+    retintMonaco(themeBase(theme));
+  }, [theme, compact, uiFontSize, uiFont, editorFont, leftCollapsed, rightCollapsed]);
+
+  useEffect(() => { void startAutoSync(); }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (mod && key === "k") { e.preventDefault(); setCommandOpen(true); }
+      if (mod && key === "n") { e.preventDefault(); newRequestTab(); }
+      if (mod && e.key === "Enter") { e.preventDefault(); void runActiveRequest(); }
+      if (mod && key === "s") { e.preventDefault(); void saveActiveRequest(); }
+      if (mod && key === "b") { e.preventDefault(); toggleLeft(); }
+      if (mod && key === "r") { e.preventDefault(); toggleRight(); }
+      if (mod && e.key === ",") { e.preventDefault(); openTab("settings"); }
+      if (mod && key >= "1" && key <= "9") {
+        const tab = useApp.getState().tabs[Number(key) - 1];
+        if (tab) { e.preventDefault(); useApp.getState().activateTab(tab.id); }
+      }
+      if (mod && key === "w") { e.preventDefault(); closeTab(useApp.getState().activeTabId); }
+      if (mod && (e.key === "+" || e.key === "=")) { e.preventDefault(); useApp.getState().changeUiFontSize(1); }
+      if (mod && e.key === "-") { e.preventDefault(); useApp.getState().changeUiFontSize(-1); }
+      if (e.key === "Escape") setCommandOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [setCommandOpen, newRequestTab, toggleLeft, toggleRight, openTab, closeTab]);
+
+  return (
+    <div className="app-frame">
+      <Titlebar />
+      <main className="main">
+        <Sidebar />
+        <section className="workspace">
+          <TabsBar />
+          {tabs.map((tab) => renderView(tab, tab.id === activeTabId))}
+        </section>
+        <Inspector />
+        <PanelResizeHandles />
+      </main>
+      <Statusbar />
+      <button type="button" className={`tool-btn panel-toggle panel-corner left ${leftCollapsed ? "" : "active"}`} title="Toggle sidebar (⌘B)" onClick={toggleLeft}>
+        <Icon name="panel-left" />
+      </button>
+      <button type="button" className={`tool-btn panel-toggle panel-corner right ${rightCollapsed ? "" : "active"}`} title="Toggle inspector (⌘R)" onClick={toggleRight}>
+        <Icon name="panel-right" />
+      </button>
+      <CommandPalette />
+      <Toast />
+      <Dialog />
+    </div>
+  );
+}
