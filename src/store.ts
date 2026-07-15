@@ -4,7 +4,7 @@ import type { IconName } from "./ui/Icon";
 import { changeFontSize, clampFontSize, DEFAULT_FONT_SIZE } from "./lib/fontScale";
 import { isThemeId } from "./lib/themes";
 
-export type TabKind = "welcome" | "request" | "collections" | "environments" | "history" | "import-export" | "github-sync" | "ai-import" | "settings";
+export type TabKind = "welcome" | "request" | "collections" | "environments" | "history" | "import-export" | "github-sync" | "settings";
 
 export interface TabDef { id: string; kind: TabKind; title: string; icon: IconName }
 
@@ -15,7 +15,6 @@ const TAB_META: Record<Exclude<TabKind, "request">, { title: string; icon: IconN
   history: { title: "Request History", icon: "history" },
   "import-export": { title: "Import / Export", icon: "copy" },
   "github-sync": { title: "GitHub Sync", icon: "github" },
-  "ai-import": { title: "AI import", icon: "wand" },
   settings: { title: "Settings", icon: "settings" },
 };
 
@@ -46,6 +45,7 @@ export type DialogRequest =
   | { kind: "select"; title: string; message?: string; options: { label: string; value: string }[]; confirmLabel?: string; resolve: (v: string | null) => void };
 
 let tabCounter = 0;
+let activationSequence = 0;
 const nextId = (prefix: string) => `${prefix}-${++tabCounter}-${Date.now().toString(36)}`;
 
 const requestIcon = (r: Request): IconName => (r.protocol === "grpc" ? "grpc" : r.protocol === "ws" ? "ws" : "request");
@@ -147,7 +147,13 @@ const loadSession = (): { tabs: TabDef[]; activeTabId: string; requestTabs: Reco
         response: null, running: false, error: null,
       };
     }
-    const tabs: TabDef[] = s.tabs.filter((t: TabDef) => t.kind !== "request" || requestTabs[t.id]);
+    const tabs: TabDef[] = s.tabs
+      .filter((tab: TabDef) => tab.kind !== "request" || requestTabs[tab.id])
+      .map((tab: TabDef) => {
+        if ((tab.kind as string) !== "ai-import") return tab;
+        return { ...tab, kind: "import-export", ...TAB_META["import-export"] };
+      })
+      .filter((tab: TabDef, index: number, all: TabDef[]) => all.findIndex((other) => other.kind === tab.kind && tab.kind !== "request") === index);
     if (!tabs.length) return null;
     return { tabs, activeTabId: tabs.some((t) => t.id === s.activeTabId) ? s.activeTabId : tabs[0].id, requestTabs };
   } catch { return null; }
@@ -278,6 +284,7 @@ export const useApp = create<AppState>((set, get) => ({
   requestTabs: session?.requestTabs ?? {},
 
   openTab: (kind) => {
+    activationSequence++;
     const existing = get().tabs.find((t) => t.kind === kind);
     if (existing) {
       set({ activeTabId: existing.id });
@@ -289,6 +296,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   openRequestTab: async (collectionId, relPath) => {
+    const activation = ++activationSequence;
     const existing = get().tabs.find(
       (t) => t.kind === "request" && get().requestTabs[t.id]?.collectionId === collectionId && get().requestTabs[t.id]?.relPath === relPath,
     );
@@ -306,11 +314,12 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({
       tabs: [...s.tabs, tab],
       requestTabs: { ...s.requestTabs, [id]: state },
-      activeTabId: id,
+      activeTabId: activation === activationSequence ? id : s.activeTabId,
     }));
   },
 
   newRequestTab: (protocol = "http", collectionId = null) => {
+    activationSequence++;
     const request = emptyRequest(protocol);
     const id = nextId("req");
     const state: RequestTabState = {
@@ -332,8 +341,9 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
 
-  activateTab: (id) => set({ activeTabId: id }),
+  activateTab: (id) => { activationSequence++; set({ activeTabId: id }); },
   closeTab: (id) => {
+    activationSequence++;
     set((s) => {
       const index = s.tabs.findIndex((t) => t.id === id);
       if (index < 0) return {};

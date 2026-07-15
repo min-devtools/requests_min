@@ -1,23 +1,25 @@
 import { useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { Icon } from "../../ui/Icon";
 import { ToolButton } from "../../ui/ToolButton";
 import { useApp } from "../../store";
 import { api, type DraftEntry, type ScanHit } from "../../lib/api";
 
-export function AiImportView({ active }: { active: boolean }) {
-  const { collections, activeCollectionId, setActiveCollection, reloadCollections, showToast, openTab, aiEndpoint, aiModel, aiApiKey } = useApp();
+export function AiImportView({ active, embedded = false }: { active: boolean; embedded?: boolean }) {
+  const { collections, activeCollectionId, setActiveCollection, reloadCollections, showToast, openTab, openSelect, openDialog, aiEndpoint, aiModel, aiApiKey } = useApp();
   const [dir, setDir] = useState("");
   const [scanning, setScanning] = useState(false);
   const [files, setFiles] = useState<ScanHit[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [anchor, setAnchor] = useState<number | null>(null); // for shift-range selection
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState<DraftEntry[]>([]);
 
-  const scan = async () => {
-    if (!dir.trim()) return;
+  const scanPath = async (path: string) => {
+    if (!path.trim()) return;
     setScanning(true);
     try {
-      const res = await api.aiScan(dir.trim());
+      const res = await api.aiScan(path.trim());
       setFiles(res.files);
       setSelected(new Set(res.files.map((f) => f.path)));
       if (res.truncated) showToast("Scan truncated", "Only the first matches are shown — narrow the folder if needed.", "warn");
@@ -27,12 +29,38 @@ export function AiImportView({ active }: { active: boolean }) {
       setScanning(false);
     }
   };
+  const scan = () => scanPath(dir);
+  const chooseFolder = async () => {
+    const selectedDir = await open({ directory: true, multiple: false, title: "Choose source folder" });
+    if (typeof selectedDir !== "string") return;
+    setDir(selectedDir);
+    await scanPath(selectedDir);
+  };
 
   const toggle = (path: string) => setSelected((s) => {
     const next = new Set(s);
     next.has(path) ? next.delete(path) : next.add(path);
     return next;
   });
+
+  // plain click = select only this; cmd/ctrl-click = toggle; shift-click = range from the anchor
+  const clickRow = (e: React.MouseEvent, index: number) => {
+    const path = files[index].path;
+    if (e.shiftKey && anchor !== null) {
+      const [lo, hi] = anchor < index ? [anchor, index] : [index, anchor];
+      setSelected((s) => {
+        const next = new Set(s);
+        for (let i = lo; i <= hi; i++) next.add(files[i].path);
+        return next;
+      });
+    } else if (e.metaKey || e.ctrlKey) {
+      toggle(path);
+      setAnchor(index);
+    } else {
+      setSelected(new Set([path]));
+      setAnchor(index);
+    }
+  };
 
   const generate = async () => {
     if (selected.size === 0) { showToast("Select at least one file", undefined, "warn"); return; }
@@ -51,20 +79,37 @@ export function AiImportView({ active }: { active: boolean }) {
 
   const addToCollection = async () => {
     if (draft.length === 0) return;
-    let collectionId = activeCollectionId;
-    if (!collectionId) {
-      const meta = await api.colCreate(dir.split("/").filter(Boolean).pop() || "AI import");
-      collectionId = meta.id;
-      await reloadCollections();
-      setActiveCollection(collectionId);
+    const NEW = "\0new"; // sentinel: create a new collection
+    // active collection first so it's the default pick
+    const ordered = activeCollectionId
+      ? [...collections.filter((c) => c.id === activeCollectionId), ...collections.filter((c) => c.id !== activeCollectionId)]
+      : collections;
+    let choice: string | null = NEW;
+    if (ordered.length) {
+      choice = await openSelect({
+        title: "Add to which collection?",
+        options: [...ordered.map((c) => ({ label: c.name, value: c.id })), { label: "＋ New collection…", value: NEW }],
+        confirmLabel: "Add",
+      });
+      if (choice === null) return; // cancelled
     }
+    let collectionId: string;
+    if (choice === NEW) {
+      const name = await openDialog({ title: "New collection", message: "Enter a name — it will be created.", defaultValue: dir.split("/").filter(Boolean).pop() || "AI import" });
+      if (!name?.trim()) return;
+      collectionId = (await api.colCreate(name.trim())).id;
+      await reloadCollections();
+    } else {
+      collectionId = choice;
+    }
+    setActiveCollection(collectionId);
     for (const entry of draft) await api.reqWrite(collectionId, entry.relPath, entry.request);
     showToast("Added", `${draft.length} request(s) written to the collection.`);
     setDraft([]);
   };
 
   return (
-    <section className={`content ai-import-view ${active ? "active" : ""}`} style={{ overflow: "auto", padding: 18 }}>
+    <section className={`${embedded ? "" : "content "}ai-import-view ${active ? "active" : ""}`} style={{ overflow: "auto", padding: 18 }}>
       <div className="page-head" style={{ padding: 0, border: 0, marginBottom: 16 }}>
         <div>
           <h1>Generate collection from local folder</h1>
@@ -80,6 +125,7 @@ export function AiImportView({ active }: { active: boolean }) {
               <span>{files.length ? `${files.length} candidate file(s) found` : "Enter an absolute path to scan"}</span>
               <div style={{ marginTop: 14, display: "flex", gap: 8, justifyContent: "center" }}>
                 <input className="path-input" style={{ maxWidth: 320 }} placeholder="/abs/path/to/project" value={dir} onChange={(e) => setDir(e.target.value)} />
+                <ToolButton onClick={chooseFolder} disabled={scanning}>Choose folder</ToolButton>
                 <ToolButton variant="primary" onClick={scan} disabled={scanning}>{scanning ? "Scanning…" : "Scan folder"}</ToolButton>
               </div>
             </div>
@@ -87,14 +133,14 @@ export function AiImportView({ active }: { active: boolean }) {
 
           {files.length > 0 && (
             <section className="panel">
-              <h3>Detected files</h3>
+              <h3>Detected files <span style={{ color: "var(--text-3)", fontWeight: 400 }}>· {selected.size}/{files.length} selected — shift-click for a range, ⌘/ctrl-click to toggle</span></h3>
               <div style={{ display: "grid", gap: 4, maxHeight: 220, overflow: "auto" }}>
-                {files.map((f) => (
-                  <label key={f.path} className="check-row" style={{ cursor: "pointer" }}>
-                    <input type="checkbox" className="row-check" checked={selected.has(f.path)} onChange={() => toggle(f.path)} />
+                {files.map((f, i) => (
+                  <div key={f.path} className="check-row" style={{ cursor: "pointer", userSelect: "none", background: selected.has(f.path) ? "var(--sel, rgba(120,140,255,0.12))" : undefined }} onClick={(e) => clickRow(e, i)}>
+                    <input type="checkbox" className="row-check" checked={selected.has(f.path)} onClick={(e) => e.stopPropagation()} onChange={() => { toggle(f.path); setAnchor(i); }} />
                     <code style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{f.path}</code>
                     <span>{f.reason}</span>
-                  </label>
+                  </div>
                 ))}
               </div>
             </section>
@@ -121,7 +167,7 @@ export function AiImportView({ active }: { active: boolean }) {
             ))}
             {draft.length > 0 && (
               <ToolButton variant="primary" style={{ marginTop: 10, width: "100%" }} onClick={addToCollection}>
-                Add to {collections.find((c) => c.id === activeCollectionId)?.name ?? "new collection"}
+                Add to collection…
               </ToolButton>
             )}
           </section>

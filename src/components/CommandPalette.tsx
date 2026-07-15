@@ -26,7 +26,7 @@ export function CommandPalette() {
       { icon: "history", label: "Open Request History", action: () => app.openTab("history") },
       { icon: "copy", label: "Open Import / Export", action: () => app.openTab("import-export") },
       { icon: "github", label: "Open GitHub Sync", action: () => app.openTab("github-sync") },
-      { icon: "wand", label: "Generate from folder", kbd: "⌘I", action: () => app.openTab("ai-import") },
+      { icon: "wand", label: "Generate from folder", kbd: "⌘I", action: () => app.openTab("import-export") },
       { icon: "settings", label: "Open Settings", kbd: "⌘,", action: () => app.openTab("settings") },
       { icon: "panel-left", label: "Toggle sidebar", kbd: "⌘B", action: () => app.toggleLeft() },
       { icon: "panel-right", label: "Toggle inspector", kbd: "⌘R", action: () => app.toggleRight() },

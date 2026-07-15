@@ -12,7 +12,6 @@ import { WelcomeView } from "./components/views/WelcomeView";
 import { RequestView } from "./components/views/RequestView";
 import { CollectionsView } from "./components/views/CollectionsView";
 import { EnvironmentsView } from "./components/views/EnvironmentsView";
-import { AiImportView } from "./components/views/AiImportView";
 import { SettingsView } from "./components/views/SettingsView";
 import { HistoryView } from "./components/views/HistoryView";
 import { ImportExportView } from "./components/views/ImportExportView";
@@ -33,7 +32,6 @@ function renderView(tab: TabDef, active: boolean) {
     case "history": return <HistoryView key={tab.id} active={active} />;
     case "import-export": return <ImportExportView key={tab.id} active={active} />;
     case "github-sync": return <GithubSyncView key={tab.id} active={active} />;
-    case "ai-import": return <AiImportView key={tab.id} active={active} />;
     case "settings": return <SettingsView key={tab.id} active={active} />;
   }
 }

@@ -14,7 +14,6 @@ const WORKSPACE_NAV: { kind: Exclude<TabKind, "request">; icon: IconName; label:
   { kind: "history", icon: "history", label: "Request History" },
   { kind: "import-export", icon: "copy", label: "Import / Export" },
   { kind: "github-sync", icon: "github", label: "GitHub Sync" },
-  { kind: "ai-import", icon: "wand", label: "AI import" },
   { kind: "settings", icon: "settings", label: "Settings" },
 ];
 
@@ -29,7 +28,6 @@ export function Sidebar() {
   const [dragOverCollection, setDragOverCollection] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<string | null>(null);
   const [dragging, setDragging] = useState<DragItem | null>(null);
-  const [selected, setSelected] = useState<{ collectionId: string; request: ReqEntry } | null>(null);
   const {
     tabs, activeTabId, requestTabs, openTab, openRequestTab, collections, reloadCollections,
     activeCollectionId, setActiveCollection, reqListVersion, workspaceNavCollapsed, toggleWorkspaceNav,
@@ -61,6 +59,12 @@ export function Sidebar() {
   const activeKind = tabs.find((t) => t.id === activeTabId)?.kind;
   const q = filter.trim().toLowerCase();
   const activeRequest = requestTabs[activeTabId];
+  const selectedRequest = activeRequest?.collectionId && activeRequest.relPath
+    ? (requestsByCollection[activeRequest.collectionId] ?? []).find((request) => request.relPath === activeRequest.relPath)
+    : undefined;
+  const selected = activeRequest?.collectionId && selectedRequest
+    ? { collectionId: activeRequest.collectionId, request: selectedRequest }
+    : null;
   const toggleCollection = (id: string) => {
     setActiveCollection(id);
     setCollapsedCollections((current) => {
@@ -72,7 +76,6 @@ export function Sidebar() {
   };
   const openRequestMenu = (event: React.MouseEvent, collectionId: string, request: ReqEntry) => {
     event.preventDefault();
-    setSelected({ collectionId, request });
     setRequestMenu({ collectionId, request, x: event.clientX, y: event.clientY });
   };
 
@@ -88,7 +91,7 @@ export function Sidebar() {
   };
   const deleteReq = async (collectionId: string, r: ReqEntry) => {
     if (!await openConfirm({ title: "Delete request", message: `Delete "${r.name}"? This cannot be undone.`, danger: true, confirmLabel: "Delete" })) return;
-    try { await deleteRequest(collectionId, r.relPath); setSelected(null); showToast("Request deleted", r.name); }
+    try { await deleteRequest(collectionId, r.relPath); showToast("Request deleted", r.name); }
     catch (error) { showToast("Delete failed", String(error), "err"); }
   };
 
@@ -96,7 +99,7 @@ export function Sidebar() {
   // onKeyDown handlers. Listen globally and act on the selected request, but stay out of
   // the way while the user types in an input / Monaco (where ⌘D etc. mean other things).
   useEffect(() => {
-    if (!selected) return;
+    if (!selected?.request) return;
     const onKey = (event: KeyboardEvent) => {
       const el = document.activeElement as HTMLElement | null;
       const editable = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable || !!el.closest(".monaco-editor"));
@@ -202,7 +205,7 @@ export function Sidebar() {
                     onDragEnd={() => { setDragging(null); setDropIndicator(null); setDragOverCollection(null); }}
                     onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); if (dragging?.kind === "request" && dragging.collectionId === c.id) setDropIndicator(`request:${c.id}:${r.relPath}`); }}
                     onDrop={(event) => { event.preventDefault(); event.stopPropagation(); setDropIndicator(null); try { const from = JSON.parse(event.dataTransfer.getData("application/json")) as DragItem; if (from.kind === "request" && from.collectionId === c.id) { if (event.clientY < event.currentTarget.getBoundingClientRect().top + event.currentTarget.offsetHeight / 2) void reorderRequests(c.id, from.relPath, r.relPath); else void reorderRequests(c.id, from.relPath, requests[requests.findIndex((request) => request.relPath === r.relPath) + 1]?.relPath ?? null); } else onDropOnCollection(event, c.id); } catch { /* ignore malformed drop */ } }}
-                    onClick={() => { setSelected({ collectionId: c.id, request: r }); setActiveCollection(c.id); void openRequestTab(c.id, r.relPath); }}
+                     onClick={() => { setActiveCollection(c.id); void openRequestTab(c.id, r.relPath); }}
                     onContextMenu={(event) => openRequestMenu(event, c.id, r)}
                   >
                     <span className={`method-tag ${r.method}`}>{r.method}</span>

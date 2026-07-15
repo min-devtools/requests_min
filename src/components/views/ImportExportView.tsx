@@ -3,6 +3,7 @@ import { api } from "../../lib/api";
 import { useApp } from "../../store";
 import { ToolButton } from "../../ui/ToolButton";
 import { Icon } from "../../ui/Icon";
+import { AiImportView } from "./AiImportView";
 
 export function ImportExportView({ active }: { active: boolean }) {
   const { collections, activeCollectionId, setActiveCollection, reloadCollections, bumpReqList, showToast } = useApp();
@@ -46,7 +47,7 @@ export function ImportExportView({ active }: { active: boolean }) {
     finally { setRunning(false); }
   };
 
-  return <section className={`content utility-view ${active ? "active" : ""}`}>
+  return <section className={`content utility-view ${active ? "active" : ""}`} style={{ overflow: "auto" }}>
     <header className="page-head"><div><div className="eyebrow">Portability</div><h1>Import / Export</h1><p>Move API definitions without including local-only secrets.</p></div></header>
     <div className="utility-grid">
       <section className="workspace-card"><h3>Import</h3><div className="mini-tabs">{(["curl", "postman", "openapi"] as const).map((x) => <button key={x} className={kind === x ? "active" : ""} onClick={() => { setKind(x); setText(""); setFileName(""); }}>{x}</button>)}</div>
@@ -61,5 +62,6 @@ export function ImportExportView({ active }: { active: boolean }) {
       </section>
       <section className="workspace-card"><h3>Export collection</h3><div className="card-copy"><Icon name="database" size={22} /><strong>{collection?.name ?? "No collection selected"}</strong><span>Postman v2.1 JSON. Environment secrets stay outside collections and cannot be exported.</span></div><div className="card-actions"><ToolButton variant="primary" disabled={running || !collection} onClick={exportPostman}>Copy Postman JSON</ToolButton></div></section>
     </div>
+    <AiImportView active={active} embedded />
   </section>;
 }

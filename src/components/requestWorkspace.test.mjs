@@ -72,6 +72,20 @@ test("saved requests expose open and delete actions from their context menus", a
   assert.match(store, /closeTab\(tab\.id\)/);
 });
 
+test("request navigation keeps sidebar actions and async tab opening on the active request", async () => {
+  const [sidebar, store] = await Promise.all([
+    readFile(new URL("components/Sidebar.tsx", root), "utf8"),
+    readFile(new URL("store.ts", root), "utf8"),
+  ]);
+
+  assert.match(store, /let activationSequence = 0/);
+  assert.match(store, /const activation = \+\+activationSequence;[\s\S]*await api\.reqRead/);
+  assert.match(store, /activeTabId: activation === activationSequence \? id : s\.activeTabId/);
+  assert.match(store, /activateTab: \(id\) => \{ activationSequence\+\+; set\(\{ activeTabId: id \}\); \}/);
+  assert.doesNotMatch(sidebar, /const \[selected, setSelected\]/);
+  assert.match(sidebar, /const selected = activeRequest\?\.collectionId/);
+});
+
 test("Collections is a request manager without duplicate sync or import panels", async () => {
   const [view, menu, store] = await Promise.all([
     readFile(new URL("components/views/CollectionsView.tsx", root), "utf8"),

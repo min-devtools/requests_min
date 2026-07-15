@@ -11,7 +11,7 @@ export function WelcomeView({ active }: { active: boolean }) {
     { icon: "ws", label: "New WebSocket", desc: "Connect and exchange messages over a socket.", onClick: () => newRequestTab("ws") },
     { icon: "database", label: "Collections", desc: "Browse saved requests and sync with GitHub.", onClick: () => openTab("collections") },
     { icon: "key", label: "Environments", desc: "Manage variables and secrets per environment.", onClick: () => openTab("environments") },
-    { icon: "wand", label: "AI import", desc: "Generate a collection draft from a source folder.", onClick: () => openTab("ai-import") },
+    { icon: "wand", label: "AI import", desc: "Generate a collection draft from a source folder.", onClick: () => openTab("import-export") },
   ];
 
   return (
