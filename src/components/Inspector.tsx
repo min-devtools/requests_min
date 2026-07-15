@@ -46,10 +46,10 @@ export function Inspector() {
               <h3>Request</h3>
               <Kv label="Protocol">{rt.request.protocol.toUpperCase()}</Kv>
               <Kv label="Saved">{rt.relPath ?? "not saved yet"}</Kv>
-              {rt.response && "status" in rt.response && <Kv label="Status">{rt.response.status}</Kv>}
-              {rt.response && "statusCode" in rt.response && <Kv label="Status">{rt.response.statusCode}</Kv>}
-              {rt.response && <Kv label="Duration">{rt.response.timeMs}ms</Kv>}
-              {rt.response && "sizeBytes" in rt.response && <Kv label="Size">{rt.response.sizeBytes} bytes</Kv>}
+              {rt.response && "status" in rt.response && <Kv label="Status" className={`metric-status ${rt.response.status < 300 ? "ok" : rt.response.status < 500 ? "warn" : "err"}`}>{rt.response.status}</Kv>}
+              {rt.response && "statusCode" in rt.response && <Kv label="Status" className={`metric-status ${rt.response.statusCode === "OK" ? "ok" : "err"}`}>{rt.response.statusCode}</Kv>}
+              {rt.response && <Kv label="Duration" className="metric-duration">{rt.response.timeMs}ms</Kv>}
+              {rt.response && "sizeBytes" in rt.response && <Kv label="Size" className="metric-size">{rt.response.sizeBytes} bytes</Kv>}
               {rt.error && <div className="err-note">{rt.error}</div>}
             </section>
           )}

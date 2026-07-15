@@ -13,6 +13,8 @@ export function Dialog() {
     if (dialog?.kind === "prompt") {
       setValue(dialog.defaultValue ?? "");
       requestAnimationFrame(() => inputRef.current?.select());
+    } else if (dialog?.kind === "select") {
+      setValue(dialog.options[0]?.value ?? "");
     }
   }, [dialog]);
 
@@ -32,6 +34,7 @@ export function Dialog() {
   const cancel = () => closeDialog(null);
   const submit = () => {
     if (dialog.kind === "prompt" && !value.trim()) return;
+    if (dialog.kind === "select") return closeDialog(value);
     closeDialog(dialog.kind === "prompt" ? value : "1");
   };
 
@@ -53,6 +56,21 @@ export function Dialog() {
               if (e.key === "Escape") cancel();
             }}
           />
+        )}
+        {dialog.kind === "select" && (
+          <select
+            className="side-search"
+            style={{ width: "100%" }}
+            value={value}
+            autoFocus
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+              if (e.key === "Escape") cancel();
+            }}
+          >
+            {dialog.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
         )}
         <div className="prompt-dialog-foot">
           <ToolButton onClick={cancel}>Cancel</ToolButton>

@@ -203,7 +203,14 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                   setUrlDraft(null);
                   // single-line <input> collapses newlines to spaces, leaving stray `\ ` from `\`-continuations
                   api.importCurl(text.replace(/\\(\s|$)/g, "$1"))
-                    .then((parsed) => { if (parsed.http) update({ http: parsed.http }); showToast("Imported", "cURL parsed into request."); })
+                    .then((parsed) => {
+                      if (parsed.http) {
+                        // importCurl leaves the query on the url; split it into the Params tab like manual entry does
+                        const { base, query } = splitUrl(parsed.http.url);
+                        update({ http: { ...parsed.http, url: base, params: [...parsed.http.params, ...queryToParams(query)] } });
+                      }
+                      showToast("Imported", "cURL parsed into request.");
+                    })
                     .catch((err) => showToast("Import failed", String(err), "err"));
                   return;
                 }
@@ -323,7 +330,7 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                 />
               </div>
             )}
-            <ToolButton onClick={() => void describe("reflection")} disabled={describing}>{describing ? "Describing…" : "Describe"}</ToolButton>
+            <div className={`req-progress ${rt.running ? "on" : ""}`}><span /></div>
           </div>
           <section className="editor-pane">
             <div className="editor-tabs">
@@ -339,10 +346,10 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
               <div className="proto-panel">
                 <div className="proto-actions">
                   <ToolButton variant="primary" onClick={() => void importProtoFiles()} disabled={describing}><Icon name="braces" size={13} /> {describing ? "Describing…" : "Import .proto"}</ToolButton>
-                  <ToolButton onClick={() => void describe("files")} disabled={describing || grpc.protoFiles.length === 0}>Describe</ToolButton>
+                  <ToolButton onClick={() => void describe(grpc.protoFiles.length ? "files" : "reflection")} disabled={describing}>{grpc.protoFiles.length ? "Describe" : "Describe (reflection)"}</ToolButton>
                 </div>
                 {grpc.protoFiles.length === 0 ? (
-                  <div className="empty-note">No .proto files. Import to load and describe.</div>
+                  <div className="empty-note">No .proto files. Import to describe, or use Describe (reflection) to load from the endpoint.</div>
                 ) : (
                   <ul className="proto-files">
                     {grpc.protoFiles.map((f) => (
@@ -395,7 +402,7 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
               {rt.response && "statusCode" in rt.response && <span className="response-status ok">{rt.response.statusCode}</span>}
               {rt.error && <span className="response-status err">{rt.error}</span>}
               <span className="response-meta">
-                {rt.response && <span>{rt.response.timeMs}ms</span>}
+                {rt.response && <span className="metric-duration">{rt.response.timeMs}ms</span>}
                 <button type="button" className={responseTab === "pretty" ? "active" : ""} onClick={() => setResponseTab("pretty")}><Icon name="braces" size={13} /> Pretty</button>
                 <button type="button" className={responseTab === "raw" ? "active" : ""} onClick={() => setResponseTab("raw")}><Icon name="code" size={13} /> Raw</button>
                 <button type="button" className={responseTab === "headers" ? "active" : ""} onClick={() => setResponseTab("headers")}><Icon name="list" size={13} /> Headers</button>

@@ -42,7 +42,8 @@ export interface HistoryEntry {
 
 export type DialogRequest =
   | { kind: "prompt"; title: string; message?: string; defaultValue?: string; confirmLabel?: string; resolve: (v: string | null) => void }
-  | { kind: "confirm"; title: string; message?: string; confirmLabel?: string; danger?: boolean; resolve: (v: string | null) => void };
+  | { kind: "confirm"; title: string; message?: string; confirmLabel?: string; danger?: boolean; resolve: (v: string | null) => void }
+  | { kind: "select"; title: string; message?: string; options: { label: string; value: string }[]; confirmLabel?: string; resolve: (v: string | null) => void };
 
 let tabCounter = 0;
 const nextId = (prefix: string) => `${prefix}-${++tabCounter}-${Date.now().toString(36)}`;
@@ -85,6 +86,7 @@ interface AppState {
   dialog: DialogRequest | null;
   openDialog: (req: Omit<Extract<DialogRequest, { kind: "prompt" }>, "resolve" | "kind">) => Promise<string | null>;
   openConfirm: (req: Omit<Extract<DialogRequest, { kind: "confirm" }>, "resolve" | "kind">) => Promise<boolean>;
+  openSelect: (req: Omit<Extract<DialogRequest, { kind: "select" }>, "resolve" | "kind">) => Promise<string | null>;
   closeDialog: (value: string | null) => void;
 
   collections: CollectionMeta[];
@@ -126,6 +128,32 @@ const storedHistory = (): HistoryEntry[] => {
   try { return JSON.parse(localStorage.getItem("requestsmin:history") ?? "[]") as HistoryEntry[]; }
   catch { return []; }
 };
+
+const SESSION_KEY = "requestsmin:session";
+
+/** Restore last session's open tabs from localStorage (responses are not persisted). */
+const loadSession = (): { tabs: TabDef[]; activeTabId: string; requestTabs: Record<string, RequestTabState> } | null => {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null");
+    if (!s || !Array.isArray(s.tabs) || s.tabs.length === 0) return null;
+    const requestTabs: Record<string, RequestTabState> = {};
+    for (const [id, rt] of Object.entries<any>(s.requestTabs ?? {})) {
+      if (!rt?.request) continue;
+      requestTabs[id] = {
+        collectionId: rt.collectionId ?? null,
+        relPath: rt.relPath ?? null,
+        request: rt.request,
+        original: rt.original ?? "",
+        response: null, running: false, error: null,
+      };
+    }
+    const tabs: TabDef[] = s.tabs.filter((t: TabDef) => t.kind !== "request" || requestTabs[t.id]);
+    if (!tabs.length) return null;
+    return { tabs, activeTabId: tabs.some((t) => t.id === s.activeTabId) ? s.activeTabId : tabs[0].id, requestTabs };
+  } catch { return null; }
+};
+
+const session = loadSession();
 
 export const useApp = create<AppState>((set, get) => ({
   theme: (() => {
@@ -215,6 +243,10 @@ export const useApp = create<AppState>((set, get) => ({
     new Promise((resolve) => {
       set({ dialog: { ...req, kind: "confirm", resolve: (v: string | null) => resolve(v === "1") } });
     }),
+  openSelect: (req) =>
+    new Promise((resolve) => {
+      set({ dialog: { ...req, kind: "select", resolve } });
+    }),
   closeDialog: (value) => {
     const d = get().dialog;
     set({ dialog: null });
@@ -241,9 +273,9 @@ export const useApp = create<AppState>((set, get) => ({
   syncDirty: false,
   setSyncDirty: (v) => set({ syncDirty: v }),
 
-  tabs: [{ id: WELCOME_ID, kind: "welcome", title: "Welcome", icon: "sparkles" }],
-  activeTabId: WELCOME_ID,
-  requestTabs: {},
+  tabs: session?.tabs ?? [{ id: WELCOME_ID, kind: "welcome", title: "Welcome", icon: "sparkles" }],
+  activeTabId: session?.activeTabId ?? WELCOME_ID,
+  requestTabs: session?.requestTabs ?? {},
 
   openTab: (kind) => {
     const existing = get().tabs.find((t) => t.kind === kind);
@@ -282,8 +314,8 @@ export const useApp = create<AppState>((set, get) => ({
     const request = emptyRequest(protocol);
     const id = nextId("req");
     const state: RequestTabState = {
-      collectionId: collectionId ?? get().activeCollectionId,
-      relPath: null, request, original: "",
+      // unattached by default — the collection is chosen at save time, not inherited from whatever is active
+      collectionId, relPath: null, request, original: "",
       response: null, running: false, error: null,
     };
     const tab: TabDef = { id, kind: "request", title: request.name, icon: requestIcon(request) };
@@ -393,3 +425,18 @@ export const useApp = create<AppState>((set, get) => ({
     set({ history: [] });
   },
 }));
+
+// Persist open tabs across restarts (responses/running/error are dropped — transient).
+let prevSession = useApp.getState();
+useApp.subscribe((s) => {
+  if (s.tabs !== prevSession.tabs || s.activeTabId !== prevSession.activeTabId || s.requestTabs !== prevSession.requestTabs) {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      tabs: s.tabs,
+      activeTabId: s.activeTabId,
+      requestTabs: Object.fromEntries(Object.entries(s.requestTabs).map(([id, rt]) => [id, {
+        collectionId: rt.collectionId, relPath: rt.relPath, request: rt.request, original: rt.original,
+      }])),
+    }));
+  }
+  prevSession = s;
+});

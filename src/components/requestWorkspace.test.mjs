@@ -45,8 +45,9 @@ test("response dock resizer persists a bounded vertical split", async () => {
   assert.match(handles, /--request-top/);
   assert.match(handles, /export function toggleRequestEditorSize\(event: React\.MouseEvent, horizontal: boolean\)/);
   assert.match(handles, /if \(horizontal\) return/);
-  assert.match(handles, /classList\.toggle\("editor-maxed"/);
   assert.match(handles, /classList\.remove\("editor-maxed"\)/);
+  // double-click toggles the dock: body flush to tabs (MIN_TOP) <-> 50% split
+  assert.match(handles, /cur <= MIN_TOP \+ 8 \? Math\.round\(screenH \/ 2\) : MIN_TOP/);
   assert.match(view, /onDoubleClick=\{\(event\) => toggleRequestEditorSize\(event, horizontal\)\}/);
   assert.match(styles, /minmax\(39px, var\(--request-top\)\)/);
   assert.match(styles, /\.request-screen:not\(\.layout-cols\)\.editor-maxed[^}]*grid-template-rows:\s*38px 52px minmax\(39px, 1fr\) 0 0/s);
@@ -155,6 +156,25 @@ test("response view tabs include distinct icons", async () => {
   assert.match(view, /<Icon name="list" size=\{13\} \/> Headers/);
 });
 
+test("response metadata uses theme-aware semantic colors", async () => {
+  const [inspector, view, kv, styles] = await Promise.all([
+    readFile(new URL("components/Inspector.tsx", root), "utf8"),
+    readFile(new URL("components/views/RequestView.tsx", root), "utf8"),
+    readFile(new URL("ui/Kv.tsx", root), "utf8"),
+    readFile(new URL("styles/components.css", root), "utf8"),
+  ]);
+
+  assert.match(kv, /className=\{`kv \$\{className\}`\}/);
+  assert.match(inspector, /className=\{`metric-status/);
+  assert.match(inspector, /className="metric-duration"/);
+  assert.match(inspector, /className="metric-size"/);
+  assert.match(view, /className="metric-duration"/);
+  assert.match(styles, /\.metric-duration/);
+  assert.match(styles, /\.metric-size/);
+  assert.match(styles, /\.metric-status\.ok/);
+  assert.match(styles, /color-mix\(in oklab/);
+});
+
 test("JSON responses use Monaco scope folding and path projection Normalize", async () => {
   const [view, viewer, normalize] = await Promise.all([
     readFile(new URL("components/views/RequestView.tsx", root), "utf8"),
@@ -201,11 +221,11 @@ test("gRPC imports multiple proto files, describes them immediately, and uses re
   assert.match(view, /extensions: \["proto"\]/);
   assert.match(view, /await describe\("files", files\)/);
   assert.match(view, /Import \.proto/);
-  assert.match(view, /describe\("files"\)/);
-  assert.match(view, /disabled=\{describing \|\| grpc\.protoFiles\.length === 0\}/);
-  // reflection endpoint lives in the path bar; proto files live in a dedicated Proto tab
+  // single Describe in the Proto tab picks the source: files if imported, else reflection from the endpoint
+  assert.match(view, /describe\(grpc\.protoFiles\.length \? "files" : "reflection"\)/);
+  // reflection describe lives in the Proto tab now, not the path bar
   assert.match(view, /editorTab === "proto"/);
-  assert.match(view, /describe\("reflection"\)/);
+  assert.doesNotMatch(view, /void describe\("reflection"\)/);
   assert.match(view, /grpc-method-pickers/);
   assert.match(styles, /\.proto-panel/);
   assert.match(styles, /\.grpc-method-pickers/);

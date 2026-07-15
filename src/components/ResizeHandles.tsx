@@ -65,25 +65,22 @@ export function startResize(event: React.PointerEvent, axis: "left" | "right" | 
   window.addEventListener("pointercancel", stop, { once: true });
 }
 
-// Double-click a tab to toggle the editor between its current split and full height
-// (response collapsed). State is derived from the measured editor height, not a cached
-// element ref, so it stays correct after switching request tabs.
+// Double-click a tab to toggle the bottom dock (response). Two states, decided by the
+// measured editor height — the editor row CAN reach its 39px min, so the reading is
+// reliable (unlike the max, which the grid caps):
+//   body already at min (dock maxed)  -> open dock to 50%
+//   otherwise                         -> shrink body flush to the tabs, dock takes the rest
+const MIN_TOP = 39;
 export function toggleRequestEditorSize(event: React.MouseEvent, horizontal: boolean) {
   if (horizontal) return;
   const screen = (event.currentTarget as HTMLElement).closest(".request-screen.active") as HTMLElement | null;
   const editorPane = screen?.querySelector(".editor-pane") as HTMLElement | null;
   if (!screen || !editorPane) return;
 
-  const maxed = screen.classList.toggle("editor-maxed");
-  if (maxed) {
-    localStorage.setItem("requestsmin:request-top-restore", String(Math.round(editorPane.getBoundingClientRect().height)));
-    localStorage.setItem("requestsmin:request-maxed", "1");
-    return;
-  }
-
-  const saved = Number(localStorage.getItem("requestsmin:request-top-restore"));
-  const next = saved || Math.round(screen.getBoundingClientRect().height / 2);
-  localStorage.setItem("requestsmin:request-maxed", "0");
+  screen.classList.remove("editor-maxed"); // legacy editor-max state; dock is driven via --request-top
+  const screenH = screen.getBoundingClientRect().height;
+  const cur = editorPane.getBoundingClientRect().height;
+  const next = cur <= MIN_TOP + 8 ? Math.round(screenH / 2) : MIN_TOP;
   document.body.style.setProperty("--request-top", `${next}px`);
   localStorage.setItem("requestsmin:request-top", String(next));
 }

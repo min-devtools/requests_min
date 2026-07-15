@@ -641,6 +641,23 @@ tbody tr:hover td, tbody tr.selected td { background: color-mix(in oklab, var(--
 
 .kv code { color: var(--text); font-family: var(--font-mono); word-break: break-all; user-select: text; }
 
+.metric-duration { --metric-color: var(--blue-2); }
+.metric-size { --metric-color: var(--purple); }
+.metric-status.ok { --metric-color: var(--green); }
+.metric-status.warn { --metric-color: var(--orange); }
+.metric-status.err { --metric-color: var(--red); }
+
+.response-meta > .metric-duration,
+.kv.metric-duration code,
+.kv.metric-size code,
+.kv.metric-status code {
+  padding: 2px 6px;
+  color: var(--metric-color);
+  background: color-mix(in oklab, var(--metric-color), transparent 88%);
+  border: 1px solid color-mix(in oklab, var(--metric-color), transparent 72%);
+  border-radius: 5px;
+}
+
 .actions { display: grid; gap: 8px; margin-top: 12px; }
 
 .action-btn {
