@@ -87,6 +87,7 @@ export function JsonResponseViewer({ value }: { value: string }) {
       domReadOnly: true,
       automaticLayout: true,
       minimap: { enabled: false },
+      stickyScroll: { enabled: false },
       fontFamily: editorFont || '"Google Sans Code", "Berkeley Mono", ui-monospace, Menlo, Consolas, monospace',
       fontSize: uiFontSize,
       lineHeight: Math.round(uiFontSize * 1.65),

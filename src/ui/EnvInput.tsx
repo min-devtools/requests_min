@@ -11,6 +11,11 @@ type Props = {
 
 const parts = (value: string) => value.split(/(\{\{[^{}]*\}\})/g).filter(Boolean);
 
+export const replaceEnvSuggestion = (value: string, start: number, caret: number, name: string) => {
+  const closingBraces = value.slice(caret).match(/^\}+/)?.[0].length ?? 0;
+  return value.slice(0, start) + `{{${name}}}` + value.slice(caret + closingBraces);
+};
+
 export function EnvInput({ value, onChange, variableNames, className = "", placeholder, onBlur }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState<string | null>(null);
@@ -35,7 +40,7 @@ export function EnvInput({ value, onChange, variableNames, className = "", place
     if (!element) return;
     const caret = element.selectionStart ?? value.length;
     const token = `{{${name}}}`;
-    onChange(value.slice(0, start) + token + value.slice(caret));
+    onChange(replaceEnvSuggestion(value, start, caret, name));
     setQuery(null);
     requestAnimationFrame(() => {
       const next = start + token.length;

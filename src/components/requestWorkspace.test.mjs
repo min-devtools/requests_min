@@ -189,6 +189,76 @@ test("response metadata uses theme-aware semantic colors", async () => {
   assert.match(styles, /color-mix\(in oklab/);
 });
 
+test("right dock keeps unique context actions and copies live HTTP and gRPC commands", async () => {
+  const [inspector, requestView, styles] = await Promise.all([
+    readFile(new URL("components/Inspector.tsx", root), "utf8"),
+    readFile(new URL("components/views/RequestView.tsx", root), "utf8"),
+    readFile(new URL("styles/components.css", root), "utf8"),
+  ]);
+
+  assert.match(inspector, /className="inspector-environment"/);
+  assert.match(inspector, /Environment/);
+  assert.match(inspector, /saveActiveRequest/);
+  assert.match(inspector, /buildCurl\(request\)/);
+  assert.match(inspector, /buildGrpcurl\(request\)/);
+  assert.match(inspector, /Copy \{request\.protocol === "grpc" \? "grpcurl" : "cURL"\}/);
+  assert.match(inspector, /Recent runs/);
+  assert.match(requestView, /export function buildCurl/);
+  assert.match(requestView, /export function buildGrpcurl/);
+  assert.doesNotMatch(inspector, /GitHub sync/);
+  assert.doesNotMatch(inspector, /runActiveRequest/);
+  assert.doesNotMatch(inspector, /inspector-metrics/);
+  assert.doesNotMatch(inspector, /inspector-request-title/);
+  assert.doesNotMatch(inspector, /api\.exportCurl/);
+  assert.match(styles, /\.inspector-environment\s*\{/);
+  assert.match(styles, /\.inspector-error\s*\{/);
+});
+
+test("right dock inspects only variables used by the live request and protects secrets", async () => {
+  const [inspector, variables, styles] = await Promise.all([
+    readFile(new URL("components/Inspector.tsx", root), "utf8"),
+    readFile(new URL("lib/requestVariables.ts", root), "utf8"),
+    readFile(new URL("styles/components.css", root), "utf8"),
+  ]);
+
+  assert.match(variables, /export function requestVariableNames/);
+  assert.match(variables, /new Set/);
+  assert.match(inspector, /api\.secretRead\(activeEnv\)/);
+  assert.match(inspector, /requestVariableNames\(request\)/);
+  assert.match(inspector, /Secret/);
+  assert.match(inspector, /Unresolved/);
+  assert.match(inspector, /onPointerDown/);
+  assert.match(inspector, /onPointerUp/);
+  assert.doesNotMatch(inspector, /Request details/);
+  assert.match(styles, /\.inspector-variable-row/);
+  assert.match(styles, /\.inspector-variable-warning/);
+});
+
+test("environment autocomplete consumes existing closing braces when inserting a suggestion", async () => {
+  const input = await readFile(new URL("ui/EnvInput.tsx", root), "utf8");
+
+  assert.match(input, /export const replaceEnvSuggestion/);
+  assert.match(input, /slice\(caret\)\.match\(\/\^\\}\+\//);
+  assert.match(input, /replaceEnvSuggestion\(value, start, caret, name\)/);
+});
+
+test("right dock wraps full variable values and previews the resolved request target", async () => {
+  const [inspector, variables, styles] = await Promise.all([
+    readFile(new URL("components/Inspector.tsx", root), "utf8"),
+    readFile(new URL("lib/requestVariables.ts", root), "utf8"),
+    readFile(new URL("styles/components.css", root), "utf8"),
+  ]);
+
+  assert.match(variables, /export function resolveRequestTarget/);
+  assert.match(inspector, /Resolved preview/);
+  assert.match(inspector, /resolveRequestTarget\(request, vars, secrets, revealSecrets\)/);
+  assert.match(inspector, /inspector-preview-target/);
+  assert.match(styles, /\.inspector-variable-row strong[^}]*white-space:\s*pre-wrap/s);
+  assert.match(styles, /\.inspector-variable-row strong[^}]*overflow-wrap:\s*anywhere/s);
+  assert.doesNotMatch(styles, /\.inspector-variable-row strong[^}]*max-width:\s*112px/s);
+  assert.match(styles, /\.inspector-preview\s*\{/);
+});
+
 test("JSON responses use Monaco scope folding and path projection Normalize", async () => {
   const [view, viewer, normalize] = await Promise.all([
     readFile(new URL("components/views/RequestView.tsx", root), "utf8"),

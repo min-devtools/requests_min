@@ -34,7 +34,7 @@ const fullUrl = (base: string, params: KV[]): string => {
   return q ? `${splitUrl(base).base}?${q}` : base;
 };
 
-function buildCurl(request: Request): string {
+export function buildCurl(request: Request): string {
   if (!request.http) return "";
   const h = request.http;
   const parts = [`curl -X ${h.method} '${fullUrl(h.url, h.params)}'`];
@@ -43,6 +43,20 @@ function buildCurl(request: Request): string {
   if (h.body.type === "json" && h.body.content) parts.push(`-d '${h.body.content.replace(/'/g, "'\\''")}'`);
   if (h.body.type === "text" && h.body.content) parts.push(`-d '${h.body.content.replace(/'/g, "'\\''")}'`);
   return parts.join(" \\\n  ");
+}
+
+const shellQuote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
+
+export function buildGrpcurl(request: Request): string {
+  if (!request.grpc) return "";
+  const grpc = request.grpc;
+  const target = grpc.endpoint.replace(/^https?:\/\//, "");
+  const parts = ["grpcurl"];
+  if (!grpc.endpoint.startsWith("https://")) parts.push("-plaintext");
+  for (const file of grpc.protoFiles) parts.push("-proto", shellQuote(file));
+  for (const item of grpc.metadata) if (item.enabled !== false && item.key) parts.push("-H", shellQuote(`${item.key}: ${item.value}`));
+  parts.push("-d", shellQuote(grpc.message || "{}"), target, `${grpc.service}/${grpc.method}`);
+  return parts.join(" ");
 }
 
 export function RequestView({ tabId, active }: { tabId: string; active: boolean }) {

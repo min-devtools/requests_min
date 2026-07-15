@@ -7,7 +7,7 @@ import { DEFAULT_REPO } from "../../lib/ghSync";
 import { THEMES, themeBase } from "../../lib/themes";
 
 export function SettingsView({ active }: { active: boolean }) {
-  const { theme, setTheme, compact, toggleCompact, uiFontSize, changeUiFontSize, resetUiFontSize, uiFont, editorFont, setUiFont, setEditorFont, aiEndpoint, aiModel, aiApiKey, setAiSettings, showToast } = useApp();
+  const { theme, setTheme, compact, toggleCompact, vimMode, toggleVimMode, uiFontSize, changeUiFontSize, resetUiFontSize, uiFont, editorFont, setUiFont, setEditorFont, aiEndpoint, aiModel, aiApiKey, setAiSettings, showToast } = useApp();
   const [gh, setGh] = useState<GhStatus | null>(null);
   const [token, setToken] = useState("");
   const [repo, setRepo] = useState(DEFAULT_REPO);
@@ -83,6 +83,11 @@ export function SettingsView({ active }: { active: boolean }) {
             <div className="settings-copy"><strong>Compact density</strong><span>Use the same dense data layout available in ElasticMin.</span></div>
             <div className="settings-control"><label className="switch"><input type="checkbox" checked={compact} onChange={toggleCompact} /><span /></label></div>
           </div>
+          <div className="settings-row">
+            <span className="settings-icon"><Icon name="keyboard" size={15} /></span>
+            <div className="settings-copy"><strong>Vim mode</strong><span>Modal editing via monaco-vim in the query editor. Toggle also lives in the editor footer.</span></div>
+            <div className="settings-control"><label className="switch"><input type="checkbox" checked={vimMode} onChange={() => { toggleVimMode(); showToast("Vim mode", vimMode ? "Disabled." : "Enabled — NORMAL mode in query editor."); }} /><span /></label></div>
+          </div>
         </section>
 
         <section className="settings-card">
@@ -148,7 +153,20 @@ export function SettingsView({ active }: { active: boolean }) {
             <div className="shortcut-row"><span>Open settings</span><span className="kbd">⌘,</span></div>
           </div>
         </section>
-        <div className="settings-credit"><strong>RequestsMin</strong><a className="settings-credit-link" href="https://www.linkedin.com/in/ngthminh-dev/" target="_blank" rel="noreferrer">Created by @ngthminhdev</a></div>
+
+        <section className="settings-card">
+          <h3>Data</h3>
+          <div className="settings-row">
+            <span className="settings-icon"><Icon name="database" size={15} /></span>
+            <div className="settings-copy"><strong>Collections</strong><span>Stored on disk under ~/RequestsMin (collections/, environments/). Right-click a collection in the sidebar to edit or remove it.</span></div>
+            <div className="settings-control" />
+          </div>
+        </section>
+        <div className="settings-credit">
+          <a className="settings-github" href="https://github.com/min-devtools/requests_min" target="_blank" rel="noreferrer"><Icon name="github" size={15} /> View on GitHub</a>
+          <strong>RequestsMin</strong>
+          <a className="settings-credit-link" href="https://www.linkedin.com/in/ngthminh-dev/" target="_blank" rel="noreferrer">Created by @ngthminhdev</a>
+        </div>
       </div>
     </section>
   );

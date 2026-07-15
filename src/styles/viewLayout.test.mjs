@@ -16,6 +16,11 @@ test("response viewer editor always gets the remaining height, even with no path
   assert.match(viewer, /<div className="json-response-editor">/);
 });
 
+test("response JSON does not pin parent scopes while scrolling", async () => {
+  const viewer = await readFile(new URL("../ui/JsonResponseViewer.tsx", import.meta.url), "utf8");
+  assert.match(viewer, /stickyScroll:\s*\{\s*enabled:\s*false\s*\}/);
+});
+
 test("stacked response can expand until only the editor tab bar remains", async () => {
   const css = await readFile(new URL("requestsmin.css", import.meta.url), "utf8");
   const resizeHandles = await readFile(new URL("../components/ResizeHandles.tsx", import.meta.url), "utf8");
