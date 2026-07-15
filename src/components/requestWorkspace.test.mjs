@@ -43,7 +43,14 @@ test("response dock resizer persists a bounded vertical split", async () => {
   assert.match(handles, /axis: "left" \| "right" \| "request" \| "request-x"/);
   assert.match(handles, /requestsmin:request-top/);
   assert.match(handles, /--request-top/);
-  assert.match(styles, /minmax\(220px, var\(--request-top\)\)/);
+  assert.match(handles, /export function toggleRequestEditorSize\(event: React\.MouseEvent, horizontal: boolean\)/);
+  assert.match(handles, /if \(horizontal\) return/);
+  assert.match(handles, /classList\.toggle\("editor-maxed"/);
+  assert.match(handles, /classList\.remove\("editor-maxed"\)/);
+  assert.match(view, /onDoubleClick=\{\(event\) => toggleRequestEditorSize\(event, horizontal\)\}/);
+  assert.match(styles, /minmax\(39px, var\(--request-top\)\)/);
+  assert.match(styles, /\.request-screen:not\(\.layout-cols\)\.editor-maxed[^}]*grid-template-rows:\s*38px 52px minmax\(39px, 1fr\) 0 0/s);
+  assert.match(styles, /\.request-screen \.editor-pane[^}]*overflow:\s*hidden/s);
   assert.match(styles, /touch-action: none/);
 });
 
@@ -79,6 +86,13 @@ test("Collections is a request manager without duplicate sync or import panels",
   assert.match(menu, /<strong>Duplicate request<\/strong>/);
   assert.match(store, /renameRequest: \(collectionId: string, relPath: string, name: string\) => Promise<void>/);
   assert.match(store, /duplicateRequest: \(collectionId: string, relPath: string, name: string\) => Promise<void>/);
+});
+
+test("collection rows leave space after the method prefix and distinguish gRPC", async () => {
+  const styles = await readFile(new URL("styles/requestsmin.css", root), "utf8");
+
+  assert.match(styles, /collection-request-head, \.collection-request-row \{[^}]*grid-template-columns: 96px/s);
+  assert.match(styles, /\.method-tag\.RPC \{ color: var\(--orange\); \}/);
 });
 
 test("Settings exposes persistent UI and editor font family controls", async () => {
@@ -185,11 +199,15 @@ test("gRPC imports multiple proto files, describes them immediately, and uses re
   assert.match(view, /import \{ open \} from "@tauri-apps\/plugin-dialog"/);
   assert.match(view, /multiple: true/);
   assert.match(view, /extensions: \["proto"\]/);
-  assert.match(view, /await describe\(files\)/);
-  assert.match(view, />Import \.proto</);
-  assert.match(view, /grpc-source-select/);
+  assert.match(view, /await describe\("files", files\)/);
+  assert.match(view, /Import \.proto/);
+  assert.match(view, /describe\("files"\)/);
+  assert.match(view, /disabled=\{describing \|\| grpc\.protoFiles\.length === 0\}/);
+  // reflection endpoint lives in the path bar; proto files live in a dedicated Proto tab
+  assert.match(view, /editorTab === "proto"/);
+  assert.match(view, /describe\("reflection"\)/);
   assert.match(view, /grpc-method-pickers/);
-  assert.match(styles, /\.grpc-source-select/);
+  assert.match(styles, /\.proto-panel/);
   assert.match(styles, /\.grpc-method-pickers/);
   assert.match(cargo, /tauri-plugin-dialog/);
   assert.match(backend, /tauri_plugin_dialog::init/);

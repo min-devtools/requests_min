@@ -8,7 +8,7 @@ import { JsonView } from "../../ui/JsonView";
 import { JsonResponseViewer } from "../../ui/JsonResponseViewer";
 import { EnvInput } from "../../ui/EnvInput";
 import { Combobox } from "../../ui/Combobox";
-import { startResize } from "../ResizeHandles";
+import { startResize, toggleRequestEditorSize } from "../ResizeHandles";
 import { useApp } from "../../store";
 import {
   api, emptyGrpc, emptyHttp, emptyWs, onWsEvent,
@@ -49,9 +49,10 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
   const rt = useApp((s) => s.requestTabs[tabId]);
   const updateRequestTab = useApp((s) => s.updateRequestTab);
   const showToast = useApp((s) => s.showToast);
-  const [editorTab, setEditorTab] = useState<"body" | "headers" | "auth" | "params" | "metadata">("body");
+  const [editorTab, setEditorTab] = useState<"body" | "headers" | "auth" | "params" | "cookies" | "metadata" | "proto">("body");
   const [urlDraft, setUrlDraft] = useState<string | null>(null); // local while typing the URL, so it isn't reformatted mid-edit
-  const [responseTab, setResponseTab] = useState<"pretty" | "headers" | "raw">("pretty");
+  const [responseTab, setResponseTab] = useState<"pretty" | "headers" | "cookies" | "raw">("pretty");
+  const [reqCookies, setReqCookies] = useState<KV[]>([]);
   const [catalog, setCatalog] = useState<GrpcCatalog | null>(null);
   const [describing, setDescribing] = useState(false);
   const [wsLog, setWsLog] = useState<{ dir: "out" | "in" | "sys"; text: string }[]>([]);
@@ -85,6 +86,14 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
   const request = rt.request;
   const update = (patch: Partial<Request>) => updateRequestTab(tabId, { request: { ...request, ...patch } });
 
+  // cookies the jar will attach for this url (refresh on tab open / url change / after send)
+  const reqUrl = request.http?.url ?? "";
+  const lastResponse = rt.response;
+  useEffect(() => {
+    if (editorTab !== "cookies") return;
+    api.cookiesFor(reqUrl).then(setReqCookies).catch(() => setReqCookies([]));
+  }, [editorTab, reqUrl, lastResponse]);
+
   const setProtocol = (protocol: Request["protocol"]) => {
     if (protocol === request.protocol) return;
     setEditorTab("body");
@@ -96,15 +105,16 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
     });
   };
 
-  const describe = async (selectedFiles?: string[]) => {
+  // Source is set by whichever Describe runs last — reflection (path bar) or files (Proto tab).
+  const describe = async (source: "reflection" | "files", selectedFiles?: string[]) => {
     if (!request.grpc) return;
     setDescribing(true);
     try {
-      const usingFiles = selectedFiles !== undefined || request.grpc.protoSource === "files";
-      const endpoint = usingFiles ? null : request.grpc.endpoint;
-      const files = selectedFiles ?? (usingFiles ? request.grpc.protoFiles : []);
-      const c = await api.grpcDescribe(endpoint, files, request.grpc.insecure);
+      const files = source === "files" ? (selectedFiles ?? request.grpc.protoFiles) : [];
+      const endpoint = source === "reflection" ? request.grpc.endpoint : null;
+      const c = await api.grpcDescribe(env, endpoint, files, request.grpc.insecure);
       setCatalog(c);
+      update({ grpc: { ...request.grpc, protoSource: source } }); // last describe wins
       showToast("Described", `${c.services.length} service(s) found.`);
     } catch (err) {
       showToast("Describe failed", String(err), "err");
@@ -120,9 +130,10 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
         filters: [{ name: "Protocol Buffers", extensions: ["proto"] }],
       });
       if (!selected || !request.grpc) return;
-      const files = Array.isArray(selected) ? selected : [selected];
-      update({ grpc: { ...request.grpc, protoSource: "files", protoFiles: files } });
-      await describe(files);
+      const picked = Array.isArray(selected) ? selected : [selected];
+      const files = [...new Set([...request.grpc.protoFiles, ...picked])];
+      update({ grpc: { ...request.grpc, protoFiles: files } });
+      await describe("files", files);
     } catch (err) {
       showToast("Import failed", String(err), "err");
     }
@@ -187,6 +198,15 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
             <EnvInput className="query-path-input"
               value={urlDraft ?? fullUrl(request.http.url, request.http.params)}
               onChange={(text) => {
+                // paste a whole `curl ...` into the URL bar → parse it and fill method/url/params/headers/body/auth
+                if (/^\s*curl\s/i.test(text)) {
+                  setUrlDraft(null);
+                  // single-line <input> collapses newlines to spaces, leaving stray `\ ` from `\`-continuations
+                  api.importCurl(text.replace(/\\(\s|$)/g, "$1"))
+                    .then((parsed) => { if (parsed.http) update({ http: parsed.http }); showToast("Imported", "cURL parsed into request."); })
+                    .catch((err) => showToast("Import failed", String(err), "err"));
+                  return;
+                }
                 // typing/pasting a query in the URL splits it live into the Params tab (and vice-versa, since the value is derived from params)
                 setUrlDraft(text);
                 const { base, query } = splitUrl(text);
@@ -200,10 +220,11 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
           </div>
           <section className="editor-pane">
             <div className="editor-tabs">
-              <button type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")}><Icon name="braces" size={13} /> Body</button>
-              <button type="button" className={editorTab === "headers" ? "active" : ""} onClick={() => setEditorTab("headers")}><Icon name="activity" size={13} /> Headers <span className="tab-count">{request.http.headers.length}</span></button>
-              <button type="button" className={editorTab === "params" ? "active" : ""} onClick={() => setEditorTab("params")}><Icon name="key" size={13} /> Params <span className="tab-count">{request.http.params.length}</span></button>
-              <button type="button" className={editorTab === "auth" ? "active" : ""} onClick={() => setEditorTab("auth")}><Icon name="key" size={13} /> Auth</button>
+              <button type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Body</button>
+              <button type="button" className={editorTab === "headers" ? "active" : ""} onClick={() => setEditorTab("headers")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="activity" size={13} /> Headers <span className="tab-count">{request.http.headers.length}</span></button>
+              <button type="button" className={editorTab === "params" ? "active" : ""} onClick={() => setEditorTab("params")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Params <span className="tab-count">{request.http.params.length}</span></button>
+              <button type="button" className={editorTab === "auth" ? "active" : ""} onClick={() => setEditorTab("auth")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Auth</button>
+              <button type="button" className={editorTab === "cookies" ? "active" : ""} onClick={() => setEditorTab("cookies")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="list" size={13} /> Cookies <span className="tab-count">{reqCookies.length}</span></button>
               {editorTab === "body" && (
                 <div className="body-type-tabs">
                   {(["none", "json", "text", "form"] as const).map((t) => (
@@ -263,6 +284,17 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                 )}
               </div>
             )}
+            {editorTab === "cookies" && (
+              <div className="cookies-panel">
+                <div className="cookies-head">
+                  <span>Cookies sent to <code>{reqUrl || "this request"}</code> from the shared jar.</span>
+                  <ToolButton onClick={() => void api.cookiesClear().then(() => setReqCookies([])).then(() => showToast("Cookies cleared", "Jar emptied."))}><Icon name="trash" size={13} /> Clear all</ToolButton>
+                </div>
+                {reqCookies.length === 0
+                  ? <div className="empty-note">No cookies for this URL yet. Send a request that returns Set-Cookie.</div>
+                  : <table className="cookies-table"><tbody>{reqCookies.map((c, i) => <tr key={i}><td>{c.key}</td><td>{c.value}</td></tr>)}</tbody></table>}
+              </div>
+            )}
           </section>
         </>
       )}
@@ -270,47 +302,59 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
       {request.protocol === "grpc" && grpc && (
         <>
           <div className="request-head">
-            <select className="method-select grpc-source-select" value={grpc.protoSource} onChange={(e) => update({ grpc: { ...grpc, protoSource: e.target.value as any } })}>
-              <option value="reflection">reflection</option>
-              <option value="files">.proto files</option>
-            </select>
-            {grpc.protoSource === "reflection" ? (
-              <EnvInput className="query-path-input" value={grpc.endpoint} onChange={(endpoint) => update({ grpc: { ...grpc, endpoint } })} placeholder="{{grpcHost}}:50051" variableNames={variableNames} />
-            ) : (
-                <input className="query-path-input" value={grpc.protoFiles.join(", ")} onChange={(e) => update({ grpc: { ...grpc, protoFiles: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) } })} placeholder="/abs/path/a.proto, /abs/path/b.proto" />
-              )}
-            {grpc.protoSource === "files" && <ToolButton onClick={() => void importProtoFiles()}>Import .proto</ToolButton>}
-            <ToolButton onClick={() => void describe()} disabled={describing}>{describing ? "Describing…" : "Describe"}</ToolButton>
+            <EnvInput className="query-path-input" value={grpc.endpoint} onChange={(endpoint) => update({ grpc: { ...grpc, endpoint } })} placeholder="{{grpcHost}}:50051" variableNames={variableNames} />
+            {catalog && (
+              <div className="grpc-method-pickers">
+                <Combobox
+                  value={grpc.service}
+                  options={catalog.services.map((service) => service.name)}
+                  placeholder="Select service..."
+                  onChange={(service) => update({ grpc: { ...grpc, service, method: "" } })}
+                />
+                <Combobox
+                  value={grpc.method}
+                  options={selectedService?.methods.map((method) => method.name) ?? []}
+                  placeholder="Select method..."
+                  disabled={!selectedService}
+                  onChange={(method) => {
+                    const selectedMethod = selectedService?.methods.find((item) => item.name === method);
+                    update({ grpc: { ...grpc, method, message: selectedMethod?.inputTemplate ?? grpc.message } });
+                  }}
+                />
+              </div>
+            )}
+            <ToolButton onClick={() => void describe("reflection")} disabled={describing}>{describing ? "Describing…" : "Describe"}</ToolButton>
           </div>
           <section className="editor-pane">
             <div className="editor-tabs">
-              <button type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")}><Icon name="braces" size={13} /> Message</button>
-              <button type="button" className={editorTab === "metadata" ? "active" : ""} onClick={() => setEditorTab("metadata")}><Icon name="key" size={13} /> Metadata <span className="tab-count">{grpc.metadata.length}</span></button>
-              {catalog && (
-                <div className="grpc-method-pickers">
-                  <Combobox
-                    value={grpc.service}
-                    options={catalog.services.map((service) => service.name)}
-                    placeholder="Select service..."
-                    onChange={(service) => update({ grpc: { ...grpc, service, method: "" } })}
-                  />
-                  <Combobox
-                    value={grpc.method}
-                    options={selectedService?.methods.map((method) => method.name) ?? []}
-                    placeholder="Select method..."
-                    disabled={!selectedService}
-                    onChange={(method) => {
-                      const selectedMethod = selectedService?.methods.find((item) => item.name === method);
-                      update({ grpc: { ...grpc, method, message: selectedMethod?.inputTemplate ?? grpc.message } });
-                    }}
-                  />
-                </div>
-              )}
+              <button type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Message</button>
+              <button type="button" className={editorTab === "metadata" ? "active" : ""} onClick={() => setEditorTab("metadata")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Metadata <span className="tab-count">{grpc.metadata.length}</span></button>
+              <button type="button" className={editorTab === "proto" ? "active" : ""} onClick={() => setEditorTab("proto")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Proto <span className="tab-count">{grpc.protoFiles.length}</span></button>
             </div>
             {editorTab === "body" && (
               <JsonEditor value={grpc.message} onChange={(message) => update({ grpc: { ...grpc, message } })} variableNames={variableNames} />
             )}
             {editorTab === "metadata" && <KvEditor items={grpc.metadata} onChange={(metadata) => update({ grpc: { ...grpc, metadata } })} keyPlaceholder="metadata key" />}
+            {editorTab === "proto" && (
+              <div className="proto-panel">
+                <div className="proto-actions">
+                  <ToolButton variant="primary" onClick={() => void importProtoFiles()} disabled={describing}><Icon name="braces" size={13} /> {describing ? "Describing…" : "Import .proto"}</ToolButton>
+                  <ToolButton onClick={() => void describe("files")} disabled={describing || grpc.protoFiles.length === 0}>Describe</ToolButton>
+                </div>
+                {grpc.protoFiles.length === 0 ? (
+                  <div className="empty-note">No .proto files. Import to load and describe.</div>
+                ) : (
+                  <ul className="proto-files">
+                    {grpc.protoFiles.map((f) => (
+                      <li key={f}>
+                        <span className="proto-path" title={f}>{f}</span>
+                        <button type="button" className="proto-remove" aria-label="Remove file" onClick={() => update({ grpc: { ...grpc, protoFiles: grpc.protoFiles.filter((p) => p !== f) } })}>✕</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </section>
         </>
       )}
@@ -355,14 +399,15 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                 <button type="button" className={responseTab === "pretty" ? "active" : ""} onClick={() => setResponseTab("pretty")}><Icon name="braces" size={13} /> Pretty</button>
                 <button type="button" className={responseTab === "raw" ? "active" : ""} onClick={() => setResponseTab("raw")}><Icon name="code" size={13} /> Raw</button>
                 <button type="button" className={responseTab === "headers" ? "active" : ""} onClick={() => setResponseTab("headers")}><Icon name="list" size={13} /> Headers</button>
+                <button type="button" className={responseTab === "cookies" ? "active" : ""} onClick={() => setResponseTab("cookies")}><Icon name="list" size={13} /> Cookies</button>
               </span>
             </div>
             <div className="response-body">
               {!rt.response && !rt.error && <div className="response-empty">{rt.running ? "sending…" : "send a request to see the response"}</div>}
-              {rt.response && "body" in rt.response && responseTab !== "headers" && (
+              {rt.response && "body" in rt.response && (responseTab === "pretty" || responseTab === "raw") && (
                 responseTab === "pretty" ? <JsonResponseViewer value={tryPretty(rt.response.body)} /> : <JsonView className="response-code json-tree" value={rt.response.body} />
               )}
-              {rt.response && "bodyJson" in rt.response && responseTab !== "headers" && (
+              {rt.response && "bodyJson" in rt.response && (responseTab === "pretty" || responseTab === "raw") && (
                 responseTab === "pretty" ? <JsonResponseViewer value={tryPretty(rt.response.bodyJson)} /> : <JsonView className="response-code json-tree" value={rt.response.bodyJson} />
               )}
               {rt.response && responseTab === "headers" && (
@@ -371,6 +416,13 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                   <tbody>{rt.response.headers.map((h, i) => <tr key={i}><td>{h.key}</td><td>{h.value}</td></tr>)}</tbody>
                 </table>
               )}
+              {rt.response && responseTab === "cookies" && (() => {
+                const cookies = parseSetCookies(rt.response.headers);
+                return cookies.length === 0
+                  ? <div className="response-empty">No Set-Cookie in this response.</div>
+                  : <table><thead><tr><th>Name</th><th>Value</th><th>Attributes</th></tr></thead>
+                      <tbody>{cookies.map((c, i) => <tr key={i}><td>{c.name}</td><td>{c.value}</td><td>{c.attrs}</td></tr>)}</tbody></table>;
+              })()}
             </div>
           </section>
         </>
@@ -381,4 +433,17 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
 
 function tryPretty(text: string): string {
   try { return JSON.stringify(JSON.parse(text), null, 2); } catch { return text; }
+}
+
+// Split each Set-Cookie response header into name / value / remaining attributes.
+function parseSetCookies(headers: KV[]): { name: string; value: string; attrs: string }[] {
+  return headers.filter((h) => h.key.toLowerCase() === "set-cookie").map((h) => {
+    const semi = h.value.indexOf(";");
+    const pair = semi === -1 ? h.value : h.value.slice(0, semi);
+    const attrs = semi === -1 ? "" : h.value.slice(semi + 1).trim();
+    const eq = pair.indexOf("=");
+    return eq === -1
+      ? { name: pair.trim(), value: "", attrs }
+      : { name: pair.slice(0, eq).trim(), value: pair.slice(eq + 1).trim(), attrs };
+  });
 }

@@ -29,13 +29,14 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(ws::WsState::default())
+        .manage(http::CookieState::default())
         .invoke_handler(tauri::generate_handler![
             ping, list_fonts,
-            collection::col_list, collection::col_create, collection::col_rename, collection::col_delete,
-            collection::req_list, collection::req_read, collection::req_write, collection::req_delete, collection::req_move,
+            collection::col_list, collection::col_create, collection::col_rename, collection::col_delete, collection::col_reorder,
+            collection::req_list, collection::req_read, collection::req_write, collection::req_delete, collection::req_move, collection::req_reorder,
             collection::env_list, collection::env_read, collection::env_write, collection::env_delete,
             secrets::secret_read, secrets::secret_write,
-            http::http_request,
+            http::http_request, http::cookies_for, http::cookies_clear,
             ws::ws_connect, ws::ws_send, ws::ws_close,
             grpc::grpc_describe, grpc::grpc_unary,
             import::import_curl, import::import_postman, import::import_openapi,

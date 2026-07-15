@@ -2,7 +2,7 @@
   /* Default dark = Bearded Arc (shared with elastic_min); light theme carries the #7A3EED purple */
   --accent: var(--blue);
   --font-body-default: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono-default: "Berkeley Mono", ui-monospace, Menlo, Consolas, monospace;
+  --font-mono-default: "Google Sans Code", "Berkeley Mono", ui-monospace, Menlo, Consolas, monospace;
   --font-body: var(--font-body-default);
   --font-mono: var(--font-mono-default);
 

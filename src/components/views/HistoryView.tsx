@@ -24,7 +24,7 @@ export function HistoryView({ active }: { active: boolean }) {
       </header>
       <div className="utility-body">
         {!history.length ? <div className="empty-state"><Icon name="history" size={22} /><strong>No requests run yet</strong><span>Send an HTTP or gRPC request and it will appear here.</span></div> : (
-          <div className="table-panel"><table><thead><tr><th>Time</th><th>Protocol</th><th>Request</th><th>Status</th><th>Duration</th><th /></tr></thead><tbody>
+          <div className="table-panel"><table className="history-table"><thead><tr><th>Time</th><th>Protocol</th><th>Request</th><th>Status</th><th>Duration</th><th /></tr></thead><tbody>
             {history.map((entry, index) => <tr key={entry.id} onDoubleClick={() => reopen(index)}>
               <td className="cell-date">{new Date(entry.timestamp).toLocaleString()}</td>
               <td><span className={`method-tag ${entry.request.protocol === "grpc" ? "RPC" : "API"}`}>{entry.request.protocol.toUpperCase()}</span></td>

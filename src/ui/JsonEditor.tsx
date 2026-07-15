@@ -1,17 +1,33 @@
 import Editor, { type OnMount } from "@monaco-editor/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { initVimMode } from "monaco-vim";
 import { Icon } from "./Icon";
 import { MONACO_THEME } from "../lib/monaco";
 import { runActiveRequest } from "../lib/runRequest";
 import { useApp } from "../store";
 
+type MonacoEditor = Parameters<OnMount>[0];
+
 export function JsonEditor({ value, onChange, language = "json", variableNames = [] }: { value: string; onChange: (value: string) => void; language?: "json" | "plaintext"; variableNames?: string[] }) {
   const uiFontSize = useApp((state) => state.uiFontSize);
   const editorFont = useApp((state) => state.editorFont);
   const showToast = useApp((state) => state.showToast);
+  const vimMode = useApp((state) => state.vimMode);
+  const toggleVimMode = useApp((state) => state.toggleVimMode);
   const [validation, setValidation] = useState<"valid" | "invalid" | null>(null);
   const variableNamesRef = useRef(variableNames);
   variableNamesRef.current = variableNames;
+  const editorRef = useRef<MonacoEditor | null>(null);
+  const statusRef = useRef<HTMLDivElement | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Vim is opt-in and lives only while focused in the editor, so app shortcuts (Cmd+Enter to
+  // send, etc.) are unaffected — monaco-vim never binds Cmd combos. Dispose on toggle/unmount.
+  useEffect(() => {
+    if (!mounted || !vimMode || !editorRef.current) return;
+    const vim = initVimMode(editorRef.current, statusRef.current);
+    return () => vim.dispose();
+  }, [mounted, vimMode]);
   const transform = (pretty: boolean) => {
     try {
       onChange(JSON.stringify(JSON.parse(value), null, pretty ? 2 : undefined));
@@ -34,6 +50,8 @@ export function JsonEditor({ value, onChange, language = "json", variableNames =
     }
   };
   const onMount: OnMount = (editor, monaco) => {
+    editorRef.current = editor;
+    setMounted(true);
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => void runActiveRequest());
     const decorations = editor.createDecorationsCollection();
     const markVariables = () => {
@@ -77,6 +95,7 @@ export function JsonEditor({ value, onChange, language = "json", variableNames =
         <div className="json-editor-tools">
           <span className={validation === "invalid" ? "invalid" : validation === "valid" ? "valid" : ""}>JSON {validation ?? ""}</span>
           <span />
+          <button type="button" className={vimMode ? "active" : ""} onClick={toggleVimMode} title="Vim mode" aria-label="Vim mode" aria-pressed={vimMode}>vim</button>
           <button type="button" onClick={format} title="Format" aria-label="Format"><Icon name="wand" size={14} /></button>
           <button type="button" onClick={minify} title="Minify" aria-label="Minify"><Icon name="minify" size={14} /></button>
           <button type="button" onClick={validate} title="Validate" aria-label="Validate"><Icon name="check" size={14} /></button>
@@ -91,7 +110,7 @@ export function JsonEditor({ value, onChange, language = "json", variableNames =
         options={{
           automaticLayout: true,
           minimap: { enabled: false },
-          fontFamily: editorFont || '"Berkeley Mono", ui-monospace, Menlo, Consolas, monospace',
+          fontFamily: editorFont || '"Google Sans Code", "Berkeley Mono", ui-monospace, Menlo, Consolas, monospace',
           fontSize: uiFontSize,
           lineHeight: Math.round(uiFontSize * 1.65),
           tabSize: 2,
@@ -108,6 +127,7 @@ export function JsonEditor({ value, onChange, language = "json", variableNames =
           scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
         }}
       />
+      {vimMode && <div className="vim-status" ref={statusRef} />}
     </div>
   );
 }

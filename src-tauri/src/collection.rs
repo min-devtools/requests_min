@@ -146,8 +146,18 @@ pub fn list_collections(root: &Path) -> Result<Vec<CollectionMeta>, String> {
             if let Ok(meta) = serde_json::from_str::<CollectionMeta>(&text) { out.push(meta); }
         }
     }
-    out.sort_by(|a, b| a.name.cmp(&b.name));
+    let order: Vec<String> = std::fs::read_to_string(base.join("order.json"))
+        .ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default();
+    out.sort_by(|a, b| {
+        let ai = order.iter().position(|id| id == &a.id).unwrap_or(usize::MAX);
+        let bi = order.iter().position(|id| id == &b.id).unwrap_or(usize::MAX);
+        ai.cmp(&bi).then_with(|| a.name.cmp(&b.name))
+    });
     Ok(out)
+}
+
+pub fn reorder_collections(root: &Path, order: &[String]) -> Result<(), String> {
+    write_sorted_json(&root.join("collections/order.json"), &serde_json::to_value(order).map_err(|e| e.to_string())?)
 }
 
 pub fn rename_collection(root: &Path, id: &str, name: &str) -> Result<(), String> {
@@ -187,8 +197,23 @@ pub fn list_requests(root: &Path, id: &str) -> Result<Vec<ReqEntry>, String> {
         };
         out.push(ReqEntry { rel_path: rel_str, name: req.name, protocol: req.protocol, method });
     }
-    out.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+    let order = std::fs::read_to_string(base.join("collection.json")).ok()
+        .and_then(|text| serde_json::from_str::<CollectionMeta>(&text).ok())
+        .map(|meta| meta.order).unwrap_or_default();
+    out.sort_by(|a, b| {
+        let ai = order.iter().position(|path| path == &a.rel_path).unwrap_or(usize::MAX);
+        let bi = order.iter().position(|path| path == &b.rel_path).unwrap_or(usize::MAX);
+        ai.cmp(&bi).then_with(|| a.rel_path.cmp(&b.rel_path))
+    });
     Ok(out)
+}
+
+pub fn reorder_requests(root: &Path, id: &str, order: &[String]) -> Result<(), String> {
+    let mf = col_path(root, id).join("collection.json");
+    let text = std::fs::read_to_string(&mf).map_err(|e| e.to_string())?;
+    let mut meta: CollectionMeta = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    meta.order = order.to_vec();
+    write_sorted_json(&mf, &serde_json::to_value(meta).map_err(|e| e.to_string())?)
 }
 
 pub fn read_request(root: &Path, id: &str, rel_path: &str) -> Result<Request, String> {
@@ -260,6 +285,8 @@ pub fn col_rename(id: String, name: String) -> Result<(), String> { rename_colle
 #[tauri::command]
 pub fn col_delete(id: String) -> Result<(), String> { delete_collection(&root_dir(), &id) }
 #[tauri::command]
+pub fn col_reorder(order: Vec<String>) -> Result<(), String> { reorder_collections(&root_dir(), &order) }
+#[tauri::command]
 pub fn req_list(collection_id: String) -> Result<Vec<ReqEntry>, String> { list_requests(&root_dir(), &collection_id) }
 #[tauri::command]
 pub fn req_read(collection_id: String, rel_path: String) -> Result<Request, String> { read_request(&root_dir(), &collection_id, &rel_path) }
@@ -269,6 +296,8 @@ pub fn req_write(collection_id: String, rel_path: String, request: Request) -> R
 pub fn req_delete(collection_id: String, rel_path: String) -> Result<(), String> { delete_request(&root_dir(), &collection_id, &rel_path) }
 #[tauri::command]
 pub fn req_move(collection_id: String, from: String, to: String) -> Result<(), String> { move_request(&root_dir(), &collection_id, &from, &to) }
+#[tauri::command]
+pub fn req_reorder(collection_id: String, order: Vec<String>) -> Result<(), String> { reorder_requests(&root_dir(), &collection_id, &order) }
 #[tauri::command]
 pub fn env_list() -> Result<Vec<String>, String> { list_envs(&root_dir()) }
 #[tauri::command]
@@ -340,6 +369,26 @@ mod tests {
         move_request(dir.path(), &meta.id, "orders/get.json", "orders/get-one.json").unwrap();
         delete_request(dir.path(), &meta.id, "orders/get-one.json").unwrap();
         assert!(list_requests(dir.path(), &meta.id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn collection_order_persists_across_listing() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = create_collection(dir.path(), "Zebra").unwrap();
+        let second = create_collection(dir.path(), "Alpha").unwrap();
+        reorder_collections(dir.path(), &[first.id.clone(), second.id.clone()]).unwrap();
+        assert_eq!(list_collections(dir.path()).unwrap().iter().map(|c| c.id.clone()).collect::<Vec<_>>(), vec![first.id, second.id]);
+    }
+
+    #[test]
+    fn request_order_persists_across_listing() {
+        let dir = tempfile::tempdir().unwrap();
+        let meta = create_collection(dir.path(), "API").unwrap();
+        let req = |name: &str| Request { name: name.into(), protocol: "http".into(), http: None, grpc: None, ws: None };
+        write_request(dir.path(), &meta.id, "a.json", &req("A")).unwrap();
+        write_request(dir.path(), &meta.id, "b.json", &req("B")).unwrap();
+        reorder_requests(dir.path(), &meta.id, &["b.json".into(), "a.json".into()]).unwrap();
+        assert_eq!(list_requests(dir.path(), &meta.id).unwrap().iter().map(|r| r.rel_path.clone()).collect::<Vec<_>>(), vec!["b.json", "a.json"]);
     }
 
     #[test]

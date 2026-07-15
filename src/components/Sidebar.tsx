@@ -5,6 +5,8 @@ import { RequestContextMenu } from "./RequestContextMenu";
 import { useApp, type TabKind } from "../store";
 import { api, type ReqEntry } from "../lib/api";
 
+type DragItem = { kind: "collection"; id: string } | { kind: "request"; collectionId: string; relPath: string };
+
 const WORKSPACE_NAV: { kind: Exclude<TabKind, "request">; icon: IconName; label: string }[] = [
   { kind: "welcome", icon: "sparkles", label: "Welcome" },
   { kind: "collections", icon: "database", label: "Collections" },
@@ -25,6 +27,8 @@ export function Sidebar() {
   });
   const [requestMenu, setRequestMenu] = useState<{ collectionId: string; request: ReqEntry; x: number; y: number } | null>(null);
   const [dragOverCollection, setDragOverCollection] = useState<string | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<DragItem | null>(null);
   const [selected, setSelected] = useState<{ collectionId: string; request: ReqEntry } | null>(null);
   const {
     tabs, activeTabId, requestTabs, openTab, openRequestTab, collections, reloadCollections,
@@ -110,11 +114,36 @@ export function Sidebar() {
   const onDropOnCollection = (event: React.DragEvent, collectionId: string) => {
     event.preventDefault();
     setDragOverCollection(null);
+    setDropIndicator(null);
     try {
-      const { collectionId: from, relPath } = JSON.parse(event.dataTransfer.getData("application/json")) as { collectionId: string; relPath: string };
+      const item = JSON.parse(event.dataTransfer.getData("application/json")) as DragItem;
+      if (item.kind === "collection") {
+        const from = item.id;
+        const row = (event.target as HTMLElement).closest(".collection-node")?.getBoundingClientRect();
+        if (!row || event.clientY < row.top + row.height / 2) void reorderCollections(from, collectionId);
+        else void reorderCollections(from, collections[collections.findIndex((collection) => collection.id === collectionId) + 1]?.id ?? null);
+        return;
+      }
+      const { collectionId: from, relPath } = item;
       if (from === collectionId) return;
       void moveRequest(from, relPath, collectionId).then(() => showToast("Request moved")).catch((error) => showToast("Move failed", String(error), "err"));
     } catch { /* ignore malformed drop */ }
+  };
+  const reorderCollections = async (from: string, before: string | null) => {
+    if (from === before) return;
+    const order = collections.map((collection) => collection.id).filter((id) => id !== from);
+    order.splice(before ? order.indexOf(before) : order.length, 0, from);
+    try { await api.colReorder(order); await reloadCollections(); }
+    catch (error) { showToast("Reorder failed", String(error), "err"); }
+  };
+  const reorderRequests = async (collectionId: string, from: string, before: string | null) => {
+    if (from === before) return;
+    const order = (requestsByCollection[collectionId] ?? []).map((request) => request.relPath).filter((path) => path !== from);
+    order.splice(before ? order.indexOf(before) : order.length, 0, from);
+    try {
+      await api.reqReorder(collectionId, order);
+      setRequestsByCollection((current) => ({ ...current, [collectionId]: order.map((path) => current[collectionId].find((request) => request.relPath === path)!) }));
+    } catch (error) { showToast("Reorder failed", String(error), "err"); }
   };
 
   return (
@@ -151,11 +180,11 @@ export function Sidebar() {
             return <div
               key={c.id}
               className={`collection-tree ${collapsed ? "collapsed" : ""} ${dragOverCollection === c.id ? "drop-target" : ""}`}
-              onDragOver={(event) => { event.preventDefault(); if (dragOverCollection !== c.id) setDragOverCollection(c.id); }}
-              onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragOverCollection(null); }}
+              onDragOver={(event) => { event.preventDefault(); if (dragging?.kind === "collection") setDropIndicator(`collection:${c.id}`); else if (dragOverCollection !== c.id) setDragOverCollection(c.id); }}
+              onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) { setDragOverCollection(null); setDropIndicator(null); } }}
               onDrop={(event) => onDropOnCollection(event, c.id)}
             >
-              <button type="button" className={`nav-item collection-node ${c.id === activeCollectionId ? "active" : ""}`} onClick={() => toggleCollection(c.id)} aria-expanded={!collapsed}>
+              <button type="button" className={`nav-item collection-node ${c.id === activeCollectionId ? "active" : ""} ${dropIndicator === `collection:${c.id}` ? "drop-prefix" : ""}`} draggable onDragStart={(event) => { const item = { kind: "collection", id: c.id } as const; setDragging(item); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/json", JSON.stringify(item)); }} onDragEnd={() => { setDragging(null); setDropIndicator(null); setDragOverCollection(null); }} onClick={() => toggleCollection(c.id)} aria-expanded={!collapsed}>
                 <Icon name="chevron-down" className="collection-chevron" size={13} />
                 <span>{c.name}</span>
                 <Badge>{(requestsByCollection[c.id] ?? []).length || ""}</Badge>
@@ -166,10 +195,13 @@ export function Sidebar() {
                   <button
                     type="button"
                     key={r.relPath}
-                    className={`nav-item request-node ${activeRequest?.collectionId === c.id && activeRequest.relPath === r.relPath ? "active" : ""} ${selected?.collectionId === c.id && selected.request.relPath === r.relPath ? "selected" : ""}`}
+                    className={`nav-item request-node ${activeRequest?.collectionId === c.id && activeRequest.relPath === r.relPath ? "active" : ""} ${selected?.collectionId === c.id && selected.request.relPath === r.relPath ? "selected" : ""} ${dropIndicator === `request:${c.id}:${r.relPath}` ? "drop-prefix" : ""}`}
                     title={r.relPath}
                     draggable
-                    onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/json", JSON.stringify({ collectionId: c.id, relPath: r.relPath })); }}
+                    onDragStart={(event) => { const item = { kind: "request", collectionId: c.id, relPath: r.relPath } as const; setDragging(item); event.stopPropagation(); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/json", JSON.stringify(item)); }}
+                    onDragEnd={() => { setDragging(null); setDropIndicator(null); setDragOverCollection(null); }}
+                    onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); if (dragging?.kind === "request" && dragging.collectionId === c.id) setDropIndicator(`request:${c.id}:${r.relPath}`); }}
+                    onDrop={(event) => { event.preventDefault(); event.stopPropagation(); setDropIndicator(null); try { const from = JSON.parse(event.dataTransfer.getData("application/json")) as DragItem; if (from.kind === "request" && from.collectionId === c.id) { if (event.clientY < event.currentTarget.getBoundingClientRect().top + event.currentTarget.offsetHeight / 2) void reorderRequests(c.id, from.relPath, r.relPath); else void reorderRequests(c.id, from.relPath, requests[requests.findIndex((request) => request.relPath === r.relPath) + 1]?.relPath ?? null); } else onDropOnCollection(event, c.id); } catch { /* ignore malformed drop */ } }}
                     onClick={() => { setSelected({ collectionId: c.id, request: r }); setActiveCollection(c.id); void openRequestTab(c.id, r.relPath); }}
                     onContextMenu={(event) => openRequestMenu(event, c.id, r)}
                   >

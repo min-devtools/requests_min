@@ -1,8 +1,17 @@
 use crate::collection::{build_ctx, interpolate, read_env, root_dir, HttpPart, Request, KV};
 use crate::secrets::read_secrets;
 use base64::Engine;
+use reqwest::cookie::{CookieStore, Jar};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+/// Shared cookie jar so Set-Cookie from one response is auto-sent on later requests
+/// (Postman-style). Inner Arc is swapped out to clear all cookies.
+pub struct CookieState(pub Mutex<Arc<Jar>>);
+impl Default for CookieState {
+    fn default() -> Self { CookieState(Mutex::new(Arc::new(Jar::default()))) }
+}
 
 pub struct PreparedHttp {
     pub method: String,
@@ -88,7 +97,7 @@ pub struct HttpResponse {
 }
 
 #[tauri::command]
-pub async fn http_request(env: Option<String>, request: Request) -> Result<HttpResponse, String> {
+pub async fn http_request(env: Option<String>, request: Request, cookies: tauri::State<'_, CookieState>) -> Result<HttpResponse, String> {
     let part = request.http.ok_or("not an http request")?;
     let root = root_dir();
     let (env_vars, secret_vars) = match &env {
@@ -98,10 +107,12 @@ pub async fn http_request(env: Option<String>, request: Request) -> Result<HttpR
     let ctx = build_ctx(env_vars, secret_vars);
     let prepared = prepare_http(&part, &ctx)?;
 
+    let jar = { cookies.0.lock().unwrap().clone() };
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(8))
         .timeout(Duration::from_secs(60))
         .danger_accept_invalid_certs(part.insecure)
+        .cookie_provider(jar)
         .build()
         .map_err(|e| e.to_string())?;
     let method = reqwest::Method::from_bytes(prepared.method.as_bytes()).map_err(|e| e.to_string())?;
@@ -120,6 +131,23 @@ pub async fn http_request(env: Option<String>, request: Request) -> Result<HttpR
     let body = String::from_utf8_lossy(&bytes).to_string();
     let time_ms = t0.elapsed().as_millis() as u64;
     Ok(HttpResponse { status, headers, body, time_ms, size_bytes })
+}
+
+/// Cookies the jar would send for `url` (what the next request attaches). Empty on
+/// unparseable url (e.g. still has {{template}} vars) or no matching cookies.
+#[tauri::command]
+pub fn cookies_for(url: String, cookies: tauri::State<'_, CookieState>) -> Vec<KV> {
+    let jar = cookies.0.lock().unwrap().clone();
+    let Ok(u) = reqwest::Url::parse(&url) else { return vec![] };
+    let Some(h) = jar.cookies(&u) else { return vec![] };
+    h.to_str().unwrap_or("").split("; ").filter(|p| !p.is_empty())
+        .filter_map(|p| p.split_once('=').map(|(k, v)| KV { key: k.into(), value: v.into(), enabled: None }))
+        .collect()
+}
+
+#[tauri::command]
+pub fn cookies_clear(cookies: tauri::State<'_, CookieState>) {
+    *cookies.0.lock().unwrap() = Arc::new(Jar::default());
 }
 
 #[cfg(test)]

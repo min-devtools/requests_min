@@ -145,14 +145,25 @@ pub async fn describe_via_reflection(endpoint: &str, insecure: bool) -> Result<G
     Ok(catalog_from_pool(&pool_from_fd_bytes(bytes)?))
 }
 
+fn describe_endpoint(endpoint: Option<String>, ctx: &HashMap<String, String>) -> Result<Option<String>, String> {
+    endpoint.map(|ep| interpolate(&ep, ctx)).transpose()
+}
+
 #[tauri::command]
-pub async fn grpc_describe(endpoint: Option<String>, proto_files: Vec<String>, insecure: bool) -> Result<GrpcCatalog, String> {
+pub async fn grpc_describe(env: Option<String>, endpoint: Option<String>, proto_files: Vec<String>, insecure: bool) -> Result<GrpcCatalog, String> {
     if !proto_files.is_empty() {
         describe_from_files(&proto_files)
-    } else if let Some(ep) = endpoint {
-        describe_via_reflection(&ep, insecure).await
     } else {
-        Err("provide endpoint or protoFiles".into())
+        let root = root_dir();
+        let (env_vars, secret_vars) = match &env {
+            Some(e) => (read_env(&root, e)?, read_secrets(&root, e)?),
+            None => (HashMap::new(), HashMap::new()),
+        };
+        let ctx = build_ctx(env_vars, secret_vars);
+        let Some(ep) = describe_endpoint(endpoint, &ctx)? else {
+            return Err("provide endpoint or protoFiles".into());
+        };
+        describe_via_reflection(&ep, insecure).await
     }
 }
 
@@ -317,5 +328,12 @@ mod tests {
         assert_eq!(cat.services[0].name, "demo.Greeter");
         assert_eq!(cat.services[0].methods[0].name, "SayHello");
         assert!(!cat.services[0].methods[0].server_streaming);
+    }
+
+    #[test]
+    fn describe_endpoint_resolves_environment_variables() {
+        let mut ctx = HashMap::new();
+        ctx.insert("grpcHost".into(), "http://localhost".into());
+        assert_eq!(describe_endpoint(Some("{{grpcHost}}:50051".into()), &ctx).unwrap(), Some("http://localhost:50051".into()));
     }
 }

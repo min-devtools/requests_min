@@ -76,11 +76,13 @@ export const api = {
   colCreate: (name: string) => mutated(invoke<CollectionMeta>("col_create", { name })),
   colRename: (id: string, name: string) => mutated(invoke<void>("col_rename", { id, name })),
   colDelete: (id: string) => mutated(invoke<void>("col_delete", { id })),
+  colReorder: (order: string[]) => mutated(invoke<void>("col_reorder", { order })),
   reqList: (collectionId: string) => invoke<ReqEntry[]>("req_list", { collectionId }),
   reqRead: (collectionId: string, relPath: string) => invoke<Request>("req_read", { collectionId, relPath }),
   reqWrite: (collectionId: string, relPath: string, request: Request) => mutated(invoke<void>("req_write", { collectionId, relPath, request })),
   reqDelete: (collectionId: string, relPath: string) => mutated(invoke<void>("req_delete", { collectionId, relPath })),
   reqMove: (collectionId: string, from: string, to: string) => mutated(invoke<void>("req_move", { collectionId, from, to })),
+  reqReorder: (collectionId: string, order: string[]) => mutated(invoke<void>("req_reorder", { collectionId, order })),
   envList: () => invoke<string[]>("env_list"),
   envRead: (env: string) => invoke<Record<string, string>>("env_read", { env }),
   envWrite: (env: string, vars: Record<string, string>) => mutated(invoke<void>("env_write", { env, vars })),
@@ -89,11 +91,13 @@ export const api = {
   secretWrite: (env: string, vars: Record<string, string>) => invoke<void>("secret_write", { env, vars }),
   httpRequest: (env: string | null, request: Request) =>
     invoke<HttpResponse>("http_request", { env, request }),
+  cookiesFor: (url: string) => invoke<KV[]>("cookies_for", { url }),
+  cookiesClear: () => invoke<void>("cookies_clear"),
   wsConnect: (sessionId: string, url: string, headers: KV[]) => invoke<void>("ws_connect", { sessionId, url, headers }),
   wsSend: (sessionId: string, text: string) => invoke<void>("ws_send", { sessionId, text }),
   wsClose: (sessionId: string) => invoke<void>("ws_close", { sessionId }),
-  grpcDescribe: (endpoint: string | null, protoFiles: string[], insecure: boolean) =>
-    invoke<GrpcCatalog>("grpc_describe", { endpoint, protoFiles, insecure }),
+  grpcDescribe: (env: string | null, endpoint: string | null, protoFiles: string[], insecure: boolean) =>
+    invoke<GrpcCatalog>("grpc_describe", { env, endpoint, protoFiles, insecure }),
   grpcUnary: (env: string | null, part: GrpcPart) =>
     invoke<GrpcResponse>("grpc_unary", { env, part }),
   importCurl: (text: string) => invoke<Request>("import_curl", { text }),

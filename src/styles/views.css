@@ -170,6 +170,8 @@ body.light .editor-pane { background: var(--editor-bg); }
 
 .result-grid { min-height: 0; overflow: auto; }
 
+.history-table td { height: 52px; padding: 8px 12px; }
+
 .quick-query-view {
   grid-template-rows: 46px minmax(0, 1fr);
   background: var(--window);
@@ -791,11 +793,18 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--blue), transparent 86%);
 }
 .vim-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  padding: 0 10px;
+  border-top: 1px solid var(--line);
   color: var(--orange);
-  font-family: var(--font-mono);
+  background: var(--pane-2);
+  font: 0.7692rem var(--font-mono);
   text-transform: uppercase;
 }
-.vim-status input { color: var(--text); background: transparent; border: 0; outline: none; font: inherit; }
+.vim-status input { flex: 1; color: var(--text); background: transparent; border: 0; outline: none; font: inherit; text-transform: none; }
 
 .shortcut-grid {
   display: grid;

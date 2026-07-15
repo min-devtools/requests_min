@@ -37,9 +37,11 @@ export function startResize(event: React.PointerEvent, axis: "left" | "right" | 
       document.body.style.setProperty("--request-left", `${Math.round(next)}px`);
       localStorage.setItem("requestsmin:request-left", String(Math.round(next)));
     } else if (axis === "request") {
-      const next = clamp(startTop + (e.clientY - startY), 220, Math.max(220, rect.height - 267));
+      const next = clamp(startTop + (e.clientY - startY), 39, Math.max(39, rect.height - 86));
+      container.classList.remove("editor-maxed");
       document.body.style.setProperty("--request-top", `${Math.round(next)}px`);
       localStorage.setItem("requestsmin:request-top", String(Math.round(next)));
+      localStorage.setItem("requestsmin:request-maxed", "0");
     } else if (axis === "left") {
       const max = Math.min(430, rect.width - 760);
       const next = clamp(e.clientX - rect.left, 190, max);
@@ -61,6 +63,29 @@ export function startResize(event: React.PointerEvent, axis: "left" | "right" | 
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", stop, { once: true });
   window.addEventListener("pointercancel", stop, { once: true });
+}
+
+// Double-click a tab to toggle the editor between its current split and full height
+// (response collapsed). State is derived from the measured editor height, not a cached
+// element ref, so it stays correct after switching request tabs.
+export function toggleRequestEditorSize(event: React.MouseEvent, horizontal: boolean) {
+  if (horizontal) return;
+  const screen = (event.currentTarget as HTMLElement).closest(".request-screen.active") as HTMLElement | null;
+  const editorPane = screen?.querySelector(".editor-pane") as HTMLElement | null;
+  if (!screen || !editorPane) return;
+
+  const maxed = screen.classList.toggle("editor-maxed");
+  if (maxed) {
+    localStorage.setItem("requestsmin:request-top-restore", String(Math.round(editorPane.getBoundingClientRect().height)));
+    localStorage.setItem("requestsmin:request-maxed", "1");
+    return;
+  }
+
+  const saved = Number(localStorage.getItem("requestsmin:request-top-restore"));
+  const next = saved || Math.round(screen.getBoundingClientRect().height / 2);
+  localStorage.setItem("requestsmin:request-maxed", "0");
+  document.body.style.setProperty("--request-top", `${next}px`);
+  localStorage.setItem("requestsmin:request-top", String(next));
 }
 
 export function PanelResizeHandles() {

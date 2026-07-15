@@ -74,6 +74,8 @@ interface AppState {
   toggleWorkspaceNav: () => void;
   requestHorizontal: boolean; // response beside the editor (Postman-style) vs below it
   toggleRequestLayout: () => void;
+  vimMode: boolean; // vim keybindings in the Monaco editors
+  toggleVimMode: () => void;
   commandOpen: boolean;
   setCommandOpen: (v: boolean) => void;
 
@@ -143,6 +145,11 @@ export const useApp = create<AppState>((set, get) => ({
   toggleCompact: () => set((s) => {
     localStorage.setItem("requestsmin:compact", s.compact ? "0" : "1");
     return { compact: !s.compact };
+  }),
+  vimMode: localStorage.getItem("requestsmin:vim") === "1",
+  toggleVimMode: () => set((s) => {
+    localStorage.setItem("requestsmin:vim", s.vimMode ? "0" : "1");
+    return { vimMode: !s.vimMode };
   }),
   uiFontSize: clampFontSize(Number(localStorage.getItem("requestsmin:font-size")) || DEFAULT_FONT_SIZE),
   changeUiFontSize: (direction) => set((s) => {
