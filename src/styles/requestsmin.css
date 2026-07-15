@@ -177,14 +177,15 @@ body.resizing-x { user-select: none; cursor: col-resize; }
 .json-response-tools, .json-response-paths { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-bottom: 1px solid var(--line); background: var(--pane); }
 .json-response-tools input { flex: 1; min-width: 0; height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; outline: none; color: var(--text); background: var(--pane-2); font: .8462rem/1.4 var(--font-mono); }
 .json-response-tools button, .json-response-paths button { height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--text-2); background: transparent; font: .7692rem/1.4 var(--font-mono); }
-.json-response-tools button:hover, .json-response-paths button.active { color: var(--blue); border-color: color-mix(in oklab, var(--blue), transparent 55%); background: color-mix(in oklab, var(--blue), transparent 88%); }
+.json-response-tools button:hover, .json-response-path.active { color: var(--blue); border-color: color-mix(in oklab, var(--blue), transparent 55%); background: color-mix(in oklab, var(--blue), transparent 88%); }
 .json-response-paths { overflow-x: auto; padding-top: 4px; padding-bottom: 4px; }
-.json-response-paths button { flex: none; }
+.json-response-path { display: inline-flex; align-items: center; flex: none; height: 26px; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; }
 .json-response-error { overflow: hidden; color: var(--red); font: .7692rem/1.4 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .json-response-tools button:disabled { opacity: .45; pointer-events: none; }
 .json-response-tools button.active, .json-response-tools button.active:hover { color: var(--blue); border-color: color-mix(in oklab, var(--blue), transparent 45%); background: color-mix(in oklab, var(--blue), transparent 84%); }
-.json-response-paths button { display: inline-flex; align-items: center; gap: 6px; }
-.json-response-paths .path-remove { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 4px; color: var(--text-3); }
+.json-response-paths .json-response-path button { height: 24px; border: 0; border-radius: 0; }
+.json-response-paths .path-copy, .json-response-paths .path-remove { display: inline-flex; align-items: center; justify-content: center; width: 24px; padding: 0; color: var(--text-3); }
+.json-response-paths .path-copy:hover { color: var(--blue); background: color-mix(in oklab, var(--blue), transparent 85%); }
 .json-response-paths .path-remove:hover { color: var(--red); background: color-mix(in oklab, var(--red), transparent 85%); }
 .response-empty { height: 100%; display: grid; place-items: center; color: var(--text-3); font: 0.9231rem var(--font-mono); }
 

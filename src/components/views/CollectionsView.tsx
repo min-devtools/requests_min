@@ -8,12 +8,13 @@ import { api, type ReqEntry } from "../../lib/api";
 export function CollectionsView({ active }: { active: boolean }) {
   const {
     collections, reloadCollections, activeCollectionId, setActiveCollection, newRequestTab,
-    openRequestTab, openDialog, openConfirm, showToast, reqListVersion, renameRequest, duplicateRequest, deleteRequest,
+    openRequestTab, openDialog, openConfirm, showToast, reqListVersion, bumpReqList, renameRequest, duplicateRequest, deleteRequest,
   } = useApp();
   const [requests, setRequests] = useState<ReqEntry[]>([]);
   const [menu, setMenu] = useState<{ request: ReqEntry; x: number; y: number } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set()); // relPaths picked for bulk actions
   const [anchor, setAnchor] = useState<number | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const collection = collections.find((item) => item.id === activeCollectionId);
 
   useEffect(() => { void reloadCollections(); }, []);
@@ -90,7 +91,7 @@ export function CollectionsView({ active }: { active: boolean }) {
     if (!collection) return;
     const sorted = [...requests].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) * (direction === "asc" ? 1 : -1));
     const order = sorted.map((request) => request.relPath);
-    try { await api.reqReorder(collection.id, order); setRequests(sorted); }
+    try { await api.reqReorder(collection.id, order); setRequests(sorted); setSortDirection(direction); bumpReqList(); }
     catch (error) { showToast("Sort failed", String(error), "err"); }
   };
 
@@ -100,8 +101,7 @@ export function CollectionsView({ active }: { active: boolean }) {
       <div className="toolbar">
         <ToolButton onClick={newCollection}><Icon name="plus" /> New collection</ToolButton>
         {collection && <ToolButton variant="primary" onClick={() => newRequestTab("http", collection.id)}><Icon name="plus" /> New request</ToolButton>}
-        {collection && <ToolButton onClick={() => void sortRequests("asc")}>A-Z</ToolButton>}
-        {collection && <ToolButton onClick={() => void sortRequests("desc")}>Z-A</ToolButton>}
+        {collection && <ToolButton iconOnly title={sortDirection === "asc" ? "Sort Z-A" : "Sort A-Z"} aria-label={sortDirection === "asc" ? "Sort requests Z-A" : "Sort requests A-Z"} onClick={() => void sortRequests(sortDirection === "desc" ? "asc" : "desc")}><Icon name={sortDirection === "asc" ? "sort-asc" : "sort-desc"} /></ToolButton>}
         {collection && <ToolButton onClick={renameCollection}><Icon name="pencil" /> Rename</ToolButton>}
         {collection && <ToolButton variant="danger" onClick={deleteCollection}><Icon name="trash" /> Delete</ToolButton>}
       </div>

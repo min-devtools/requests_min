@@ -1,6 +1,7 @@
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
 type Segment = { kind: "field"; key: string } | { kind: "index"; index: number } | { kind: "all" };
+const MISSING = Symbol("missing");
 
 function parsePath(path: string): Segment[] {
   const input = path.trim();
@@ -31,26 +32,36 @@ function parsePath(path: string): Segment[] {
   return segments;
 }
 
-function project(value: Json, segments: Segment[]): Json {
+function project(value: Json, segments: Segment[], optional = false): Json | typeof MISSING {
   const [segment, ...rest] = segments;
   if (!segment) return value;
   if (segment.kind === "all") {
     if (!Array.isArray(value)) throw new Error("$ requires an array value.");
-    return value.map((item) => project(item, rest));
+    return value.map((item) => {
+      const projected = project(item, rest, true);
+      return projected === MISSING ? {} : projected;
+    });
   }
   if (segment.kind === "index") {
-    if (!Array.isArray(value) || segment.index >= value.length) throw new Error(`Array item [${segment.index}] does not exist.`);
-    return project(value[segment.index], rest);
+    if (!Array.isArray(value) || segment.index >= value.length) {
+      if (optional) return MISSING;
+      throw new Error(`Array item [${segment.index}] does not exist.`);
+    }
+    return project(value[segment.index], rest, optional);
   }
   if (value === null || Array.isArray(value) || typeof value !== "object" || !(segment.key in value)) {
+    if (optional) return MISSING;
     throw new Error(`Field "${segment.key}" does not exist.`);
   }
-  return { [segment.key]: project(value[segment.key], rest) };
+  const projected = project(value[segment.key], rest, optional);
+  return projected === MISSING ? MISSING : { [segment.key]: projected };
 }
 
 /** Projects a response using paths such as value.$.a or value[0].a. */
 export function normalizeJson(value: Json, path: string): Json {
-  return project(value, parsePath(path));
+  const projected = project(value, parsePath(path));
+  if (projected === MISSING) throw new Error("Path does not exist.");
+  return projected;
 }
 
 const isObject = (v: Json): v is { [key: string]: Json } =>

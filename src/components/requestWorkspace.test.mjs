@@ -204,6 +204,10 @@ test("JSON responses use Monaco scope folding and path projection Normalize", as
   assert.match(viewer, /actions\.find/);
   assert.match(viewer, /setNormalize\(\(v\) => !v\)/);
   assert.match(viewer, /placeholder="value\.\$\.a or value\[0\]\.a"/);
+  assert.match(viewer, /const refillPath = \(path: string\) =>/);
+  assert.match(viewer, /setDraft\(path\)/);
+  assert.match(viewer, /draftRef\.current\?\.focus\(\)/);
+  assert.match(viewer, /<Icon name="copy"/);
   assert.match(normalize, /export function normalizeJson/);
   assert.match(normalize, /value\.\$\.a/);
   assert.match(normalize, /value\[0\]\.a/);

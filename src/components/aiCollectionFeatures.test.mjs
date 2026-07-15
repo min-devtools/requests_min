@@ -24,15 +24,18 @@ test("AI generation contract includes module names, payload examples, and batchi
   assert.match(source, /merge_drafts/);
 });
 
-test("collection requests can be persistently sorted A-Z and Z-A by name", async () => {
+test("collection request sort toggles direction and refreshes the left dock", async () => {
   const view = await readFile(new URL("components/views/CollectionsView.tsx", root), "utf8");
 
-  assert.match(view, /sortRequests\("asc"\)/);
-  assert.match(view, /sortRequests\("desc"\)/);
+  assert.match(view, /const \[sortDirection, setSortDirection\] = useState<"asc" \| "desc">\("desc"\)/);
+  assert.match(view, /sortRequests\(sortDirection === "desc" \? "asc" : "desc"\)/);
   assert.match(view, /localeCompare\(b\.name/);
   assert.match(view, /api\.reqReorder\(collection\.id, order\)/);
-  assert.match(view, />A-Z</);
-  assert.match(view, />Z-A</);
+  assert.match(view, /bumpReqList\(\)/);
+  assert.match(view, /iconOnly/);
+  assert.match(view, /name=\{sortDirection === "asc" \? "sort-asc" : "sort-desc"\}/);
+  assert.doesNotMatch(view, />A-Z</);
+  assert.doesNotMatch(view, />Z-A</);
 });
 
 test("AI import lives inside Import Export without a separate navigation tab", async () => {

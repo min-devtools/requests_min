@@ -11,6 +11,20 @@ test("value.$.a projects the field across every array item", () => {
   assert.deepEqual(normalizeJson(response, "value.$.a"), [{ a: "Mary Engelbreit" }, { a: "Seneca" }]);
 });
 
+test("array projections keep item positions and omit missing nested branches", () => {
+  const uneven = [
+    { user: { profile: { name: "Ada" } }, id: 1 },
+    { user: { profile: {} }, id: 2 },
+    { id: 3 },
+  ];
+
+  assert.deepEqual(normalizeJson(uneven, "value.$.user.profile.name"), [
+    { user: { profile: { name: "Ada" } } },
+    {},
+    {},
+  ]);
+});
+
 test("value[0].a projects only the first item", () => {
   assert.deepEqual(normalizeJson(response, "value[0].a"), { a: "Mary Engelbreit" });
 });
@@ -31,6 +45,6 @@ test("merge conflicts keep the value from the earlier path", () => {
 test("nested paths and errors behave", () => {
   assert.deepEqual(normalizeJson({ data: { items: [{ id: 1 }, { id: 2 }] } }, "value.data.items.$.id"), { data: { items: [{ id: 1 }, { id: 2 }] } });
   assert.throws(() => normalizeJson(response, "items.$.a"), /must begin with "value"/);
-  assert.throws(() => normalizeJson(response, "value.$.missing"), /does not exist/);
+  assert.deepEqual(normalizeJson(response, "value.$.missing"), [{}, {}]);
   assert.throws(() => normalizeJson({ a: 1 }, "value.$"), /requires an array/);
 });

@@ -13,6 +13,7 @@ export function JsonResponseViewer({ value }: { value: string }) {
   const uiFontSize = useApp((state) => state.uiFontSize);
   const editorFont = useApp((state) => state.editorFont);
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const draftRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState("");
   const [paths, setPaths] = useState<string[]>([]);
   const [enabled, setEnabled] = useState<Set<string>>(new Set());
@@ -53,6 +54,11 @@ export function JsonResponseViewer({ value }: { value: string }) {
     setEnabled((current) => { const next = new Set(current); next.delete(path); return next; });
   };
 
+  const refillPath = (path: string) => {
+    setDraft(path);
+    requestAnimationFrame(() => { draftRef.current?.focus(); draftRef.current?.select(); });
+  };
+
   const openSearch = () => {
     const editor = editorRef.current;
     if (!editor) return;
@@ -63,15 +69,17 @@ export function JsonResponseViewer({ value }: { value: string }) {
   return <div className="json-response-viewer">
     <div className="json-response-tools">
       <button type="button" title="Search in response (⌘F)" aria-label="Search in response" onClick={openSearch}><Icon name="search" size={13} /></button>
-      <input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => event.key === "Enter" && addPath()} placeholder="value.$.a or value[0].a" />
+      <input ref={draftRef} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => event.key === "Enter" && addPath()} placeholder="value.$.a or value[0].a" />
       <button type="button" onClick={addPath}>Add path</button>
       <button type="button" className={normalize && active.length > 0 ? "active" : ""} disabled={paths.length === 0} title="Show only the enabled paths, merged; earlier paths win conflicts" onClick={() => setNormalize((v) => !v)}>Normalize</button>
       {error && <span className="json-response-error">{error}</span>}
     </div>
     {paths.length > 0 && <div className="json-response-paths">
-      {paths.map((path) => <button key={path} type="button" className={enabled.has(path) && normalize ? "active" : ""} title="Toggle this path" onClick={() => togglePath(path)}>
-        {path}<span className="path-remove" title="Remove path" aria-label="Remove path" onClick={(event) => { event.stopPropagation(); removePath(path); }}>×</span>
-      </button>)}
+      {paths.map((path) => <div key={path} className={`json-response-path ${enabled.has(path) && normalize ? "active" : ""}`}>
+        <button type="button" className="path-toggle" title="Toggle this path" onClick={() => togglePath(path)}>{path}</button>
+        <button type="button" className="path-copy" title="Fill path input" aria-label={`Fill ${path} in path input`} onClick={() => refillPath(path)}><Icon name="copy" size={12} /></button>
+        <button type="button" className="path-remove" title="Remove path" aria-label={`Remove ${path}`} onClick={() => removePath(path)}>×</button>
+      </div>)}
     </div>}
     <div className="json-response-editor">
     <Editor language="json" theme={MONACO_THEME} value={display} onMount={(editor) => { editorRef.current = editor; }} options={{
