@@ -8,6 +8,7 @@ import { JsonView } from "../../ui/JsonView";
 import { JsonResponseViewer } from "../../ui/JsonResponseViewer";
 import { EnvInput } from "../../ui/EnvInput";
 import { Combobox } from "../../ui/Combobox";
+import { LoadingBar } from "../../ui/LoadingBar";
 import { startResize, toggleRequestEditorSize } from "../ResizeHandles";
 import { useApp } from "../../store";
 import {
@@ -250,7 +251,7 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
               placeholder="{{baseUrl}}/v1/resource" variableNames={variableNames} />
             <ToolButton className="request-copy" onClick={() => navigator.clipboard?.writeText(buildCurl(request)).then(() => showToast("Copied", "cURL command copied."))}><Icon name="copy" /> Copy cURL</ToolButton>
             {/* pinned to the bottom edge of the head row; overlay, never a grid child (see .request-screen rows) */}
-            <div className={`req-progress ${rt.running ? "on" : ""}`}><span /></div>
+            <LoadingBar active={rt.running} />
           </div>
           <section className="editor-pane">
             <div className="editor-tabs">
@@ -357,7 +358,7 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                 />
               </div>
             )}
-            <div className={`req-progress ${rt.running ? "on" : ""}`}><span /></div>
+            <LoadingBar active={rt.running} />
           </div>
           <section className="editor-pane">
             <div className="editor-tabs">
