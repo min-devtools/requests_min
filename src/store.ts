@@ -153,7 +153,8 @@ const loadSession = (): { tabs: TabDef[]; activeTabId: string; requestTabs: Reco
         if ((tab.kind as string) !== "ai-import") return tab;
         return { ...tab, kind: "import-export", ...TAB_META["import-export"] };
       })
-      .filter((tab: TabDef, index: number, all: TabDef[]) => all.findIndex((other) => other.kind === tab.kind && tab.kind !== "request") === index);
+      // keep every request tab (each is unique); dedup only singleton kinds
+      .filter((tab: TabDef, index: number, all: TabDef[]) => tab.kind === "request" || all.findIndex((other) => other.kind === tab.kind) === index);
     if (!tabs.length) return null;
     return { tabs, activeTabId: tabs.some((t) => t.id === s.activeTabId) ? s.activeTabId : tabs[0].id, requestTabs };
   } catch { return null; }
