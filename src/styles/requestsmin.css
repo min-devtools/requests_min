@@ -306,11 +306,11 @@ body.resizing-x { user-select: none; cursor: col-resize; }
 .utility-body, .utility-grid { min-height: 0; padding: 14px; overflow: auto; }
 .utility-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
 .table-panel, .workspace-card { overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--pane); }
-.workspace-card { display: grid; min-height: 300px; grid-template-rows: auto minmax(0, 1fr) auto; }
+.workspace-card { display: grid; min-height: 0; grid-template-rows: auto minmax(0, 1fr) auto; }
 .workspace-card > h3 { margin: 0; padding: 1rem 1.0769rem; border-bottom: 0.0769rem solid var(--line); font-size: 1rem; }
 .workspace-card > .mini-tabs { border-bottom: 1px solid var(--line); }
-.import-editor { min-height: 20rem; width: 100%; resize: vertical; padding: 1.0769rem; border: 0; outline: 0; color: var(--editor-fg); background: var(--editor-bg); font: 0.9231rem/1.65 var(--font-mono); }
-.import-file { min-height: 20rem; display: grid; place-items: center; align-content: center; gap: 8px; padding: 24px; color: var(--text-3); background: var(--editor-bg); text-align: center; cursor: pointer; }
+.import-editor { min-height: 10rem; height: 10rem; width: 100%; resize: vertical; padding: 1.0769rem; border: 0; outline: 0; color: var(--editor-fg); background: var(--editor-bg); font: 0.9231rem/1.65 var(--font-mono); }
+.import-file { min-height: 10rem; display: grid; place-items: center; align-content: center; gap: 8px; padding: 24px; color: var(--text-3); background: var(--editor-bg); text-align: center; cursor: pointer; }
 .import-file:hover { color: var(--text-2); background: color-mix(in oklab, var(--editor-bg), var(--blue) 4%); }
 .import-file input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .import-file strong { color: var(--text); font-size: 1rem; }

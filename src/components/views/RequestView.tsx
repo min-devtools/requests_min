@@ -14,6 +14,7 @@ import {
   api, emptyGrpc, emptyHttp, emptyWs, onWsEvent,
   type GrpcCatalog, type KV, type Request,
 } from "../../lib/api";
+import { isGrpcurl, parseGrpcurl } from "../../lib/grpcurl";
 
 // URL <-> Params two-way sync (Postman-style). Params are canonical for send (backend
 // appends them to the base url); the URL bar is a derived view. Raw (no encoding) so
@@ -119,6 +120,16 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
     });
   };
 
+  // paste a whole `grpcurl …` into any address bar → switch to gRPC and fill it
+  const applyGrpcurl = (text: string): boolean => {
+    const parsed = parseGrpcurl(text.replace(/\\(\s|$)/g, "$1"));
+    if (!parsed?.grpc) return false;
+    setEditorTab("body");
+    update({ protocol: "grpc", grpc: parsed.grpc });
+    showToast("Imported", "grpcurl parsed into request.");
+    return true;
+  };
+
   // Source is set by whichever Describe runs last — reflection (path bar) or files (Proto tab).
   const describe = async (source: "reflection" | "files", selectedFiles?: string[]) => {
     if (!request.grpc) return;
@@ -212,6 +223,8 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
             <EnvInput className="query-path-input"
               value={urlDraft ?? fullUrl(request.http.url, request.http.params)}
               onChange={(text) => {
+                // paste a `grpcurl ...` → switch protocol to gRPC and fill it
+                if (isGrpcurl(text)) { setUrlDraft(null); applyGrpcurl(text); return; }
                 // paste a whole `curl ...` into the URL bar → parse it and fill method/url/params/headers/body/auth
                 if (/^\s*curl\s/i.test(text)) {
                   setUrlDraft(null);
@@ -323,7 +336,7 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
       {request.protocol === "grpc" && grpc && (
         <>
           <div className="request-head">
-            <EnvInput className="query-path-input" value={grpc.endpoint} onChange={(endpoint) => update({ grpc: { ...grpc, endpoint } })} placeholder="{{grpcHost}}:50051" variableNames={variableNames} />
+            <EnvInput className="query-path-input" value={grpc.endpoint} onChange={(endpoint) => { if (isGrpcurl(endpoint)) { applyGrpcurl(endpoint); return; } update({ grpc: { ...grpc, endpoint } }); }} placeholder="{{grpcHost}}:50051  (or paste a grpcurl command)" variableNames={variableNames} />
             {catalog && (
               <div className="grpc-method-pickers">
                 <Combobox

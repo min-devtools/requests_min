@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../../lib/api";
+import { parseGrpcurl } from "../../lib/grpcurl";
 import { useApp } from "../../store";
 import { ToolButton } from "../../ui/ToolButton";
 import { Icon } from "../../ui/Icon";
@@ -7,7 +8,7 @@ import { AiImportView } from "./AiImportView";
 
 export function ImportExportView({ active }: { active: boolean }) {
   const { collections, activeCollectionId, setActiveCollection, reloadCollections, bumpReqList, showToast } = useApp();
-  const [kind, setKind] = useState<"curl" | "postman" | "openapi">("curl");
+  const [kind, setKind] = useState<"curl" | "grpcurl" | "postman" | "openapi">("curl");
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState("");
   const [running, setRunning] = useState(false);
@@ -17,9 +18,12 @@ export function ImportExportView({ active }: { active: boolean }) {
     if (!text.trim()) return;
     setRunning(true);
     try {
-      if (kind === "curl") {
-        if (!collection) throw new Error("Select a collection before importing cURL");
-        const request = await api.importCurl(text);
+      if (kind === "curl" || kind === "grpcurl") {
+        if (!collection) throw new Error(`Select a collection before importing ${kind === "curl" ? "cURL" : "grpcurl"}`);
+        const request = kind === "curl"
+          ? await api.importCurl(text)
+          : parseGrpcurl(text.replace(/\\(\s|$)/g, "$1"));
+        if (!request) throw new Error("Not a valid grpcurl command");
         const relPath = `${request.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "request"}.json`;
         await api.reqWrite(collection.id, relPath, request);
         bumpReqList();
@@ -50,8 +54,8 @@ export function ImportExportView({ active }: { active: boolean }) {
   return <section className={`content utility-view ${active ? "active" : ""}`} style={{ overflow: "auto" }}>
     <header className="page-head"><div><div className="eyebrow">Portability</div><h1>Import / Export</h1><p>Move API definitions without including local-only secrets.</p></div></header>
     <div className="utility-grid">
-      <section className="workspace-card"><h3>Import</h3><div className="mini-tabs">{(["curl", "postman", "openapi"] as const).map((x) => <button key={x} className={kind === x ? "active" : ""} onClick={() => { setKind(x); setText(""); setFileName(""); }}>{x}</button>)}</div>
-        {kind === "curl" ? <textarea className="import-editor" value={text} onChange={(e) => setText(e.target.value)} placeholder="curl 'https://api.example.com/users'" /> :
+      <section className="workspace-card"><h3>Import</h3><div className="mini-tabs">{(["curl", "grpcurl", "postman", "openapi"] as const).map((x) => <button key={x} className={kind === x ? "active" : ""} onClick={() => { setKind(x); setText(""); setFileName(""); }}>{x}</button>)}</div>
+        {kind === "curl" || kind === "grpcurl" ? <textarea className="import-editor" value={text} onChange={(e) => setText(e.target.value)} placeholder={kind === "curl" ? "curl 'https://api.example.com/users'" : "grpcurl -plaintext -d '{}' localhost:50051 pkg.Service/Method"} /> :
           <label className="import-file"><input type="file" accept={kind === "postman" ? ".json,application/json" : ".json,.yaml,.yml,application/json,application/yaml"} onChange={async (event) => {
             const file = event.target.files?.[0];
             if (!file) return;
