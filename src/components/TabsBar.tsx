@@ -1,13 +1,19 @@
 import { useEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Icon } from "../ui/Icon";
 import { RequestContextMenu } from "./RequestContextMenu";
 import { useApp } from "../store";
 
 export function TabsBar() {
   const {
-    tabs, activeTabId, activateTab, closeTab, requestTabs, newRequestTab, renameTab, reorderTab,
+    tabs, activeTabId, activateTab, confirmCloseTab, requestTabs, newRequestTab, renameTab, reorderTab,
     openDialog, openConfirm, showToast, renameRequest, duplicateRequest, deleteRequest,
-  } = useApp();
+  } = useApp(useShallow((s) => ({
+    tabs: s.tabs, activeTabId: s.activeTabId, activateTab: s.activateTab, confirmCloseTab: s.confirmCloseTab,
+    requestTabs: s.requestTabs, newRequestTab: s.newRequestTab, renameTab: s.renameTab, reorderTab: s.reorderTab,
+    openDialog: s.openDialog, openConfirm: s.openConfirm, showToast: s.showToast,
+    renameRequest: s.renameRequest, duplicateRequest: s.duplicateRequest, deleteRequest: s.deleteRequest,
+  })));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
@@ -21,7 +27,7 @@ export function TabsBar() {
     <nav className="tabs">
       {tabs.map((tab) => {
         const rt = tab.kind === "request" ? requestTabs[tab.id] : null;
-        const dirty = rt ? JSON.stringify(rt.request) !== rt.original : false;
+        const dirty = rt?.dirty ?? false;
         const method = rt?.request.protocol === "http"
           ? rt.request.http?.method ?? "HTTP"
           : rt?.request.protocol === "grpc" ? "RPC"
@@ -34,7 +40,7 @@ export function TabsBar() {
             className={`tab ${tab.id === activeTabId ? "active" : ""} ${dragId === tab.id ? "dragging" : ""} ${overId === tab.id ? "drag-over" : ""}`}
             onClick={() => activateTab(tab.id)}
             onContextMenu={(event) => { if (!rt?.collectionId || !rt.relPath) return; event.preventDefault(); setRequestMenu({ tabId: tab.id, x: event.clientX, y: event.clientY }); }}
-            onAuxClick={(e) => { if (e.button === 1) closeTab(tab.id); }}
+            onAuxClick={(e) => { if (e.button === 1) void confirmCloseTab(tab.id); }}
             onDoubleClick={() => { if (tab.kind === "request") { setEditingId(tab.id); setDraft(tab.title); } }}
             onDragStart={(e) => { setDragId(tab.id); e.dataTransfer.setData("application/x-requestsmin-tab", tab.id); }}
             onDragEnd={() => { setDragId(null); setOverId(null); }}
@@ -44,7 +50,7 @@ export function TabsBar() {
             {dirty && <span className="tab-dirty-dot" title="Unsaved changes" />}
             {rt ? <span className={`tab-method method-tag ${method}`}>{method}</span> : <Icon name={tab.icon} className={dirty ? "soft-orange" : undefined} />}
             {editingId === tab.id ? <input ref={inputRef} className="tab-title-input" value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") commit(); if (e.key === "Escape") setEditingId(null); }} /> : <span className="tab-title">{tab.title}</span>}
-            <span className="tab-close" title={`Close ${tab.title}`} aria-label={`Close ${tab.title}`} onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}>
+            <span className="tab-close" title={`Close ${tab.title}`} aria-label={`Close ${tab.title}`} onClick={(e) => { e.stopPropagation(); void confirmCloseTab(tab.id); }}>
               <Icon name="x" size={13} />
             </span>
           </button>

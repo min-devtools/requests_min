@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { ToolButton } from "../ui/ToolButton";
 import { Icon } from "../ui/Icon";
 import { useApp } from "../store";
@@ -23,16 +24,22 @@ const relativeTime = (timestamp: number) => {
 
 export function Inspector() {
   const {
-    tabs, activeTabId, requestTabs, activeEnv, setActiveEnv, envVersion, history,
+    activeEnv, setActiveEnv, envVersion, history,
     openTab, newRequestTab, showToast,
-  } = useApp();
+  } = useApp(useShallow((s) => ({
+    activeEnv: s.activeEnv, setActiveEnv: s.setActiveEnv, envVersion: s.envVersion, history: s.history,
+    openTab: s.openTab, newRequestTab: s.newRequestTab, showToast: s.showToast,
+  })));
+  const activeTab = useApp((s) => s.tabs.find((tab) => tab.id === s.activeTabId));
+  // live tab state — the inspector previews the request as it's typed, so this re-renders per edit by design
+  const rt = useApp((s) => {
+    const tab = s.tabs.find((t) => t.id === s.activeTabId);
+    return tab?.kind === "request" ? s.requestTabs[s.activeTabId] ?? null : null;
+  });
   const [vars, setVars] = useState<Record<string, string>>({});
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [envs, setEnvs] = useState<string[]>([]);
   const [revealSecrets, setRevealSecrets] = useState(false);
-
-  const activeTab = tabs.find((tab) => tab.id === activeTabId);
-  const rt = activeTab?.kind === "request" ? requestTabs[activeTabId] : null;
   const request = rt?.request;
   const variableNames = request ? requestVariableNames(request) : [];
   const unresolved = variableNames.filter((name) => !(name in secrets) && !(name in vars));
@@ -41,7 +48,7 @@ export function Inspector() {
 
   useEffect(() => {
     api.envList().then(setEnvs).catch(() => setEnvs([]));
-  }, [activeTabId, envVersion]);
+  }, [activeTab?.id, envVersion]);
 
   useEffect(() => {
     if (!activeEnv) { setVars({}); setSecrets({}); return; }

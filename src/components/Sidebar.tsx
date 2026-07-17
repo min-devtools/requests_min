@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Badge } from "../ui/Badge";
 import { Icon, type IconName } from "../ui/Icon";
 import { RequestContextMenu } from "./RequestContextMenu";
@@ -29,10 +30,22 @@ export function Sidebar() {
   const [dropIndicator, setDropIndicator] = useState<string | null>(null);
   const [dragging, setDragging] = useState<DragItem | null>(null);
   const {
-    tabs, activeTabId, requestTabs, openTab, openRequestTab, collections, reloadCollections,
+    openTab, openRequestTab, collections, reloadCollections,
     activeCollectionId, setActiveCollection, reqListVersion, workspaceNavCollapsed, toggleWorkspaceNav,
     openDialog, openConfirm, deleteRequest, renameRequest, duplicateRequest, moveRequest, showToast, leftCollapsed,
-  } = useApp();
+  } = useApp(useShallow((s) => ({
+    openTab: s.openTab, openRequestTab: s.openRequestTab, collections: s.collections, reloadCollections: s.reloadCollections,
+    activeCollectionId: s.activeCollectionId, setActiveCollection: s.setActiveCollection, reqListVersion: s.reqListVersion,
+    workspaceNavCollapsed: s.workspaceNavCollapsed, toggleWorkspaceNav: s.toggleWorkspaceNav,
+    openDialog: s.openDialog, openConfirm: s.openConfirm, deleteRequest: s.deleteRequest, renameRequest: s.renameRequest,
+    duplicateRequest: s.duplicateRequest, moveRequest: s.moveRequest, showToast: s.showToast, leftCollapsed: s.leftCollapsed,
+  })));
+  const activeKind = useApp((s) => s.tabs.find((t) => t.id === s.activeTabId)?.kind);
+  // only the identity of the active request — not the whole tab state, so keystrokes don't re-render the tree
+  const activeRequest = useApp(useShallow((s) => {
+    const rt = s.requestTabs[s.activeTabId];
+    return rt ? { collectionId: rt.collectionId, relPath: rt.relPath } : null;
+  }));
 
   useEffect(() => { void reloadCollections(); }, []);
 
@@ -56,9 +69,7 @@ export function Sidebar() {
     if (!activeCollectionId && collections.length) setActiveCollection(collections[0].id);
   }, [collections, activeCollectionId, setActiveCollection]);
 
-  const activeKind = tabs.find((t) => t.id === activeTabId)?.kind;
   const q = filter.trim().toLowerCase();
-  const activeRequest = requestTabs[activeTabId];
   const selectedRequest = activeRequest?.collectionId && activeRequest.relPath
     ? (requestsByCollection[activeRequest.collectionId] ?? []).find((request) => request.relPath === activeRequest.relPath)
     : undefined;

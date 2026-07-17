@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Icon } from "../../ui/Icon";
 import { ToolButton } from "../../ui/ToolButton";
@@ -36,18 +36,28 @@ const fullUrl = (base: string, params: KV[]): string => {
   return q ? `${splitUrl(base).base}?${q}` : base;
 };
 
+const shellQuote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
+
+// Mirrors the backend's prepare_http: auth tab wins, form body is urlencoded.
 export function buildCurl(request: Request): string {
   if (!request.http) return "";
   const h = request.http;
-  const parts = [`curl -X ${h.method} '${fullUrl(h.url, h.params)}'`];
-  for (const kv of h.headers) if (kv.enabled !== false && kv.key) parts.push(`-H '${kv.key}: ${kv.value}'`);
-  if (h.auth.type === "bearer" && h.auth.token) parts.push(`-H 'Authorization: Bearer ${h.auth.token}'`);
-  if (h.body.type === "json" && h.body.content) parts.push(`-d '${h.body.content.replace(/'/g, "'\\''")}'`);
-  if (h.body.type === "text" && h.body.content) parts.push(`-d '${h.body.content.replace(/'/g, "'\\''")}'`);
+  const auth = h.auth;
+  let url = fullUrl(h.url, h.params);
+  if (auth.type === "apiKey" && auth.addTo === "query" && auth.key) {
+    url += `${url.includes("?") ? "&" : "?"}${auth.key}=${auth.value ?? ""}`;
+  }
+  const parts = [`curl -X ${h.method} ${shellQuote(url)}`];
+  for (const kv of h.headers) if (kv.enabled !== false && kv.key) parts.push(`-H ${shellQuote(`${kv.key}: ${kv.value}`)}`);
+  if (auth.type === "bearer" && auth.token) parts.push(`-H ${shellQuote(`Authorization: Bearer ${auth.token}`)}`);
+  if (auth.type === "basic" && (auth.username || auth.password)) parts.push(`-u ${shellQuote(`${auth.username ?? ""}:${auth.password ?? ""}`)}`);
+  if (auth.type === "apiKey" && (auth.addTo ?? "header") === "header" && auth.key) parts.push(`-H ${shellQuote(`${auth.key}: ${auth.value ?? ""}`)}`);
+  if ((h.body.type === "json" || h.body.type === "text") && h.body.content) parts.push(`-d ${shellQuote(h.body.content)}`);
+  if (h.body.type === "form") {
+    for (const f of h.body.fields ?? []) if (f.enabled !== false && f.key) parts.push(`--data-urlencode ${shellQuote(`${f.key}=${f.value}`)}`);
+  }
   return parts.join(" \\\n  ");
 }
-
-const shellQuote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
 
 export function buildGrpcurl(request: Request): string {
   if (!request.grpc) return "";
@@ -67,13 +77,14 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
   const showToast = useApp((s) => s.showToast);
   const [editorTab, setEditorTab] = useState<"body" | "headers" | "auth" | "params" | "cookies" | "metadata" | "proto">("body");
   const [urlDraft, setUrlDraft] = useState<string | null>(null); // local while typing the URL, so it isn't reformatted mid-edit
-  const [responseTab, setResponseTab] = useState<"pretty" | "headers" | "cookies" | "raw">("pretty");
+  const [responseTab, setResponseTab] = useState<"pretty" | "headers" | "cookies" | "raw" | "preview">("pretty");
   const [reqCookies, setReqCookies] = useState<KV[]>([]);
   const [catalog, setCatalog] = useState<GrpcCatalog | null>(null);
   const [describing, setDescribing] = useState(false);
-  const [wsLog, setWsLog] = useState<{ dir: "out" | "in" | "sys"; text: string }[]>([]);
+  const [wsLog, setWsLog] = useState<{ dir: "out" | "in" | "sys"; text: string; ts: number }[]>([]);
   const [wsConnected, setWsConnected] = useState(false);
   const [wsDraft, setWsDraft] = useState("");
+  const wsLogRef = useRef<HTMLDivElement>(null);
   const [variableNames, setVariableNames] = useState<string[]>([]);
   const wsSid = useMemo(() => `ws-${tabId}`, [tabId]);
   const env = useApp((s) => s.activeEnv);
@@ -88,27 +99,40 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
       .catch(() => setVariableNames([]));
   }, [env, envVersion]);
 
+  // ponytail: 1000-entry cap keeps long ws sessions from growing the DOM/state unbounded
+  const pushWs = (dir: "out" | "in" | "sys", text: string) =>
+    setWsLog((l) => [...l.slice(-999), { dir, text, ts: Date.now() }]);
+
   useEffect(() => {
     const p = onWsEvent(wsSid, (e) => {
-      if (e.kind === "open") { setWsConnected(true); setWsLog((l) => [...l, { dir: "sys", text: "connected" }]); }
-      if (e.kind === "message") setWsLog((l) => [...l, { dir: "in", text: e.data }]);
-      if (e.kind === "closed") { setWsConnected(false); setWsLog((l) => [...l, { dir: "sys", text: "closed" }]); }
-      if (e.kind === "error") setWsLog((l) => [...l, { dir: "sys", text: `error: ${e.data}` }]);
+      if (e.kind === "open") { setWsConnected(true); pushWs("sys", "connected"); }
+      if (e.kind === "message") pushWs("in", e.data);
+      if (e.kind === "closed") { setWsConnected(false); pushWs("sys", "closed"); }
+      if (e.kind === "error") pushWs("sys", `error: ${e.data}`);
     });
     return () => { void p.then((unlisten) => unlisten()); };
   }, [wsSid]);
 
-  if (!rt) return null;
-  const request = rt.request;
-  const update = (patch: Partial<Request>) => updateRequestTab(tabId, { request: { ...request, ...patch } });
+  // keep the newest ws message in view
+  useEffect(() => { wsLogRef.current?.scrollTo(0, wsLogRef.current.scrollHeight); }, [wsLog.length]);
 
   // cookies the jar will attach for this url (refresh on tab open / url change / after send)
-  const reqUrl = request.http?.url ?? "";
-  const lastResponse = rt.response;
+  const reqUrl = rt?.request.http?.url ?? "";
+  const lastResponse = rt?.response ?? null;
   useEffect(() => {
     if (editorTab !== "cookies") return;
     api.cookiesFor(reqUrl).then(setReqCookies).catch(() => setReqCookies([]));
   }, [editorTab, reqUrl, lastResponse]);
+
+  // pretty-printing a multi-MB body is too expensive to redo on every keystroke re-render
+  const prettyBody = useMemo(() => {
+    if (!lastResponse) return "";
+    return tryPretty("body" in lastResponse ? lastResponse.body : lastResponse.bodyJson);
+  }, [lastResponse]);
+
+  if (!rt) return null;
+  const request = rt.request;
+  const update = (patch: Partial<Request>) => updateRequestTab(tabId, { request: { ...request, ...patch } });
 
   const setProtocol = (protocol: Request["protocol"]) => {
     if (protocol === request.protocol) return;
@@ -177,7 +201,7 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
     if (!wsDraft.trim()) return;
     try {
       await api.wsSend(wsSid, wsDraft);
-      setWsLog((l) => [...l, { dir: "out", text: wsDraft }]);
+      pushWs("out", wsDraft);
       setWsDraft("");
     } catch (err) {
       showToast("Send failed", String(err), "err");
@@ -243,9 +267,11 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                   return;
                 }
                 // typing/pasting a query in the URL splits it live into the Params tab (and vice-versa, since the value is derived from params)
+                // disabled params aren't in the URL, so keep them instead of wiping them on every URL edit
                 setUrlDraft(text);
                 const { base, query } = splitUrl(text);
-                update({ http: { ...request.http!, url: base, params: queryToParams(query) } });
+                const disabledParams = request.http!.params.filter((p) => p.enabled === false);
+                update({ http: { ...request.http!, url: base, params: [...queryToParams(query), ...disabledParams] } });
               }}
               onBlur={() => setUrlDraft(null)}
               placeholder="{{baseUrl}}/v1/resource" variableNames={variableNames} />
@@ -405,10 +431,11 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
               <span className="editor-meta" style={{ marginLeft: 0 }}>
                 <span className={wsConnected ? "soft-green" : "soft-orange"}>{wsConnected ? "connected" : "disconnected"}</span>
               </span>
+              <button type="button" disabled={wsLog.length === 0} onClick={() => setWsLog([])}>Clear</button>
             </div>
-            <div className="ws-log">
+            <div className="ws-log" ref={wsLogRef}>
               {wsLog.length === 0 && <div className="empty-note">No messages yet. Connect and send one.</div>}
-              {wsLog.map((m, i) => <div key={i} className={`ws-msg ${m.dir}`}><span className="dir">{m.dir}</span><span>{m.text}</span></div>)}
+              {wsLog.map((m, i) => <div key={i} className={`ws-msg ${m.dir}`}><span className="dir">{m.dir}</span><span>{m.text}</span><time>{new Date(m.ts).toLocaleTimeString()}</time></div>)}
             </div>
             <div className="ws-compose">
               <input value={wsDraft} onChange={(e) => setWsDraft(e.target.value)} placeholder="Message to send…" onKeyDown={(e) => e.key === "Enter" && void wsSend()} />
@@ -418,7 +445,12 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
         </>
       )}
 
-      {request.protocol !== "ws" && (
+      {request.protocol !== "ws" && (() => {
+        const contentType = rt.response?.headers.find((h) => h.key.toLowerCase() === "content-type")?.value ?? "";
+        const isHtml = /text\/html/i.test(contentType);
+        // "preview" only exists for html responses; fall back to pretty when the response changes underneath it
+        const shownTab = responseTab === "preview" && !isHtml ? "pretty" : responseTab;
+        return (
         <>
           <div className="bottom-resizer" title="Resize response" onPointerDown={(event) => startResize(event, horizontal ? "request-x" : "request")} />
           <section className={`response ${rt.running ? "loading" : ""}`}>
@@ -431,27 +463,30 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
               {rt.error && <span className="response-status err">{rt.error}</span>}
               <span className="response-meta">
                 {rt.response && <span className="metric-duration">{rt.response.timeMs}ms</span>}
-                <button type="button" className={responseTab === "pretty" ? "active" : ""} onClick={() => setResponseTab("pretty")}><Icon name="braces" size={13} /> Pretty</button>
-                <button type="button" className={responseTab === "raw" ? "active" : ""} onClick={() => setResponseTab("raw")}><Icon name="code" size={13} /> Raw</button>
-                <button type="button" className={responseTab === "headers" ? "active" : ""} onClick={() => setResponseTab("headers")}><Icon name="list" size={13} /> Headers</button>
-                <button type="button" className={responseTab === "cookies" ? "active" : ""} onClick={() => setResponseTab("cookies")}><Icon name="list" size={13} /> Cookies</button>
+                <button type="button" className={shownTab === "pretty" ? "active" : ""} onClick={() => setResponseTab("pretty")}><Icon name="braces" size={13} /> Pretty</button>
+                <button type="button" className={shownTab === "raw" ? "active" : ""} onClick={() => setResponseTab("raw")}><Icon name="code" size={13} /> Raw</button>
+                {isHtml && <button type="button" className={shownTab === "preview" ? "active" : ""} onClick={() => setResponseTab("preview")}><Icon name="sparkles" size={13} /> Preview</button>}
+                <button type="button" className={shownTab === "headers" ? "active" : ""} onClick={() => setResponseTab("headers")}><Icon name="list" size={13} /> Headers</button>
+                <button type="button" className={shownTab === "cookies" ? "active" : ""} onClick={() => setResponseTab("cookies")}><Icon name="list" size={13} /> Cookies</button>
               </span>
             </div>
             <div className="response-body">
               {!rt.response && !rt.error && <div className="response-empty">{rt.running ? "sending…" : "send a request to see the response"}</div>}
-              {rt.response && "body" in rt.response && (responseTab === "pretty" || responseTab === "raw") && (
-                responseTab === "pretty" ? <JsonResponseViewer value={tryPretty(rt.response.body)} /> : <JsonView className="response-code json-tree" value={rt.response.body} />
+              {rt.response && (shownTab === "pretty" || shownTab === "raw") && (
+                shownTab === "pretty"
+                  ? <JsonResponseViewer value={prettyBody} />
+                  : <JsonView className="response-code json-tree" value={"body" in rt.response ? rt.response.body : rt.response.bodyJson} />
               )}
-              {rt.response && "bodyJson" in rt.response && (responseTab === "pretty" || responseTab === "raw") && (
-                responseTab === "pretty" ? <JsonResponseViewer value={tryPretty(rt.response.bodyJson)} /> : <JsonView className="response-code json-tree" value={rt.response.bodyJson} />
+              {rt.response && shownTab === "preview" && "body" in rt.response && (
+                <iframe className="response-preview" sandbox="" srcDoc={rt.response.body} title="HTML preview" />
               )}
-              {rt.response && responseTab === "headers" && (
+              {rt.response && shownTab === "headers" && (
                 <table>
                   <thead><tr><th>Name</th><th>Value</th></tr></thead>
                   <tbody>{rt.response.headers.map((h, i) => <tr key={i}><td>{h.key}</td><td>{h.value}</td></tr>)}</tbody>
                 </table>
               )}
-              {rt.response && responseTab === "cookies" && (() => {
+              {rt.response && shownTab === "cookies" && (() => {
                 const cookies = parseSetCookies(rt.response.headers);
                 return cookies.length === 0
                   ? <div className="response-empty">No Set-Cookie in this response.</div>
@@ -461,7 +496,8 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
             </div>
           </section>
         </>
-      )}
+        );
+      })()}
     </section>
   );
 }

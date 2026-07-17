@@ -1,4 +1,8 @@
-import * as monaco from "monaco-editor";
+// Slim build: core editor + JSON language only. The full "monaco-editor" entry drags in
+// ~80 basic-languages plus the css/html/ts language services the app never uses.
+import "monaco-editor/esm/vs/editor/edcore.main";
+import "monaco-editor/esm/vs/language/json/monaco.contribution";
+import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import { loader } from "@monaco-editor/react";

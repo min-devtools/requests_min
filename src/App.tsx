@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Titlebar } from "./components/Titlebar";
 import { Sidebar } from "./components/Sidebar";
 import { TabsBar } from "./components/TabsBar";
@@ -37,10 +38,17 @@ function renderView(tab: TabDef, active: boolean) {
 }
 
 export default function App() {
+  // narrow subscription: keystrokes only touch requestTabs, which App doesn't render
   const {
     tabs, activeTabId, theme, compact, uiFontSize, uiFont, editorFont, leftCollapsed, rightCollapsed,
-    toggleLeft, toggleRight, setCommandOpen, newRequestTab, openTab, closeTab,
-  } = useApp();
+    toggleLeft, toggleRight, setCommandOpen, newRequestTab, openTab, confirmCloseTab,
+  } = useApp(useShallow((s) => ({
+    tabs: s.tabs, activeTabId: s.activeTabId, theme: s.theme, compact: s.compact,
+    uiFontSize: s.uiFontSize, uiFont: s.uiFont, editorFont: s.editorFont,
+    leftCollapsed: s.leftCollapsed, rightCollapsed: s.rightCollapsed,
+    toggleLeft: s.toggleLeft, toggleRight: s.toggleRight, setCommandOpen: s.setCommandOpen,
+    newRequestTab: s.newRequestTab, openTab: s.openTab, confirmCloseTab: s.confirmCloseTab,
+  })));
 
   useEffect(() => {
     document.body.dataset.theme = theme;
@@ -76,14 +84,14 @@ export default function App() {
         const tab = useApp.getState().tabs[Number(key) - 1];
         if (tab) { e.preventDefault(); useApp.getState().activateTab(tab.id); }
       }
-      if (mod && key === "w") { e.preventDefault(); closeTab(useApp.getState().activeTabId); }
+      if (mod && key === "w") { e.preventDefault(); void confirmCloseTab(useApp.getState().activeTabId); }
       if (mod && (e.key === "+" || e.key === "=")) { e.preventDefault(); useApp.getState().changeUiFontSize(1); }
       if (mod && e.key === "-") { e.preventDefault(); useApp.getState().changeUiFontSize(-1); }
       if (e.key === "Escape") setCommandOpen(false);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [setCommandOpen, newRequestTab, toggleLeft, toggleRight, openTab, closeTab]);
+  }, [setCommandOpen, newRequestTab, toggleLeft, toggleRight, openTab, confirmCloseTab]);
 
   return (
     <div className="app-frame">

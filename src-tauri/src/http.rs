@@ -64,7 +64,10 @@ pub fn prepare_http(part: &HttpPart, ctx: &HashMap<String, String>) -> Result<Pr
         "apiKey" => {
             let k = interpolate(auth_str("key"), ctx)?;
             let v = interpolate(auth_str("value"), ctx)?;
-            if !k.is_empty() { set_header(&mut headers, &k, v); }
+            if !k.is_empty() {
+                if auth_str("addTo") == "query" { url.query_pairs_mut().append_pair(&k, &v); }
+                else { set_header(&mut headers, &k, v); }
+            }
         }
         _ => {}
     }
@@ -76,8 +79,10 @@ pub fn prepare_http(part: &HttpPart, ctx: &HashMap<String, String>) -> Result<Pr
         "json" => Some(("application/json".to_string(), interpolate(content, ctx)?)),
         "text" => Some(("text/plain".to_string(), interpolate(content, ctx)?)),
         "form" => {
-            // content = JSON array of KV; encode via Url query serializer
-            let kvs: Vec<KV> = serde_json::from_str(content).unwrap_or_default();
+            // the UI stores form rows in `fields`; older saved requests kept a JSON array in `content`
+            let kvs: Vec<KV> = part.body.get("fields")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_else(|| serde_json::from_str(content).unwrap_or_default());
             let mut u = reqwest::Url::parse("http://x/").map_err(|e| e.to_string())?;
             {
                 let mut qp = u.query_pairs_mut();
@@ -190,6 +195,33 @@ mod tests {
         let auth: Vec<_> = p.headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("authorization")).collect();
         assert_eq!(auth.len(), 1, "exactly one Authorization header is sent");
         assert_eq!(auth[0].1, "Bearer FRESH");
+    }
+
+    #[test]
+    fn form_body_reads_fields() {
+        let ctx = std::collections::HashMap::new();
+        let part = HttpPart {
+            method: "POST".into(), url: "http://h/x".into(),
+            body: serde_json::json!({"type":"form","fields":[{"key":"a","value":"1 2"},{"key":"off","value":"x","enabled":false}]}),
+            ..Default::default()
+        };
+        let p = prepare_http(&part, &ctx).unwrap();
+        let (ct, content) = p.body.unwrap();
+        assert_eq!(ct, "application/x-www-form-urlencoded");
+        assert_eq!(content, "a=1+2");
+    }
+
+    #[test]
+    fn api_key_add_to_query() {
+        let ctx = std::collections::HashMap::new();
+        let part = HttpPart {
+            method: "GET".into(), url: "http://h/x".into(),
+            auth: serde_json::json!({"type":"apiKey","key":"k","value":"v","addTo":"query"}),
+            ..Default::default()
+        };
+        let p = prepare_http(&part, &ctx).unwrap();
+        assert_eq!(p.url, "http://h/x?k=v");
+        assert!(!p.headers.iter().any(|(k, _)| k == "k"));
     }
 
     #[test]
