@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Icon } from "../../ui/Icon";
 import { ToolButton } from "../../ui/ToolButton";
@@ -6,7 +7,11 @@ import { useApp } from "../../store";
 import { api, type DraftEntry, type ScanHit } from "../../lib/api";
 
 export function AiImportView({ active, embedded = false }: { active: boolean; embedded?: boolean }) {
-  const { collections, activeCollectionId, setActiveCollection, reloadCollections, showToast, openTab, openSelect, openDialog, aiEndpoint, aiModel, aiApiKey } = useApp();
+  const { collections, activeCollectionId, setActiveCollection, reloadCollections, showToast, openTab, openSelect, openDialog, aiEndpoint, aiModel, aiApiKey } = useApp(useShallow((s) => ({
+    collections: s.collections, activeCollectionId: s.activeCollectionId, setActiveCollection: s.setActiveCollection,
+    reloadCollections: s.reloadCollections, showToast: s.showToast, openTab: s.openTab, openSelect: s.openSelect,
+    openDialog: s.openDialog, aiEndpoint: s.aiEndpoint, aiModel: s.aiModel, aiApiKey: s.aiApiKey,
+  })));
   const [dir, setDir] = useState("");
   const [scanning, setScanning] = useState(false);
   const [files, setFiles] = useState<ScanHit[]>([]);

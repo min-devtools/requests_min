@@ -1,9 +1,12 @@
+import { useShallow } from "zustand/react/shallow";
 import { ToolButton } from "../../ui/ToolButton";
 import { Icon, type IconName } from "../../ui/Icon";
 import { useApp } from "../../store";
 
 export function WelcomeView({ active }: { active: boolean }) {
-  const { newRequestTab, openTab, collections } = useApp();
+  const { newRequestTab, openTab, collections } = useApp(useShallow((s) => ({
+    newRequestTab: s.newRequestTab, openTab: s.openTab, collections: s.collections,
+  })));
 
   const actions: { icon: IconName; label: string; desc: string; onClick: () => void }[] = [
     { icon: "plus", label: "New REST request", desc: "Compose a REST call with headers, auth, and body.", onClick: () => newRequestTab("http") },

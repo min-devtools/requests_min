@@ -99,7 +99,8 @@ interface AppState {
   activeEnv: string | null;
   setActiveEnv: (env: string | null) => void;
   reqListVersion: number;
-  bumpReqList: () => void;
+  reqListDirty: string | null; // collection whose request list changed; null = refetch all
+  bumpReqList: (collectionId?: string | null) => void;
   envVersion: number;
   bumpEnv: () => void;
   syncDirty: boolean; // local collection edits not yet pushed to GitHub
@@ -288,7 +289,8 @@ export const useApp = create<AppState>((set, get) => ({
   collections: [],
   reloadCollections: async () => {
     const collections = await api.colList();
-    set({ collections });
+    // the collection set changed — any pending single-collection dirty mark no longer covers it
+    set({ collections, reqListDirty: null });
   },
   activeCollectionId: null,
   setActiveCollection: (id) => set({ activeCollectionId: id }),
@@ -299,7 +301,8 @@ export const useApp = create<AppState>((set, get) => ({
     set({ activeEnv: env });
   },
   reqListVersion: 0,
-  bumpReqList: () => set((s) => ({ reqListVersion: s.reqListVersion + 1 })),
+  reqListDirty: null,
+  bumpReqList: (collectionId = null) => set((s) => ({ reqListVersion: s.reqListVersion + 1, reqListDirty: collectionId })),
   envVersion: 0,
   bumpEnv: () => set((s) => ({ envVersion: s.envVersion + 1 })),
   syncDirty: false,
@@ -398,7 +401,7 @@ export const useApp = create<AppState>((set, get) => ({
       const requestTab = get().requestTabs[tab.id];
       if (requestTab?.collectionId === collectionId && requestTab.relPath === relPath) get().closeTab(tab.id);
     }
-    get().bumpReqList();
+    get().bumpReqList(collectionId);
   },
   renameRequest: async (collectionId, relPath, name) => {
     const request = await api.reqRead(collectionId, relPath);
@@ -414,7 +417,7 @@ export const useApp = create<AppState>((set, get) => ({
       });
       return { tabs, requestTabs };
     });
-    get().bumpReqList();
+    get().bumpReqList(collectionId);
   },
   duplicateRequest: async (collectionId, relPath, name) => {
     const request = await api.reqRead(collectionId, relPath);
@@ -426,7 +429,7 @@ export const useApp = create<AppState>((set, get) => ({
     let suffix = 2;
     while (existing.has(target)) target = `${folder}${safeName}-${suffix++}.json`;
     await api.reqWrite(collectionId, target, { ...request, name });
-    get().bumpReqList();
+    get().bumpReqList(collectionId);
   },
   moveRequest: async (fromCollectionId, relPath, toCollectionId) => {
     if (fromCollectionId === toCollectionId) return;

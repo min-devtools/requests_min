@@ -85,6 +85,14 @@ export default function App() {
         if (tab) { e.preventDefault(); useApp.getState().activateTab(tab.id); }
       }
       if (mod && key === "w") { e.preventDefault(); void confirmCloseTab(useApp.getState().activeTabId); }
+      // ⌘⇧[ / ⌘⇧] cycle tabs — e.code because ⇧[ yields "{" as e.key on US layouts
+      if (mod && e.shiftKey && (e.code === "BracketLeft" || e.code === "BracketRight")) {
+        e.preventDefault();
+        const { tabs: allTabs, activeTabId: current, activateTab } = useApp.getState();
+        const index = allTabs.findIndex((tab) => tab.id === current);
+        const next = allTabs[(index + (e.code === "BracketRight" ? 1 : -1) + allTabs.length) % allTabs.length];
+        if (next) activateTab(next.id);
+      }
       if (mod && (e.key === "+" || e.key === "=")) { e.preventDefault(); useApp.getState().changeUiFontSize(1); }
       if (mod && e.key === "-") { e.preventDefault(); useApp.getState().changeUiFontSize(-1); }
       if (e.key === "Escape") setCommandOpen(false);

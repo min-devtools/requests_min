@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useApp } from "../store";
 import { Icon, type IconName } from "../ui/Icon";
 
@@ -8,49 +9,53 @@ export function CommandPalette() {
   const [input, setInput] = useState("");
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const app = useApp();
+  const { commandOpen, setCommandOpen, collections, newRequestTab, openTab, toggleLeft, toggleRight, setActiveCollection } = useApp(useShallow((s) => ({
+    commandOpen: s.commandOpen, setCommandOpen: s.setCommandOpen, collections: s.collections,
+    newRequestTab: s.newRequestTab, openTab: s.openTab, toggleLeft: s.toggleLeft, toggleRight: s.toggleRight,
+    setActiveCollection: s.setActiveCollection,
+  })));
 
   useEffect(() => {
-    if (app.commandOpen) {
+    if (commandOpen) {
       setInput("");
       setCursor(0);
       requestAnimationFrame(() => inputRef.current?.focus());
     }
-  }, [app.commandOpen]);
+  }, [commandOpen]);
 
   const commands = useMemo<Command[]>(() => {
     const base: Command[] = [
-      { icon: "plus", label: "New request", kbd: "⌘N", action: () => app.newRequestTab() },
-      { icon: "database", label: "Open Collections", action: () => app.openTab("collections") },
-      { icon: "key", label: "Open Environments", action: () => app.openTab("environments") },
-      { icon: "history", label: "Open Request History", action: () => app.openTab("history") },
-      { icon: "copy", label: "Open Import / Export", action: () => app.openTab("import-export") },
-      { icon: "github", label: "Open GitHub Sync", action: () => app.openTab("github-sync") },
-      { icon: "wand", label: "Generate from folder", kbd: "⌘I", action: () => app.openTab("import-export") },
-      { icon: "settings", label: "Open Settings", kbd: "⌘,", action: () => app.openTab("settings") },
-      { icon: "panel-left", label: "Toggle sidebar", kbd: "⌘B", action: () => app.toggleLeft() },
-      { icon: "panel-right", label: "Toggle inspector", kbd: "⌘R", action: () => app.toggleRight() },
+      { icon: "plus", label: "New request", kbd: "⌘N", action: () => newRequestTab() },
+      { icon: "database", label: "Open Collections", action: () => openTab("collections") },
+      { icon: "key", label: "Open Environments", action: () => openTab("environments") },
+      { icon: "history", label: "Open Request History", action: () => openTab("history") },
+      { icon: "copy", label: "Open Import / Export", action: () => openTab("import-export") },
+      { icon: "github", label: "Open GitHub Sync", action: () => openTab("github-sync") },
+      { icon: "wand", label: "Generate from folder", kbd: "⌘I", action: () => openTab("import-export") },
+      { icon: "settings", label: "Open Settings", kbd: "⌘,", action: () => openTab("settings") },
+      { icon: "panel-left", label: "Toggle sidebar", kbd: "⌘B", action: () => toggleLeft() },
+      { icon: "panel-right", label: "Toggle inspector", kbd: "⌘R", action: () => toggleRight() },
     ];
-    for (const c of app.collections) {
-      base.push({ icon: "database", label: `Switch collection: ${c.name}`, action: () => app.setActiveCollection(c.id) });
+    for (const c of collections) {
+      base.push({ icon: "database", label: `Switch collection: ${c.name}`, action: () => setActiveCollection(c.id) });
     }
     return base;
-  }, [app]);
+  }, [collections, newRequestTab, openTab, toggleLeft, toggleRight, setActiveCollection]);
 
   const filtered = useMemo(() => {
     const q = input.trim().toLowerCase();
     return (q ? commands.filter((c) => c.label.toLowerCase().includes(q)) : commands).slice(0, 12);
   }, [commands, input]);
 
-  if (!app.commandOpen) return null;
+  if (!commandOpen) return null;
 
   const runCommand = (cmd: Command) => {
-    app.setCommandOpen(false);
+    setCommandOpen(false);
     cmd.action();
   };
 
   return (
-    <div className="command" onMouseDown={(e) => { if (e.target === e.currentTarget) app.setCommandOpen(false); }}>
+    <div className="command" onMouseDown={(e) => { if (e.target === e.currentTarget) setCommandOpen(false); }}>
       <div className="palette">
         <input
           ref={inputRef}
@@ -61,7 +66,7 @@ export function CommandPalette() {
             if (e.key === "ArrowDown") { e.preventDefault(); setCursor((c) => Math.min(filtered.length - 1, c + 1)); }
             if (e.key === "ArrowUp") { e.preventDefault(); setCursor((c) => Math.max(0, c - 1)); }
             if (e.key === "Enter" && filtered[cursor]) runCommand(filtered[cursor]);
-            if (e.key === "Escape") app.setCommandOpen(false);
+            if (e.key === "Escape") setCommandOpen(false);
           }}
         />
         <div className="cmd-list">

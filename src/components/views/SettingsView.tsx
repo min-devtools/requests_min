@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Icon } from "../../ui/Icon";
 import { ToolButton } from "../../ui/ToolButton";
 import { useApp } from "../../store";
@@ -7,7 +8,13 @@ import { DEFAULT_REPO } from "../../lib/ghSync";
 import { THEMES, themeBase } from "../../lib/themes";
 
 export function SettingsView({ active }: { active: boolean }) {
-  const { theme, setTheme, compact, toggleCompact, vimMode, toggleVimMode, uiFontSize, changeUiFontSize, resetUiFontSize, uiFont, editorFont, setUiFont, setEditorFont, aiEndpoint, aiModel, aiApiKey, setAiSettings, showToast } = useApp();
+  const { theme, setTheme, compact, toggleCompact, vimMode, toggleVimMode, uiFontSize, changeUiFontSize, resetUiFontSize, uiFont, editorFont, setUiFont, setEditorFont, aiEndpoint, aiModel, aiApiKey, setAiSettings, showToast } = useApp(useShallow((s) => ({
+    theme: s.theme, setTheme: s.setTheme, compact: s.compact, toggleCompact: s.toggleCompact,
+    vimMode: s.vimMode, toggleVimMode: s.toggleVimMode, uiFontSize: s.uiFontSize, changeUiFontSize: s.changeUiFontSize,
+    resetUiFontSize: s.resetUiFontSize, uiFont: s.uiFont, editorFont: s.editorFont, setUiFont: s.setUiFont,
+    setEditorFont: s.setEditorFont, aiEndpoint: s.aiEndpoint, aiModel: s.aiModel, aiApiKey: s.aiApiKey,
+    setAiSettings: s.setAiSettings, showToast: s.showToast,
+  })));
   const [gh, setGh] = useState<GhStatus | null>(null);
   const [token, setToken] = useState("");
   const [repo, setRepo] = useState(DEFAULT_REPO);
@@ -148,6 +155,7 @@ export function SettingsView({ active }: { active: boolean }) {
             <div className="shortcut-row"><span>Toggle inspector</span><span className="kbd">⌘R</span></div>
             <div className="shortcut-row"><span>Close tab</span><span className="kbd">⌘W</span></div>
             <div className="shortcut-row"><span>Switch tab 1…9</span><span className="kbd">⌘1…9</span></div>
+            <div className="shortcut-row"><span>Next / previous tab</span><span className="kbd">⌘⇧] / ⌘⇧[</span></div>
             <div className="shortcut-row"><span>Increase font</span><span className="kbd">⌘+</span></div>
             <div className="shortcut-row"><span>Decrease font</span><span className="kbd">⌘−</span></div>
             <div className="shortcut-row"><span>Open settings</span><span className="kbd">⌘,</span></div>

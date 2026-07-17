@@ -463,6 +463,14 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
               {rt.error && <span className="response-status err">{rt.error}</span>}
               <span className="response-meta">
                 {rt.response && <span className="metric-duration">{rt.response.timeMs}ms</span>}
+                {rt.response && "sizeBytes" in rt.response && <span className="metric-size">{fmtBytes(rt.response.sizeBytes)}</span>}
+                {rt.response && (
+                  <button type="button" title="Copy response body" aria-label="Copy response body"
+                    onClick={() => {
+                      const body = "body" in rt.response! ? rt.response!.body : rt.response!.bodyJson;
+                      void navigator.clipboard?.writeText(shownTab === "pretty" ? prettyBody : body).then(() => showToast("Copied", "Response body copied."));
+                    }}><Icon name="copy" size={13} /> Copy</button>
+                )}
                 <button type="button" className={shownTab === "pretty" ? "active" : ""} onClick={() => setResponseTab("pretty")}><Icon name="braces" size={13} /> Pretty</button>
                 <button type="button" className={shownTab === "raw" ? "active" : ""} onClick={() => setResponseTab("raw")}><Icon name="code" size={13} /> Raw</button>
                 {isHtml && <button type="button" className={shownTab === "preview" ? "active" : ""} onClick={() => setResponseTab("preview")}><Icon name="sparkles" size={13} /> Preview</button>}
@@ -504,6 +512,12 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
 
 function tryPretty(text: string): string {
   try { return JSON.stringify(JSON.parse(text), null, 2); } catch { return text; }
+}
+
+function fmtBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // Split each Set-Cookie response header into name / value / remaining attributes.

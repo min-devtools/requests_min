@@ -9,7 +9,9 @@ test("GitHub sync labels omit the footer repo and inspector organization", async
   const inspector = await readFile(new URL("components/Inspector.tsx", root), "utf8");
 
   assert.doesNotMatch(statusbar, /<span>\{gh\.repo\.split\("\/"\)\.pop\(\)\}<\/span>/);
-  assert.match(inspector, /<Kv label="Repo">\{gh\?\.repo \? gh\.repo\.split\("\/"\)\.pop\(\) : "not configured"\}<\/Kv>/);
+  // repo details left the inspector entirely — the statusbar shows a compact sync badge instead
+  assert.doesNotMatch(inspector, /gh\?\.repo/);
+  assert.match(statusbar, /sync-badge/);
 });
 
 test("right dock selects the app-wide environment", async () => {
@@ -17,7 +19,7 @@ test("right dock selects the app-wide environment", async () => {
 
   assert.match(inspector, /setActiveEnv/);
   assert.match(inspector, /api\.envList\(\)/);
-  assert.match(inspector, /<div className="kv"><span>Environment<\/span><select/);
+  assert.match(inspector, /className="inspector-env-row">\s*<select/);
   assert.match(inspector, /setActiveEnv\(event\.target\.value \|\| null\)/);
 });
 

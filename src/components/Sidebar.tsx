@@ -59,10 +59,13 @@ export function Sidebar() {
   }, [leftCollapsed]);
 
   useEffect(() => {
-    void Promise.all(collections.map(async (collection) => {
+    // reqListDirty names the one collection a bump touched; null (initial load, import, sync) = refetch all
+    const dirty = useApp.getState().reqListDirty;
+    const targets = dirty ? collections.filter((collection) => collection.id === dirty) : collections;
+    void Promise.all(targets.map(async (collection) => {
       try { return [collection.id, await api.reqList(collection.id)] as const; }
       catch { return [collection.id, []] as const; }
-    })).then((entries) => setRequestsByCollection(Object.fromEntries(entries)));
+    })).then((entries) => setRequestsByCollection((current) => dirty ? { ...current, ...Object.fromEntries(entries) } : Object.fromEntries(entries)));
   }, [collections, reqListVersion]);
 
   useEffect(() => {

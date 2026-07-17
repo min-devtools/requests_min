@@ -27,9 +27,10 @@ test("shared JSON editors expose format, minify, and validate actions", async ()
   assert.match(editor, /const format = \(\) => transform\(true\)/);
   assert.match(editor, /const minify = \(\) => transform\(false\)/);
   assert.match(editor, /const validate = \(\) =>/);
-  assert.match(editor, />Format<\/button>/);
-  assert.match(editor, />Minify<\/button>/);
-  assert.match(editor, />Validate<\/button>/);
+  // toolbar buttons are icon-only now — the action name lives in title/aria-label
+  assert.match(editor, /title="Format" aria-label="Format"/);
+  assert.match(editor, /title="Minify" aria-label="Minify"/);
+  assert.match(editor, /title="Validate" aria-label="Validate"/);
 });
 
 test("response dock resizer persists a bounded vertical split", async () => {
@@ -141,12 +142,13 @@ test("theme picker uses named palettes and retints Monaco from the active palett
 
   assert.match(themes, /Catppuccin Mocha/);
   assert.match(themes, /Tokyo Night/);
-  assert.match(themes, /Bearded Aquarelle Cymbidium/);
+  assert.match(themes, /Bearded Arc/);
   assert.match(settings, /<optgroup label="Dark">/);
   assert.match(store, /setTheme: \(theme: string\) => void/);
   assert.match(app, /retintMonaco\(themeBase\(theme\)\)/);
   assert.match(monaco, /export function retintMonaco\(theme: "dark" \| "light"\)/);
-  assert.match(main, /elatic_min\/src\/styles\/themes\.css/);
+  // themes.css is a symlink into the shared design-systems source
+  assert.match(main, /import "\.\/styles\/themes\.css"/);
 });
 
 test("responses use the shared theme-aware JSON view", async () => {
@@ -175,14 +177,15 @@ test("response metadata uses theme-aware semantic colors", async () => {
     readFile(new URL("components/Inspector.tsx", root), "utf8"),
     readFile(new URL("components/views/RequestView.tsx", root), "utf8"),
     readFile(new URL("ui/Kv.tsx", root), "utf8"),
-    readFile(new URL("styles/components.css", root), "utf8"),
+    readFile(new URL("styles/requestsmin.css", root), "utf8"),
   ]);
 
   assert.match(kv, /className=\{`kv \$\{className\}`\}/);
-  assert.match(inspector, /className=\{`metric-status/);
-  assert.match(inspector, /className="metric-duration"/);
-  assert.match(inspector, /className="metric-size"/);
+  // inspector run rows color by status; the response head shows duration and size chips
+  assert.match(inspector, /runStatusClass\(entry\)/);
+  assert.match(inspector, /className="inspector-run-row"/);
   assert.match(view, /className="metric-duration"/);
+  assert.match(view, /className="metric-size"/);
   assert.match(styles, /\.metric-duration/);
   assert.match(styles, /\.metric-size/);
   assert.match(styles, /\.metric-status\.ok/);
@@ -193,7 +196,7 @@ test("right dock keeps unique context actions and copies live HTTP and gRPC comm
   const [inspector, requestView, styles] = await Promise.all([
     readFile(new URL("components/Inspector.tsx", root), "utf8"),
     readFile(new URL("components/views/RequestView.tsx", root), "utf8"),
-    readFile(new URL("styles/components.css", root), "utf8"),
+    readFile(new URL("styles/requestsmin.css", root), "utf8"),
   ]);
 
   assert.match(inspector, /className="inspector-environment"/);
@@ -218,7 +221,7 @@ test("right dock inspects only variables used by the live request and protects s
   const [inspector, variables, styles] = await Promise.all([
     readFile(new URL("components/Inspector.tsx", root), "utf8"),
     readFile(new URL("lib/requestVariables.ts", root), "utf8"),
-    readFile(new URL("styles/components.css", root), "utf8"),
+    readFile(new URL("styles/requestsmin.css", root), "utf8"),
   ]);
 
   assert.match(variables, /export function requestVariableNames/);
@@ -246,7 +249,7 @@ test("right dock wraps full variable values and previews the resolved request ta
   const [inspector, variables, styles] = await Promise.all([
     readFile(new URL("components/Inspector.tsx", root), "utf8"),
     readFile(new URL("lib/requestVariables.ts", root), "utf8"),
-    readFile(new URL("styles/components.css", root), "utf8"),
+    readFile(new URL("styles/requestsmin.css", root), "utf8"),
   ]);
 
   assert.match(variables, /export function resolveRequestTarget/);

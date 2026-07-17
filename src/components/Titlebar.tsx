@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import { ToolButton } from "../ui/ToolButton";
 import { Badge } from "../ui/Badge";
 import { Icon } from "../ui/Icon";
@@ -7,12 +8,23 @@ import logo from "../assets/logo.png";
 import { themeBase } from "../lib/themes";
 
 export function Titlebar() {
-  const { tabs, activeTabId, requestTabs, setCommandOpen, newRequestTab, toggleTheme, toggleCompact, theme, openTab, reloadCollections, showToast, updateRequestTab } = useApp();
-  const activeTab = tabs.find((t) => t.id === activeTabId);
-  const rt = activeTab?.kind === "request" ? requestTabs[activeTabId] : null;
-  const dirty = rt ? JSON.stringify(rt.request) !== rt.original : false;
+  // derived primitives only — a keystroke in a body editor must not re-render the titlebar
+  const {
+    activeTabId, activeKind, hasRequest, dirty, running, isWs,
+    setCommandOpen, newRequestTab, toggleTheme, toggleCompact, theme, openTab, reloadCollections, showToast, updateRequestTab,
+  } = useApp(useShallow((s) => {
+    const activeTab = s.tabs.find((t) => t.id === s.activeTabId);
+    const rt = activeTab?.kind === "request" ? s.requestTabs[s.activeTabId] : null;
+    return {
+      activeTabId: s.activeTabId, activeKind: activeTab?.kind,
+      hasRequest: !!rt, dirty: rt?.dirty ?? false, running: rt?.running ?? false, isWs: rt?.request.protocol === "ws",
+      setCommandOpen: s.setCommandOpen, newRequestTab: s.newRequestTab, toggleTheme: s.toggleTheme,
+      toggleCompact: s.toggleCompact, theme: s.theme, openTab: s.openTab, reloadCollections: s.reloadCollections,
+      showToast: s.showToast, updateRequestTab: s.updateRequestTab,
+    };
+  }));
   const save = () => {
-    if (activeTab?.kind === "environments") window.dispatchEvent(new Event("requestsmin:save-environment"));
+    if (activeKind === "environments") window.dispatchEvent(new Event("requestsmin:save-environment"));
     else void saveActiveRequest();
   };
 
@@ -30,19 +42,19 @@ export function Titlebar() {
         <kbd>⌘K</kbd>
       </button>
       <div className="toolbar">
-        <ToolButton iconOnly variant="primary" title="Send request (⌘↵)" aria-label="Send request" disabled={!rt || rt.running || rt.request.protocol === "ws"} onClick={runActiveRequest}>
+        <ToolButton iconOnly variant="primary" title="Send request (⌘↵)" aria-label="Send request" disabled={!hasRequest || running || isWs} onClick={runActiveRequest}>
           <Icon name="send" />
         </ToolButton>
         <ToolButton iconOnly title="New request (⌘N)" aria-label="New request" onClick={() => newRequestTab()}>
           <Icon name="plus" />
         </ToolButton>
-        <ToolButton iconOnly variant="danger" title="Cancel request" aria-label="Cancel request" disabled={!rt?.running} onClick={() => rt && updateRequestTab(activeTabId, { running: false })}>
+        <ToolButton iconOnly variant="danger" title="Cancel request" aria-label="Cancel request" disabled={!running} onClick={() => hasRequest && updateRequestTab(activeTabId, { running: false })}>
           <Icon name="x" />
         </ToolButton>
         <ToolButton iconOnly title="Refresh collections" aria-label="Refresh collections" onClick={() => void reloadCollections().then(() => showToast("Refreshed", "Collections reloaded from disk."))}>
           <Icon name="refresh" />
         </ToolButton>
-        <ToolButton iconOnly title={activeTab?.kind === "environments" ? "Save environment (⌘S)" : "Save request (⌘S)"} aria-label={activeTab?.kind === "environments" ? "Save environment" : "Save request"} disabled={activeTab?.kind === "environments" ? false : !dirty} onClick={save}>
+        <ToolButton iconOnly title={activeKind === "environments" ? "Save environment (⌘S)" : "Save request (⌘S)"} aria-label={activeKind === "environments" ? "Save environment" : "Save request"} disabled={activeKind === "environments" ? false : !dirty} onClick={save}>
           <Icon name="save" />
         </ToolButton>
         <ToolButton iconOnly title="Toggle theme" aria-label="Toggle theme" onClick={toggleTheme}>

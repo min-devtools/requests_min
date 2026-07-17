@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { api, type GhStatus } from "../../lib/api";
 import { useApp } from "../../store";
 import { ToolButton } from "../../ui/ToolButton";
@@ -6,7 +7,9 @@ import { Icon } from "../../ui/Icon";
 import { DEFAULT_REPO } from "../../lib/ghSync";
 
 export function GithubSyncView({ active }: { active: boolean }) {
-  const { showToast, bumpReqList, reloadCollections } = useApp();
+  const { showToast, bumpReqList, reloadCollections } = useApp(useShallow((s) => ({
+    showToast: s.showToast, bumpReqList: s.bumpReqList, reloadCollections: s.reloadCollections,
+  })));
   const [status, setStatus] = useState<GhStatus | null>(null);
   const [token, setToken] = useState("");
   const [repo, setRepo] = useState(DEFAULT_REPO);

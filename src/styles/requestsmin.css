@@ -398,6 +398,7 @@ body.resizing-x { user-select: none; cursor: col-resize; }
 .metric-status.err { --metric-color: var(--red); }
 
 .response-meta > .metric-duration,
+.response-meta > .metric-size,
 .kv.metric-duration code,
 .kv.metric-size code,
 .kv.metric-status code {

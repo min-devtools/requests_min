@@ -31,7 +31,7 @@ test("collection request sort toggles direction and refreshes the left dock", as
   assert.match(view, /sortRequests\(sortDirection === "desc" \? "asc" : "desc"\)/);
   assert.match(view, /localeCompare\(b\.name/);
   assert.match(view, /api\.reqReorder\(collection\.id, order\)/);
-  assert.match(view, /bumpReqList\(\)/);
+  assert.match(view, /bumpReqList\(collection\.id\)/);
   assert.match(view, /iconOnly/);
   assert.match(view, /name=\{sortDirection === "asc" \? "sort-asc" : "sort-desc"\}/);
   assert.doesNotMatch(view, />A-Z</);

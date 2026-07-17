@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Icon } from "../../ui/Icon";
 import { ToolButton } from "../../ui/ToolButton";
 import { RequestContextMenu } from "../RequestContextMenu";
@@ -9,7 +10,12 @@ export function CollectionsView({ active }: { active: boolean }) {
   const {
     collections, reloadCollections, activeCollectionId, setActiveCollection, newRequestTab,
     openRequestTab, openDialog, openConfirm, showToast, reqListVersion, bumpReqList, renameRequest, duplicateRequest, deleteRequest,
-  } = useApp();
+  } = useApp(useShallow((s) => ({
+    collections: s.collections, reloadCollections: s.reloadCollections, activeCollectionId: s.activeCollectionId,
+    setActiveCollection: s.setActiveCollection, newRequestTab: s.newRequestTab, openRequestTab: s.openRequestTab,
+    openDialog: s.openDialog, openConfirm: s.openConfirm, showToast: s.showToast, reqListVersion: s.reqListVersion,
+    bumpReqList: s.bumpReqList, renameRequest: s.renameRequest, duplicateRequest: s.duplicateRequest, deleteRequest: s.deleteRequest,
+  })));
   const [requests, setRequests] = useState<ReqEntry[]>([]);
   const [menu, setMenu] = useState<{ request: ReqEntry; x: number; y: number } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set()); // relPaths picked for bulk actions
@@ -91,7 +97,7 @@ export function CollectionsView({ active }: { active: boolean }) {
     if (!collection) return;
     const sorted = [...requests].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) * (direction === "asc" ? 1 : -1));
     const order = sorted.map((request) => request.relPath);
-    try { await api.reqReorder(collection.id, order); setRequests(sorted); setSortDirection(direction); bumpReqList(); }
+    try { await api.reqReorder(collection.id, order); setRequests(sorted); setSortDirection(direction); bumpReqList(collection.id); }
     catch (error) { showToast("Sort failed", String(error), "err"); }
   };
 

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { api } from "../../lib/api";
 import { parseGrpcurl } from "../../lib/grpcurl";
 import { useApp } from "../../store";
@@ -7,7 +8,10 @@ import { Icon } from "../../ui/Icon";
 import { AiImportView } from "./AiImportView";
 
 export function ImportExportView({ active }: { active: boolean }) {
-  const { collections, activeCollectionId, setActiveCollection, reloadCollections, bumpReqList, showToast } = useApp();
+  const { collections, activeCollectionId, setActiveCollection, reloadCollections, bumpReqList, showToast } = useApp(useShallow((s) => ({
+    collections: s.collections, activeCollectionId: s.activeCollectionId, setActiveCollection: s.setActiveCollection,
+    reloadCollections: s.reloadCollections, bumpReqList: s.bumpReqList, showToast: s.showToast,
+  })));
   const [kind, setKind] = useState<"curl" | "grpcurl" | "postman" | "openapi">("curl");
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState("");
@@ -26,7 +30,7 @@ export function ImportExportView({ active }: { active: boolean }) {
         if (!request) throw new Error("Not a valid grpcurl command");
         const relPath = `${request.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "request"}.json`;
         await api.reqWrite(collection.id, relPath, request);
-        bumpReqList();
+        bumpReqList(collection.id);
         showToast("Imported", `${request.name} added to ${collection.name}.`);
       } else {
         const draft = kind === "postman" ? await api.importPostman(text) : await api.importOpenapi(text);

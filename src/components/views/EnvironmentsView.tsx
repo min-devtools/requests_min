@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Icon } from "../../ui/Icon";
 import { ToolButton } from "../../ui/ToolButton";
 import { useApp } from "../../store";
@@ -10,7 +11,10 @@ const toRecord = (rows: Row[]): Record<string, string> =>
   Object.fromEntries(rows.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r.value]));
 
 export function EnvironmentsView({ active }: { active: boolean }) {
-  const { activeEnv, setActiveEnv, openDialog, openConfirm, showToast, bumpEnv } = useApp();
+  const { activeEnv, setActiveEnv, openDialog, openConfirm, showToast, bumpEnv } = useApp(useShallow((s) => ({
+    activeEnv: s.activeEnv, setActiveEnv: s.setActiveEnv, openDialog: s.openDialog,
+    openConfirm: s.openConfirm, showToast: s.showToast, bumpEnv: s.bumpEnv,
+  })));
   const [envs, setEnvs] = useState<string[]>([]);
   const [vars, setVars] = useState<Row[]>([]);
   const [secrets, setSecrets] = useState<Row[]>([]);

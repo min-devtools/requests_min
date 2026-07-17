@@ -76,6 +76,6 @@ export async function saveActiveRequest() {
 
   await api.reqWrite(collectionId, relPath, rt.request);
   s.updateRequestTab(tab.id, { collectionId, relPath, original: JSON.stringify(rt.request) });
-  s.bumpReqList();
+  s.bumpReqList(collectionId);
   s.showToast("Saved", `${rt.request.name} written to disk.`);
 }
