@@ -56,6 +56,16 @@ pub fn parse(text: &str) -> Result<Request, String> {
             "-d" | "--data" | "--data-raw" | "--data-binary" | "--data-ascii" => {
                 i += 1; body_content = tokens.get(i).cloned();
             }
+            "-b" | "--cookie" => {
+                i += 1;
+                // curl: arg with '=' is a cookie string, without is a cookie-jar filename (skip)
+                if let Some(c) = tokens.get(i).filter(|c| c.contains('=')) {
+                    match headers.iter_mut().find(|h| h.key.eq_ignore_ascii_case("cookie")) {
+                        Some(h) => { h.value.push_str("; "); h.value.push_str(c); }
+                        None => headers.push(KV { key: "Cookie".into(), value: c.clone(), enabled: Some(true) }),
+                    }
+                }
+            }
             "-u" | "--user" => {
                 i += 1;
                 if let Some(u) = tokens.get(i) {

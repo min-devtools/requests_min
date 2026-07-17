@@ -106,6 +106,19 @@ mod tests {
     }
 
     #[test]
+    fn curl_parse_cookie_flag() {
+        let r = curl::parse("curl 'https://x.com/' -b 'a=1; b=2' --cookie 'c=3'").unwrap();
+        let h = r.http.unwrap();
+        assert_eq!(h.headers.len(), 1);
+        assert_eq!(h.headers[0].key, "Cookie");
+        assert_eq!(h.headers[0].value, "a=1; b=2; c=3");
+
+        // -b without '=' is a cookie-jar filename, not a cookie string
+        let r = curl::parse("curl 'https://x.com/' -b cookies.txt").unwrap();
+        assert!(r.http.unwrap().headers.is_empty());
+    }
+
+    #[test]
     fn curl_parse_hoists_auth_header() {
         let basic = base64::engine::general_purpose::STANDARD.encode("me:pw");
         let r = curl::parse(&format!("curl 'https://x.com/' -H 'authorization: Basic {basic}'")).unwrap();
