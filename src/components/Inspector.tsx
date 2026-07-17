@@ -7,6 +7,13 @@ import { saveActiveRequest } from "../lib/runRequest";
 import { buildCurl, buildGrpcurl } from "./views/RequestView";
 import { requestVariableNames, resolveRequestTarget } from "../lib/requestVariables";
 
+const runStatusClass = (entry: { status: string; error: string | null }) => {
+  if (entry.error) return "err";
+  const code = Number(entry.status);
+  if (Number.isFinite(code)) return code < 300 ? "ok" : code < 500 ? "warn" : "err";
+  return entry.status === "OK" ? "ok" : "err"; // gRPC status name — anything but OK is a failure
+};
+
 const relativeTime = (timestamp: number) => {
   const seconds = Math.max(1, Math.round((Date.now() - timestamp) / 1000));
   if (seconds < 60) return `${seconds}s ago`;
@@ -30,7 +37,7 @@ export function Inspector() {
   const variableNames = request ? requestVariableNames(request) : [];
   const unresolved = variableNames.filter((name) => !(name in secrets) && !(name in vars));
   const resolvedTarget = request ? resolveRequestTarget(request, vars, secrets, revealSecrets) : "";
-  const recentRuns = rt ? history.filter((entry) => entry.collectionId === rt.collectionId && entry.request.name === request?.name).slice(0, 3) : [];
+  const recentRuns = rt ? history.filter((entry) => entry.collectionId === rt.collectionId && entry.request.name === request?.name).slice(0, 8) : [];
 
   useEffect(() => {
     api.envList().then(setEnvs).catch(() => setEnvs([]));
@@ -73,7 +80,6 @@ export function Inspector() {
         {rt && request ? (
           <div className="inspector-command-body">
             {unresolved.length > 0 && <div className="inspector-variable-warning">{unresolved.length} unresolved variable{unresolved.length === 1 ? "" : "s"}</div>}
-            {rt.error && <section className="inspector-error"><span>Last run failed</span><strong>{rt.error}</strong></section>}
 
             <section className="inspector-actions">
               <div className="inspector-secondary-actions">
@@ -118,7 +124,7 @@ export function Inspector() {
               <div className="inspector-section-label">Recent runs</div>
               {recentRuns.length ? recentRuns.map((entry) => (
                 <div className="inspector-run-row" key={entry.id}>
-                  <strong className={entry.error ? "err" : ""}>{entry.status}</strong>
+                  <strong className={runStatusClass(entry)}>{entry.status}</strong>
                   <span>{entry.timeMs === null ? "failed" : `${entry.timeMs}ms`}</span>
                   <time>{relativeTime(entry.timestamp)}</time>
                 </div>
@@ -134,6 +140,12 @@ export function Inspector() {
           </section>
         )}
       </div>
+      {rt?.error && (
+        <section className="inspector-error">
+          <span>Last run failed</span>
+          <strong>{rt.error}</strong>
+        </section>
+      )}
     </aside>
   );
 }

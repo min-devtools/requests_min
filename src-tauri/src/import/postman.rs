@@ -41,14 +41,16 @@ fn build_request(name: &str, reqv: &Value) -> Request {
         Some(o) => o.get("raw").and_then(|r| r.as_str()).unwrap_or("").to_string(),
         None => String::new(),
     };
-    let headers = reqv.get("header").and_then(|h| h.as_array()).map(|arr| arr.iter().filter_map(|x| {
+    let mut headers: Vec<KV> = reqv.get("header").and_then(|h| h.as_array()).map(|arr| arr.iter().filter_map(|x| {
         let k = x.get("key")?.as_str()?.to_string();
         let v = x.get("value").and_then(|v| v.as_str()).unwrap_or("").to_string();
         let enabled = !x.get("disabled").and_then(|d| d.as_bool()).unwrap_or(false);
         Some(KV { key: k, value: v, enabled: Some(enabled) })
     }).collect()).unwrap_or_default();
     let body = build_body(reqv.get("body"));
-    let auth = build_auth(reqv.get("auth"));
+    let mut auth = build_auth(reqv.get("auth"));
+    // a postman `auth` block wins over an Authorization header on the same request
+    super::hoist_auth_header(&mut headers, &mut auth);
     Request {
         name: name.to_string(), protocol: "http".into(),
         http: Some(HttpPart { method, url, headers, params: vec![], auth, body, insecure: false }),

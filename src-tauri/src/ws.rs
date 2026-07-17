@@ -41,7 +41,7 @@ pub async fn ws_connect(app: AppHandle, state: State<'_, WsState>, session_id: S
         loop {
             tokio::select! {
                 cmd = rx.recv() => match cmd {
-                    Some(WsCmd::Send(t)) => { if sink.send(Message::Text(t.into())).await.is_err() { break } }
+                    Some(WsCmd::Send(t)) => { if sink.send(Message::Text(t)).await.is_err() { break } }
                     Some(WsCmd::Close) | None => { let _ = sink.send(Message::Close(None)).await; break }
                 },
                 msg = source.next() => match msg {

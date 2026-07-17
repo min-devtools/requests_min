@@ -71,6 +71,8 @@ pub fn parse(text: &str) -> Result<Request, String> {
     }
 
     if url.is_empty() { return Err("no URL found in curl command".into()); }
+    // `-u` already filled auth; it wins over any `-H 'Authorization: ...'`
+    super::hoist_auth_header(&mut headers, &mut auth);
     let method = method.unwrap_or_else(|| if body_content.is_some() { "POST".into() } else { "GET".into() });
     let body = match &body_content {
         Some(c) => {

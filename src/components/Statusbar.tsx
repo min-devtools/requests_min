@@ -3,7 +3,6 @@ import { useApp } from "../store";
 import { api, type GhStatus } from "../lib/api";
 import { syncNow } from "../lib/ghSync";
 import { Icon } from "../ui/Icon";
-import { version } from "../../package.json";
 
 export function Statusbar() {
   const { tabs, activeTabId, requestTabs, collections, activeCollectionId, activeEnv, syncDirty } = useApp();
@@ -41,7 +40,7 @@ export function Statusbar() {
           </button>
         )}
         <span>UTF-8</span>
-        <span>v{version}</span>
+        <span>v{__APP_VERSION__}</span>
         <a className="credit" href="https://www.linkedin.com/in/ngthminh-dev/" target="_blank" rel="noreferrer">by @ngthminhdev</a>
       </div>
     </footer>
