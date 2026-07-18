@@ -24,7 +24,7 @@ export function RequestContextMenu({ x, y, onOpen, onClose, onRename, onDuplicat
       <button type="button" className="context-item" onClick={() => { onClose(); onOpen(); }}><Icon name="request" /><strong>Open request</strong><kbd>↵</kbd></button>
       <button type="button" className="context-item" onClick={() => { onClose(); onRename(); }}><Icon name="pencil" /><strong>Rename request</strong><kbd>⌘E</kbd></button>
       <button type="button" className="context-item" onClick={() => { onClose(); onDuplicate(); }}><Icon name="copy" /><strong>Duplicate request</strong><kbd>⌘D</kbd></button>
-      <button type="button" className="context-item danger" onClick={() => { onClose(); onDelete(); }}><Icon name="trash" /><strong>Delete request</strong><kbd>⌫</kbd></button>
+      <button type="button" className="context-item danger" onClick={() => { onClose(); onDelete(); }}><Icon name="trash" /><strong>Delete request</strong><kbd>⌘⌫</kbd></button>
     </div>
   );
 }

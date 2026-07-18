@@ -115,6 +115,7 @@ export function Sidebar() {
   useEffect(() => {
     if (!selected?.request) return;
     const onKey = (event: KeyboardEvent) => {
+      if (useApp.getState().dialog) return;
       const el = document.activeElement as HTMLElement | null;
       const editable = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable || !!el.closest(".monaco-editor"));
       if (editable) return;
@@ -123,7 +124,8 @@ export function Sidebar() {
       const { collectionId, request } = selected;
       if (mod && key === "d") { event.preventDefault(); void duplicateReq(collectionId, request); }
       else if (mod && key === "e") { event.preventDefault(); void renameReq(collectionId, request); }
-      else if (!mod && (event.key === "Delete" || event.key === "Backspace")) { event.preventDefault(); void deleteReq(collectionId, request); }
+      // ⌘⌫ only — a plain Backspace outside inputs is too easy to hit by accident
+      else if (mod && (event.key === "Delete" || event.key === "Backspace")) { event.preventDefault(); void deleteReq(collectionId, request); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

@@ -114,7 +114,7 @@ export function SettingsView({ active }: { active: boolean }) {
             <div className="settings-copy"><strong>API key</strong><span>Stored only in this app profile on the current device.</span></div>
             <div className="settings-control" style={{ gap: 6 }}>
               <input type="password" className="settings-select" placeholder="sk-…" value={aiKeyDraft} onChange={(e) => setAiKeyDraft(e.target.value)} />
-              <ToolButton onClick={() => { setAiSettings({ endpoint: aiEndpointDraft.trim(), model: aiModelDraft.trim(), apiKey: aiKeyDraft.trim() }); showToast("AI provider saved", `${aiModelDraft.trim()} · ${aiEndpointDraft.trim()}`); }}>Save</ToolButton>
+              <ToolButton onClick={() => { setAiSettings({ endpoint: aiEndpointDraft.trim(), model: aiModelDraft.trim(), apiKey: aiKeyDraft.trim() }); showToast("AI provider saved", `${aiModelDraft.trim()} · ${aiEndpointDraft.trim()}`); }} variant="primary">Save</ToolButton>
             </div>
           </div>
         </section>
@@ -126,7 +126,7 @@ export function SettingsView({ active }: { active: boolean }) {
             <div className="settings-copy"><strong>Personal access token</strong><span>Stored locally only. Needs repo scope to push/pull collections.</span></div>
             <div className="settings-control" style={{ gap: 6 }}>
               <input type="password" className="settings-select" style={{ width: 180 }} placeholder="ghp_…" value={token} onChange={(e) => setToken(e.target.value)} />
-              <ToolButton onClick={saveToken}>Save</ToolButton>
+              <ToolButton variant="primary" onClick={saveToken}>Save</ToolButton>
             </div>
           </div>
           <div className="settings-row">
@@ -134,7 +134,7 @@ export function SettingsView({ active }: { active: boolean }) {
             <div className="settings-copy"><strong>Repository</strong><span>Single repo used as JSON storage for all collections, e.g. you/api-collections.</span></div>
             <div className="settings-control" style={{ gap: 6 }}>
               <input className="settings-select" style={{ width: 180 }} placeholder={DEFAULT_REPO} value={repo} onChange={(e) => setRepo(e.target.value)} />
-              <ToolButton onClick={saveRepo}>Save</ToolButton>
+              <ToolButton variant="primary" onClick={saveRepo}>Save</ToolButton>
             </div>
           </div>
           <div className="settings-row">
@@ -159,6 +159,9 @@ export function SettingsView({ active }: { active: boolean }) {
             <div className="shortcut-row"><span>Increase font</span><span className="kbd">⌘+</span></div>
             <div className="shortcut-row"><span>Decrease font</span><span className="kbd">⌘−</span></div>
             <div className="shortcut-row"><span>Open settings</span><span className="kbd">⌘,</span></div>
+            <div className="shortcut-row"><span>Rename selected request</span><span className="kbd">⌘E</span></div>
+            <div className="shortcut-row"><span>Duplicate selected request</span><span className="kbd">⌘D</span></div>
+            <div className="shortcut-row"><span>Delete selected request</span><span className="kbd">⌘⌫</span></div>
           </div>
         </section>
 

@@ -90,7 +90,7 @@ export function Inspector() {
 
             <section className="inspector-actions">
               <div className="inspector-secondary-actions">
-                <ToolButton onClick={() => void saveActiveRequest()}><Icon name="save" /> Save</ToolButton>
+                <ToolButton variant="primary" onClick={() => void saveActiveRequest()}><Icon name="save" /> Save</ToolButton>
                 {request.protocol !== "ws" && <ToolButton onClick={() => void copyCommand()}><Icon name="copy" /> Copy {request.protocol === "grpc" ? "grpcurl" : "cURL"}</ToolButton>}
               </div>
             </section>
