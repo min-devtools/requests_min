@@ -5,6 +5,7 @@ import { ToolButton } from "../../ui/ToolButton";
 import { KvEditor } from "../../ui/KvEditor";
 import { JsonEditor } from "../../ui/JsonEditor";
 import { JsonView } from "../../ui/JsonView";
+import { SectionVeil } from "../../ui/SectionVeil";
 import { JsonResponseViewer } from "../../ui/JsonResponseViewer";
 import { EnvInput } from "../../ui/EnvInput";
 import { Combobox } from "../../ui/Combobox";
@@ -479,6 +480,7 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
               </span>
             </div>
             <div className="response-body">
+              <SectionVeil on={rt.running} label="Sending…" />
               {!rt.response && !rt.error && <div className="response-empty">{rt.running ? "sending…" : "send a request to see the response"}</div>}
               {rt.response && (shownTab === "pretty" || shownTab === "raw") && (
                 shownTab === "pretty"

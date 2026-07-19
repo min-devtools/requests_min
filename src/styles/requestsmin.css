@@ -164,7 +164,7 @@ body.resizing-x { user-select: none; cursor: col-resize; }
   border-bottom: 1px solid var(--line);
   background: color-mix(in oklab, var(--pane), var(--window) 30%);
 }
-.response-body { min-height: 0; overflow: auto; }
+.response-body { min-height: 0; overflow: auto; position: relative; /* hosts .section-veil */ }
 .response-preview { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
 .response-code { margin: 0; padding: 1.0769rem 1.2308rem; color: var(--text-2); font: 0.9231rem/1.7 var(--font-mono); user-select: text; white-space: pre-wrap; word-break: break-word; }
 .json-tree .syntax-key { color: var(--blue); }
