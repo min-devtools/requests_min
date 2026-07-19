@@ -41,13 +41,13 @@ export default function App() {
   // narrow subscription: keystrokes only touch requestTabs, which App doesn't render
   const {
     tabs, activeTabId, theme, compact, uiFontSize, uiFont, editorFont, leftCollapsed, rightCollapsed,
-    toggleLeft, toggleRight, setCommandOpen, newRequestTab, openTab, confirmCloseTab,
+    toggleLeft, toggleRight, setCommandOpen, newRequestTab, confirmCloseTab, openTab,
   } = useApp(useShallow((s) => ({
     tabs: s.tabs, activeTabId: s.activeTabId, theme: s.theme, compact: s.compact,
     uiFontSize: s.uiFontSize, uiFont: s.uiFont, editorFont: s.editorFont,
     leftCollapsed: s.leftCollapsed, rightCollapsed: s.rightCollapsed,
     toggleLeft: s.toggleLeft, toggleRight: s.toggleRight, setCommandOpen: s.setCommandOpen,
-    newRequestTab: s.newRequestTab, openTab: s.openTab, confirmCloseTab: s.confirmCloseTab,
+    newRequestTab: s.newRequestTab, confirmCloseTab: s.confirmCloseTab, openTab: s.openTab,
   })));
 
   useEffect(() => {
@@ -99,7 +99,7 @@ export default function App() {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [setCommandOpen, newRequestTab, toggleLeft, toggleRight, openTab, confirmCloseTab]);
+  }, [setCommandOpen, newRequestTab, toggleLeft, toggleRight, confirmCloseTab, openTab]);
 
   return (
     <div className="app-frame">

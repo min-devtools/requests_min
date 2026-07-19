@@ -11,7 +11,7 @@ export function Titlebar() {
   // derived primitives only — a keystroke in a body editor must not re-render the titlebar
   const {
     activeTabId, activeKind, hasRequest, dirty, running, isWs,
-    setCommandOpen, newRequestTab, toggleTheme, toggleCompact, theme, openTab, reloadCollections, showToast, updateRequestTab,
+    setCommandOpen, newRequestTab, toggleTheme, toggleCompact, theme, reloadCollections, showToast, updateRequestTab, openTab,
   } = useApp(useShallow((s) => {
     const activeTab = s.tabs.find((t) => t.id === s.activeTabId);
     const rt = activeTab?.kind === "request" ? s.requestTabs[s.activeTabId] : null;
@@ -19,8 +19,8 @@ export function Titlebar() {
       activeTabId: s.activeTabId, activeKind: activeTab?.kind,
       hasRequest: !!rt, dirty: rt?.dirty ?? false, running: rt?.running ?? false, isWs: rt?.request.protocol === "ws",
       setCommandOpen: s.setCommandOpen, newRequestTab: s.newRequestTab, toggleTheme: s.toggleTheme,
-      toggleCompact: s.toggleCompact, theme: s.theme, openTab: s.openTab, reloadCollections: s.reloadCollections,
-      showToast: s.showToast, updateRequestTab: s.updateRequestTab,
+      toggleCompact: s.toggleCompact, theme: s.theme, reloadCollections: s.reloadCollections,
+      showToast: s.showToast, updateRequestTab: s.updateRequestTab, openTab: s.openTab,
     };
   }));
   const save = () => {

@@ -7,17 +7,12 @@ import { Icon } from "../ui/Icon";
 
 export function Statusbar() {
   // derived primitives — re-render on target/status changes, not on every store write
-  const { activeTabId, collectionName, env, syncDirty, target, running, hasResponse } = useApp(useShallow((s) => {
-    const activeTab = s.tabs.find((t) => t.id === s.activeTabId);
-    const rt = activeTab?.kind === "request" ? s.requestTabs[s.activeTabId] : null;
+  const { activeTabId, collectionName, env, syncDirty } = useApp(useShallow((s) => {
     return {
       activeTabId: s.activeTabId,
       collectionName: s.collections.find((c) => c.id === s.activeCollectionId)?.name ?? null,
       env: s.activeEnv,
       syncDirty: s.syncDirty,
-      target: rt ? `${rt.request.protocol.toUpperCase()} ${rt.request.http?.url ?? rt.request.grpc?.endpoint ?? rt.request.ws?.url ?? ""}` : null,
-      running: rt?.running ?? false,
-      hasResponse: !!rt?.response,
     };
   }));
   const [gh, setGh] = useState<GhStatus | null>(null);
@@ -37,10 +32,6 @@ export function Statusbar() {
       <div>
         <span>{collectionName ?? "no collection"}</span>
         <span style={{ color: env ? "var(--green)" : "var(--text-3)" }}>{env ?? "no environment"}</span>
-      </div>
-      <div>
-        <span>{target ?? "—"}</span>
-        <span>{running ? "sending…" : hasResponse ? "done" : "idle"}</span>
       </div>
       <div className="right-status">
         {gh?.connected && (
