@@ -22,6 +22,12 @@ export function TabsBar() {
   const [overId, setOverId] = useState<string | null>(null);
   const [requestMenu, setRequestMenu] = useState<{ tabId: string; x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const activeRef = useRef<HTMLButtonElement>(null);
+
+  // the bar scrolls, so a tab reached by ⌘1-9 / the palette / a close can be off-screen
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeTabId]);
   useEffect(() => { inputRef.current?.select(); }, [editingId]);
   const commit = () => { if (editingId) renameTab(editingId, draft); setEditingId(null); };
 
@@ -38,6 +44,7 @@ export function TabsBar() {
         return (
           <button
             key={tab.id}
+            ref={tab.id === activeTabId ? activeRef : undefined}
             type="button"
             draggable={!editingId}
             className={`tab ${tab.id === activeTabId ? "active" : ""} ${dragId === tab.id ? "dragging" : ""} ${overId === tab.id ? "drag-over" : ""}`}
@@ -50,7 +57,7 @@ export function TabsBar() {
             onDragEnd={() => { setDragId(null); setOverId(null); }}
             onDragOver={(e) => { if (dragId && dragId !== tab.id) { e.preventDefault(); setOverId(tab.id); } }}
             onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData("application/x-requestsmin-tab") || dragId; if (id && id !== tab.id) reorderTab(id, tab.id); setDragId(null); setOverId(null); }}
-            title={collection ? `${tab.title} · ${collection.name}` : undefined}
+            title={collection ? `${tab.title} Â· ${collection.name}` : undefined}
           >
             {dirty && <span className="tab-dirty-dot" title="Unsaved changes" />}
             {collection && <span className="conn-dot" />}
@@ -63,7 +70,7 @@ export function TabsBar() {
           </button>
         );
       })}
-      <button type="button" className="tab-add" title="New request (⌘N)" onClick={() => newRequestTab()}><Icon name="plus" /><span>Request</span></button>
+      <button type="button" className="tab-add" title="New request (âN)" onClick={() => newRequestTab()}><Icon name="plus" /><span>Request</span></button>
       {requestMenu && (() => {
         const request = requestTabs[requestMenu.tabId];
         if (!request?.collectionId || !request.relPath) return null;
