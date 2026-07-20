@@ -65,6 +65,7 @@ export function EnvInput({ value, onChange, variableNames, className = "", place
         onFocus={() => setFocused(true)}
         onChange={change}
         onClick={(event) => updateSuggestions(event.currentTarget)}
+        onKeyDown={(event) => { if (query !== null && event.key === "Escape") { event.stopPropagation(); setQuery(null); } }}
         onKeyUp={(event) => updateSuggestions(event.currentTarget)}
         onBlur={() => { setFocused(false); setQuery(null); onBlur?.(); }}
       />
