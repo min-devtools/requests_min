@@ -154,6 +154,11 @@ export function AiImportView({ active, embedded = false }: { active: boolean; em
           <section className="panel ai-generate-panel">
             <div><h3>Generate draft</h3><p>Using <strong>{aiModel}</strong> via {aiEndpoint}.</p></div>
             <ToolButton variant="primary" onClick={generate} disabled={generating}><Icon name="wand" /> {generating ? "Generating…" : "Generate draft"}</ToolButton>
+            {generating && (
+              <ToolButton onClick={() => void api.aiGenerateCancel()} title="Stops after the in-flight batch finishes">
+                <Icon name="x" /> Cancel
+              </ToolButton>
+            )}
           </section>
         </div>
 

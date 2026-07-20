@@ -31,10 +31,10 @@ export function CommandPalette() {
   const [cursor, setCursor] = useState(0);
   const [recents, setRecents] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { commandOpen, setCommandOpen, collections, newRequestTab, openTab, toggleLeft, toggleRight, setActiveCollection } = useApp(useShallow((s) => ({
+  const { commandOpen, setCommandOpen, collections, newRequestTab, openTab, toggleLeft, toggleRight, setActiveCollection, vimMode } = useApp(useShallow((s) => ({
     commandOpen: s.commandOpen, setCommandOpen: s.setCommandOpen, collections: s.collections,
     newRequestTab: s.newRequestTab, openTab: s.openTab, toggleLeft: s.toggleLeft, toggleRight: s.toggleRight,
-    setActiveCollection: s.setActiveCollection,
+    setActiveCollection: s.setActiveCollection, vimMode: s.vimMode,
   })));
 
   useEffect(() => {
@@ -108,8 +108,10 @@ const filtered = useMemo<Array<Command & { labelIdx: number[]; recent: boolean }
           placeholder="Run command, open collection, switch environment..."
           onChange={(e) => { setInput(e.target.value); setCursor(0); }}
           onKeyDown={(e) => {
-            if (e.key === "ArrowDown") { e.preventDefault(); setCursor((c) => Math.min(filtered.length - 1, c + 1)); }
-            if (e.key === "ArrowUp") { e.preventDefault(); setCursor((c) => Math.max(0, c - 1)); }
+            const next = e.key === "Tab" || (vimMode && e.ctrlKey && e.key.toLowerCase() === "n");
+            const previous = vimMode && e.ctrlKey && e.key.toLowerCase() === "p";
+            if (e.key === "ArrowDown" || next) { e.preventDefault(); setCursor((c) => Math.min(Math.max(0, filtered.length - 1), c + 1)); }
+            if (e.key === "ArrowUp" || previous) { e.preventDefault(); setCursor((c) => Math.max(0, c - 1)); }
             if (e.key === "Enter" && filtered[cursor]) runCommand(filtered[cursor]);
             if (e.key === "Escape") setCommandOpen(false);
           }}

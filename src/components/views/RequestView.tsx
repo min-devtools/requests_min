@@ -111,7 +111,12 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
       if (e.kind === "closed") { setWsConnected(false); pushWs("sys", "closed"); }
       if (e.kind === "error") pushWs("sys", `error: ${e.data}`);
     });
-    return () => { void p.then((unlisten) => unlisten()); };
+    return () => {
+      void p.then((unlisten) => unlisten());
+      // closing the tab must close its socket — otherwise the backend stream
+      // outlives the view and keeps burning until the app quits (idempotent)
+      void api.wsClose(wsSid);
+    };
   }, [wsSid]);
 
   // keep the newest ws message in view

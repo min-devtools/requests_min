@@ -26,7 +26,7 @@ export function retintMonaco(theme: "dark" | "light") {
     base: theme === "dark" ? "vs-dark" : "vs",
     inherit: true,
     rules: [
-      { token: "string.key.json", foreground: bare(color("--syntax-key", "#5aa7ff")) },
+      { token: "string.key.json", foreground: bare(color("--blue-2", "#5aa7ff")) },
       { token: "string.value.json", foreground: bare(color("--syntax-string", "#58d68d")) },
       { token: "number", foreground: bare(color("--syntax-number", "#1f6feb")) },
       { token: "keyword.json", foreground: bare(color("--syntax-boolean", "#b794f4")) },

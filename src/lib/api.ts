@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import type { ConnColor } from "./connColor";
 
 export interface KV { key: string; value: string; enabled?: boolean }
 
@@ -45,7 +46,13 @@ export interface Request {
   grpc?: GrpcPart;
   ws?: WsPart;
 }
-export interface CollectionMeta { id: string; name: string; order: string[] }
+export interface CollectionMeta {
+  id: string;
+  name: string;
+  order: string[];
+  /** user-assigned identity color, drawn as the dot on every tab bound to this collection */
+  color?: ConnColor;
+}
 export interface ReqEntry { relPath: string; name: string; protocol: string; method: string }
 
 export const emptyHttp = (): HttpPart => ({
@@ -75,6 +82,7 @@ export const api = {
   colList: () => invoke<CollectionMeta[]>("col_list"),
   colCreate: (name: string) => mutated(invoke<CollectionMeta>("col_create", { name })),
   colRename: (id: string, name: string) => mutated(invoke<void>("col_rename", { id, name })),
+  colSetColor: (id: string, color: ConnColor | null) => mutated(invoke<void>("col_set_color", { id, color })),
   colDelete: (id: string) => mutated(invoke<void>("col_delete", { id })),
   colReorder: (order: string[]) => mutated(invoke<void>("col_reorder", { order })),
   reqList: (collectionId: string) => invoke<ReqEntry[]>("req_list", { collectionId }),
@@ -109,6 +117,7 @@ export const api = {
   aiScan: (dir: string) => invoke<ScanResult>("ai_scan", { dir }),
   aiGenerate: (files: string[], endpoint: string, apiKey: string, model: string) =>
     invoke<DraftEntry[]>("ai_generate", { files, endpoint, apiKey, model }),
+  aiGenerateCancel: () => invoke<void>("ai_generate_cancel"),
   ghSetToken: (token: string) => invoke<void>("gh_set_token", { token }),
   ghStatus: () => invoke<GhStatus>("gh_status"),
   ghConfigure: (repo: string) => invoke<void>("gh_configure", { repo }),

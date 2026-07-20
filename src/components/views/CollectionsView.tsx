@@ -3,8 +3,10 @@ import { useShallow } from "zustand/react/shallow";
 import { Icon } from "../../ui/Icon";
 import { ToolButton } from "../../ui/ToolButton";
 import { RequestContextMenu } from "../RequestContextMenu";
+import { ColorPicker } from "../../ui/ColorPicker";
 import { useApp } from "../../store";
 import { api, type ReqEntry } from "../../lib/api";
+import { connStyle } from "../../lib/connColor";
 
 export function CollectionsView({ active }: { active: boolean }) {
   const {
@@ -21,6 +23,7 @@ export function CollectionsView({ active }: { active: boolean }) {
   const [selected, setSelected] = useState<Set<string>>(new Set()); // relPaths picked for bulk actions
   const [anchor, setAnchor] = useState<number | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [pickingColor, setPickingColor] = useState(false);
   const collection = collections.find((item) => item.id === activeCollectionId);
 
   useEffect(() => { void reloadCollections(); }, []);
@@ -108,6 +111,14 @@ export function CollectionsView({ active }: { active: boolean }) {
         <ToolButton onClick={newCollection}><Icon name="plus" /> New collection</ToolButton>
         {collection && <ToolButton variant="primary" onClick={() => newRequestTab("http", collection.id)}><Icon name="plus" /> New request</ToolButton>}
         {collection && <ToolButton iconOnly title={sortDirection === "asc" ? "Sort Z-A" : "Sort A-Z"} aria-label={sortDirection === "asc" ? "Sort requests Z-A" : "Sort requests A-Z"} onClick={() => void sortRequests(sortDirection === "desc" ? "asc" : "desc")}><Icon name={sortDirection === "asc" ? "sort-asc" : "sort-desc"} /></ToolButton>}
+        {collection && <button
+          type="button"
+          className="conn-swatch"
+          style={connStyle(collection.color)}
+          title={collection.color ? `Color: ${collection.color}` : "Pick a color"}
+          aria-label="Pick collection color"
+          onClick={() => setPickingColor(true)}
+        />}
         {collection && <ToolButton onClick={renameCollection}><Icon name="pencil" /> Rename</ToolButton>}
         {collection && <ToolButton variant="danger" onClick={deleteCollection}><Icon name="trash" /> Delete</ToolButton>}
       </div>
@@ -129,6 +140,11 @@ export function CollectionsView({ active }: { active: boolean }) {
         </button>)}
       </section>}
     </div>
+    {collection && pickingColor && <ColorPicker
+      value={collection.color}
+      onPick={(color) => { void api.colSetColor(collection.id, color).then(reloadCollections).catch((error) => showToast("Color failed", String(error), "err")); }}
+      onClose={() => setPickingColor(false)}
+    />}
     {collection && menu && <RequestContextMenu x={menu.x} y={menu.y} onOpen={() => void openRequestTab(collection.id, menu.request.relPath)} onRename={() => void rename(menu.request)} onDuplicate={() => void duplicate(menu.request)} onDelete={() => void deleteReq(menu.request)} onClose={() => setMenu(null)} />}
   </section>;
 }

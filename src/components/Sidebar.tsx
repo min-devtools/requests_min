@@ -3,8 +3,10 @@ import { useShallow } from "zustand/react/shallow";
 import { Badge } from "../ui/Badge";
 import { Icon, type IconName } from "../ui/Icon";
 import { RequestContextMenu } from "./RequestContextMenu";
+import { ColorPicker } from "../ui/ColorPicker";
 import { useApp, type TabKind } from "../store";
 import { api, type ReqEntry } from "../lib/api";
+import { connStyle } from "../lib/connColor";
 
 type DragItem = { kind: "collection"; id: string } | { kind: "request"; collectionId: string; relPath: string };
 
@@ -26,6 +28,8 @@ export function Sidebar() {
     catch { return new Set(); }
   });
   const [requestMenu, setRequestMenu] = useState<{ collectionId: string; request: ReqEntry; x: number; y: number } | null>(null);
+  const [collectionMenu, setCollectionMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [pickingColor, setPickingColor] = useState<string | null>(null);
   const [dragOverCollection, setDragOverCollection] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<string | null>(null);
   const [dragging, setDragging] = useState<DragItem | null>(null);
@@ -92,6 +96,15 @@ export function Sidebar() {
     event.preventDefault();
     setRequestMenu({ collectionId, request, x: event.clientX, y: event.clientY });
   };
+
+  // same dismiss contract as RequestContextMenu, which owns this effect itself
+  useEffect(() => {
+    if (!collectionMenu) return;
+    const close = () => setCollectionMenu(null);
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("blur", close);
+    return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("blur", close); };
+  }, [collectionMenu]);
 
   const renameReq = async (collectionId: string, r: ReqEntry) => {
     const name = await openDialog({ title: "Rename request", defaultValue: r.name, confirmLabel: "Rename" });
@@ -203,8 +216,13 @@ export function Sidebar() {
               onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) { setDragOverCollection(null); setDropIndicator(null); } }}
               onDrop={(event) => onDropOnCollection(event, c.id)}
             >
-              <button type="button" className={`nav-item collection-node ${c.id === activeCollectionId ? "active" : ""} ${dropIndicator === `collection:${c.id}` ? "drop-prefix" : ""}`} draggable onDragStart={(event) => { const item = { kind: "collection", id: c.id } as const; setDragging(item); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/json", JSON.stringify(item)); }} onDragEnd={() => { setDragging(null); setDropIndicator(null); setDragOverCollection(null); }} onClick={() => toggleCollection(c.id)} aria-expanded={!collapsed}>
+              <button type="button" className={`nav-item collection-node with-conn-dot ${c.id === activeCollectionId ? "active" : ""} ${dropIndicator === `collection:${c.id}` ? "drop-prefix" : ""}`} draggable onDragStart={(event) => { const item = { kind: "collection", id: c.id } as const; setDragging(item); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/json", JSON.stringify(item)); }} onDragEnd={() => { setDragging(null); setDropIndicator(null); setDragOverCollection(null); }} onClick={() => toggleCollection(c.id)} onContextMenu={(event) => { event.preventDefault(); setCollectionMenu({ id: c.id, x: event.clientX, y: event.clientY }); }} aria-expanded={!collapsed}>
                 <Icon name="chevron-down" className="collection-chevron" size={13} />
+                <span
+                  className="conn-dot"
+                  style={connStyle(c.color)}
+                  title={c.color ? `Color: ${c.color}` : "No color — right-click to set one"}
+                />
                 <span>{c.name}</span>
                 <Badge>{(requestsByCollection[c.id] ?? []).length || ""}</Badge>
               </button>
@@ -243,6 +261,18 @@ export function Sidebar() {
         onDuplicate={() => void duplicateReq(requestMenu.collectionId, requestMenu.request)}
         onDelete={() => void deleteReq(requestMenu.collectionId, requestMenu.request)}
         onClose={() => setRequestMenu(null)}
+      />}
+      {collectionMenu && <div className="index-context-menu" style={{ left: collectionMenu.x, top: collectionMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
+        <button type="button" className="context-item" onClick={() => { setPickingColor(collectionMenu.id); setCollectionMenu(null); }}>
+          <span className="conn-dot" style={{ ...connStyle(collections.find((c) => c.id === collectionMenu.id)?.color), justifySelf: "center" }} />
+          <strong>Set color…</strong>
+          <span />
+        </button>
+      </div>}
+      {pickingColor && <ColorPicker
+        value={collections.find((c) => c.id === pickingColor)?.color}
+        onPick={(color) => { void api.colSetColor(pickingColor, color).then(reloadCollections).catch((error) => showToast("Color failed", String(error), "err")); }}
+        onClose={() => setPickingColor(null)}
       />}
     </aside>
   );

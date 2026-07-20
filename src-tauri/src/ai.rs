@@ -214,13 +214,25 @@ fn ensure_module_prefix(draft: &mut DraftEntry) {
     );
 }
 
+/// Cancel flag for the in-flight generation — one generation runs at a time.
+#[derive(Default)]
+pub struct AiCancel(pub std::sync::atomic::AtomicBool);
+
+#[tauri::command]
+pub fn ai_generate_cancel(cancel: tauri::State<'_, AiCancel>) {
+    cancel.0.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 #[tauri::command]
 pub async fn ai_generate(
+    cancel: tauri::State<'_, AiCancel>,
     files: Vec<String>,
     endpoint: String,
     api_key: String,
     model: String,
 ) -> Result<Vec<DraftEntry>, String> {
+    use std::sync::atomic::Ordering;
+    cancel.0.store(false, Ordering::Relaxed);
     let batches = source_batches(&files, MAX_BATCH_BYTES);
     if batches.is_empty() {
         return Err("no readable source files".into());
@@ -239,17 +251,43 @@ pub async fn ai_generate(
             ],
             "temperature": 0,
         });
-        let resp = client
-            .post(format!(
-                "{}/chat/completions",
-                endpoint.trim_end_matches('/')
-            ))
-            .header("Authorization", format!("Bearer {api_key}"))
-            .header("content-type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| format!("AI batch {} failed: {e}", index + 1))?;
+        // A transient network error or 5xx/429 on batch N must not throw away
+        // batches 1..N-1 — retry the batch a few times before giving up.
+        // ponytail: cancel is checked between attempts/batches only, so an
+        // in-flight request can take up to its 120s timeout to actually stop.
+        let mut resp = None;
+        let mut last_err = String::new();
+        for attempt in 0..3u64 {
+            if cancel.0.load(Ordering::Relaxed) {
+                return Err("generation cancelled".into());
+            }
+            if attempt > 0 {
+                tokio::time::sleep(std::time::Duration::from_secs(2 * attempt)).await;
+            }
+            match client
+                .post(format!(
+                    "{}/chat/completions",
+                    endpoint.trim_end_matches('/')
+                ))
+                .header("Authorization", format!("Bearer {api_key}"))
+                .header("content-type", "application/json")
+                .json(&body)
+                .send()
+                .await
+            {
+                Ok(r) if r.status().is_server_error() || r.status().as_u16() == 429 => {
+                    last_err = format!("AI batch {} endpoint {}", index + 1, r.status());
+                }
+                Ok(r) => {
+                    resp = Some(r);
+                    break;
+                }
+                Err(e) => last_err = format!("AI batch {} failed: {e}", index + 1),
+            }
+        }
+        let Some(resp) = resp else {
+            return Err(last_err);
+        };
         let status = resp.status();
         let text = resp
             .text()

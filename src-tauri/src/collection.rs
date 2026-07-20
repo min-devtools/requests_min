@@ -47,7 +47,13 @@ pub struct Request {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CollectionMeta { pub id: String, pub name: String, #[serde(default)] pub order: Vec<String> }
+pub struct CollectionMeta {
+    pub id: String,
+    pub name: String,
+    #[serde(default)] pub order: Vec<String>,
+    /// user-assigned identity color, drawn as the dot on every tab bound to this collection
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub color: Option<String>,
+}
 
 pub fn root_dir() -> PathBuf {
     std::env::var("REQUESTS_MIN_HOME").map(PathBuf::from)
@@ -128,7 +134,7 @@ fn safe_join(base: &Path, rel: &str) -> Result<PathBuf, String> {
 
 pub fn create_collection(root: &Path, name: &str) -> Result<CollectionMeta, String> {
     let id = uuid::Uuid::new_v4().to_string();
-    let meta = CollectionMeta { id: id.clone(), name: name.to_string(), order: vec![] };
+    let meta = CollectionMeta { id: id.clone(), name: name.to_string(), order: vec![], color: None };
     let dir = col_path(root, &id);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     write_sorted_json(&dir.join("collection.json"), &serde_json::to_value(&meta).map_err(|e| e.to_string())?)?;
@@ -165,6 +171,14 @@ pub fn rename_collection(root: &Path, id: &str, name: &str) -> Result<(), String
     let text = std::fs::read_to_string(&mf).map_err(|e| e.to_string())?;
     let mut meta: CollectionMeta = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     meta.name = name.to_string();
+    write_sorted_json(&mf, &serde_json::to_value(&meta).map_err(|e| e.to_string())?)
+}
+
+pub fn set_collection_color(root: &Path, id: &str, color: Option<String>) -> Result<(), String> {
+    let mf = col_path(root, id).join("collection.json");
+    let text = std::fs::read_to_string(&mf).map_err(|e| e.to_string())?;
+    let mut meta: CollectionMeta = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    meta.color = color;
     write_sorted_json(&mf, &serde_json::to_value(&meta).map_err(|e| e.to_string())?)
 }
 
@@ -282,6 +296,8 @@ pub fn col_list() -> Result<Vec<CollectionMeta>, String> { list_collections(&roo
 pub fn col_create(name: String) -> Result<CollectionMeta, String> { create_collection(&root_dir(), &name) }
 #[tauri::command]
 pub fn col_rename(id: String, name: String) -> Result<(), String> { rename_collection(&root_dir(), &id, &name) }
+#[tauri::command]
+pub fn col_set_color(id: String, color: Option<String>) -> Result<(), String> { set_collection_color(&root_dir(), &id, color) }
 #[tauri::command]
 pub fn col_delete(id: String) -> Result<(), String> { delete_collection(&root_dir(), &id) }
 #[tauri::command]

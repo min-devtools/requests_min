@@ -3,12 +3,14 @@ import { useShallow } from "zustand/react/shallow";
 import { Icon } from "../ui/Icon";
 import { RequestContextMenu } from "./RequestContextMenu";
 import { useApp } from "../store";
+import { connStyle } from "../lib/connColor";
 
 export function TabsBar() {
   const {
     tabs, activeTabId, activateTab, confirmCloseTab, requestTabs, newRequestTab, renameTab, reorderTab,
-    openDialog, openConfirm, showToast, renameRequest, duplicateRequest, deleteRequest,
+    collections, openDialog, openConfirm, showToast, renameRequest, duplicateRequest, deleteRequest,
   } = useApp(useShallow((s) => ({
+    collections: s.collections,
     tabs: s.tabs, activeTabId: s.activeTabId, activateTab: s.activateTab, confirmCloseTab: s.confirmCloseTab,
     requestTabs: s.requestTabs, newRequestTab: s.newRequestTab, renameTab: s.renameTab, reorderTab: s.reorderTab,
     openDialog: s.openDialog, openConfirm: s.openConfirm, showToast: s.showToast,
@@ -32,12 +34,14 @@ export function TabsBar() {
           ? rt.request.http?.method ?? "HTTP"
           : rt?.request.protocol === "grpc" ? "RPC"
           : rt ? "WS" : null;
+        const collection = rt?.collectionId ? collections.find((c) => c.id === rt.collectionId) : null;
         return (
           <button
             key={tab.id}
             type="button"
             draggable={!editingId}
             className={`tab ${tab.id === activeTabId ? "active" : ""} ${dragId === tab.id ? "dragging" : ""} ${overId === tab.id ? "drag-over" : ""}`}
+            style={connStyle(collection?.color)}
             onClick={() => activateTab(tab.id)}
             onContextMenu={(event) => { if (!rt?.collectionId || !rt.relPath) return; event.preventDefault(); setRequestMenu({ tabId: tab.id, x: event.clientX, y: event.clientY }); }}
             onAuxClick={(e) => { if (e.button === 1) void confirmCloseTab(tab.id); }}
@@ -46,10 +50,13 @@ export function TabsBar() {
             onDragEnd={() => { setDragId(null); setOverId(null); }}
             onDragOver={(e) => { if (dragId && dragId !== tab.id) { e.preventDefault(); setOverId(tab.id); } }}
             onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData("application/x-requestsmin-tab") || dragId; if (id && id !== tab.id) reorderTab(id, tab.id); setDragId(null); setOverId(null); }}
+            title={collection ? `${tab.title} · ${collection.name}` : undefined}
           >
             {dirty && <span className="tab-dirty-dot" title="Unsaved changes" />}
+            {collection && <span className="conn-dot" />}
             {rt ? <span className={`tab-method method-tag ${method}`}>{method}</span> : <Icon name={tab.icon} className={dirty ? "soft-orange" : undefined} />}
             {editingId === tab.id ? <input ref={inputRef} className="tab-title-input" value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") commit(); if (e.key === "Escape") setEditingId(null); }} /> : <span className="tab-title">{tab.title}</span>}
+            {collection && !editingId && <span className="tab-conn">{collection.name}</span>}
             <span className="tab-close" title={`Close ${tab.title}`} aria-label={`Close ${tab.title}`} onClick={(e) => { e.stopPropagation(); void confirmCloseTab(tab.id); }}>
               <Icon name="x" size={13} />
             </span>
