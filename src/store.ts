@@ -37,6 +37,7 @@ export interface HistoryEntry {
   timestamp: number;
   collectionId: string | null;
   request: Request;
+  response: HttpResponse | GrpcResponse | null;
   status: string;
   timeMs: number | null;
   error: string | null;
@@ -145,6 +146,15 @@ const sanitizeForStorage = (r: Request): Request => {
     if (c.http.body.content && c.http.body.content.length > MAX_STORED_BODY) c.http.body.content = c.http.body.content.slice(0, MAX_STORED_BODY);
   }
   if (c.grpc && c.grpc.message.length > MAX_STORED_BODY) c.grpc.message = c.grpc.message.slice(0, MAX_STORED_BODY);
+  return c;
+};
+
+// ponytail: keep stored responses small so history doesn't blow localStorage quotas
+const sanitizeHistoryResponse = (response: HttpResponse | GrpcResponse | null): HttpResponse | GrpcResponse | null => {
+  if (!response) return null;
+  const c = structuredClone(response);
+  if ("body" in c && c.body && c.body.length > MAX_STORED_BODY) c.body = c.body.slice(0, MAX_STORED_BODY) + "\n\n…truncated for history storage";
+  if ("bodyJson" in c && c.bodyJson && c.bodyJson.length > MAX_STORED_BODY) c.bodyJson = c.bodyJson.slice(0, MAX_STORED_BODY) + "\n\n…truncated for history storage";
   return c;
 };
 
@@ -473,7 +483,11 @@ export const useApp = create<AppState>((set, get) => ({
     const history = [{ ...entry, id: nextId("history"), timestamp: Date.now() }, ...s.history].slice(0, 100);
     // persist with literal secrets stripped and huge bodies truncated; in-memory copy stays full
     try {
-      localStorage.setItem("requestsmin:history", JSON.stringify(history.map((h) => ({ ...h, request: sanitizeForStorage(h.request) }))));
+      localStorage.setItem("requestsmin:history", JSON.stringify(history.map((h) => ({
+        ...h,
+        request: sanitizeForStorage(h.request),
+        response: sanitizeHistoryResponse(h.response),
+      }))));
     } catch { /* quota exceeded — keep in-memory history, drop persistence */ }
     return { history };
   }),

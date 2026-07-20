@@ -82,7 +82,12 @@ export function JsonResponseViewer({ value }: { value: string }) {
       </div>)}
     </div>}
     <div className="json-response-editor">
-    <Editor language="json" theme={MONACO_THEME} value={display} onMount={(editor) => { editorRef.current = editor; }} options={{
+    <Editor language="json" theme={MONACO_THEME} value={display} onMount={(editor, monaco) => {
+      editorRef.current = editor;
+      editor.addCommand(monaco.KeyCode.Escape, () => {
+        editor.getDomNode()?.blur();
+      });
+    }} options={{ 
       readOnly: true,
       domReadOnly: true,
       automaticLayout: true,

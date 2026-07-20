@@ -14,7 +14,10 @@ export function HistoryView({ active }: { active: boolean }) {
     newRequestTab(entry.request.protocol, entry.collectionId);
     const state = useApp.getState();
     const tabId = state.activeTabId;
-    state.updateRequestTab(tabId, { request: structuredClone(entry.request) });
+    state.updateRequestTab(tabId, {
+      request: structuredClone(entry.request),
+      response: entry.response ? structuredClone(entry.response) : null,
+    });
   };
 
   const q = filter.trim().toLowerCase();

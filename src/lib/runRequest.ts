@@ -21,16 +21,16 @@ export async function runActiveRequest() {
       if (!rt.request.grpc) throw new Error("missing gRPC part");
       const response = await api.grpcUnary(env, rt.request.grpc);
       s.updateRequestTab(tab.id, { running: false, response });
-      s.addHistory({ collectionId: rt.collectionId, request: structuredClone(rt.request), status: response.statusCode, timeMs: response.timeMs, error: null });
+      s.addHistory({ collectionId: rt.collectionId, request: structuredClone(rt.request), response, status: response.statusCode, timeMs: response.timeMs, error: null });
     } else {
       const response = await api.httpRequest(env, rt.request);
       s.updateRequestTab(tab.id, { running: false, response });
-      s.addHistory({ collectionId: rt.collectionId, request: structuredClone(rt.request), status: String(response.status), timeMs: response.timeMs, error: null });
+      s.addHistory({ collectionId: rt.collectionId, request: structuredClone(rt.request), response, status: String(response.status), timeMs: response.timeMs, error: null });
     }
   } catch (err) {
     const error = String(err);
-    s.updateRequestTab(tab.id, { running: false, error });
-    s.addHistory({ collectionId: rt.collectionId, request: structuredClone(rt.request), status: "failed", timeMs: null, error });
+    s.updateRequestTab(tab.id, { running: false, response: null, error });
+    s.addHistory({ collectionId: rt.collectionId, request: structuredClone(rt.request), response: null, status: "failed", timeMs: null, error });
     s.showToast("Request failed", error, "err");
   }
 }

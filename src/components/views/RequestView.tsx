@@ -461,7 +461,6 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                 <span className={`response-status ${rt.response.status < 300 ? "ok" : rt.response.status < 500 ? "warn" : "err"}`}>{rt.response.status}</span>
               )}
               {rt.response && "statusCode" in rt.response && <span className="response-status ok">{rt.response.statusCode}</span>}
-              {rt.error && <span className="response-status err">{rt.error}</span>}
               <span className="response-meta">
                 {rt.response && <span className="metric-duration">{rt.response.timeMs}ms</span>}
                 {rt.response && "sizeBytes" in rt.response && <span className="metric-size">{fmtBytes(rt.response.sizeBytes)}</span>}
