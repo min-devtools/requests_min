@@ -57,20 +57,23 @@ export function TabsBar() {
             onDragEnd={() => { setDragId(null); setOverId(null); }}
             onDragOver={(e) => { if (dragId && dragId !== tab.id) { e.preventDefault(); setOverId(tab.id); } }}
             onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData("application/x-requestsmin-tab") || dragId; if (id && id !== tab.id) reorderTab(id, tab.id); setDragId(null); setOverId(null); }}
-            title={collection ? `${tab.title} Â· ${collection.name}` : undefined}
+            title={collection && collection.name !== tab.title ? `${tab.title} · ${collection.name}` : undefined}
           >
             {dirty && <span className="tab-dirty-dot" title="Unsaved changes" />}
             {collection && <span className="conn-dot" />}
             {rt ? <span className={`tab-method method-tag ${method}`}>{method}</span> : <Icon name={tab.icon} className={dirty ? "soft-orange" : undefined} />}
             {editingId === tab.id ? <input ref={inputRef} className="tab-title-input" value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") commit(); if (e.key === "Escape") setEditingId(null); }} /> : <span className="tab-title">{tab.title}</span>}
-            {collection && !editingId && <span className="tab-conn">{collection.name}</span>}
+            {collection && !editingId && collection.name !== tab.title && (
+            // a tab already titled after its owner would just repeat the name
+            <span className="tab-conn">{collection.name}</span>
+          )}
             <span className="tab-close" title={`Close ${tab.title}`} aria-label={`Close ${tab.title}`} onClick={(e) => { e.stopPropagation(); void confirmCloseTab(tab.id); }}>
               <Icon name="x" size={13} />
             </span>
           </button>
         );
       })}
-      <button type="button" className="tab-add" title="New request (âN)" onClick={() => newRequestTab()}><Icon name="plus" /><span>Request</span></button>
+      <button type="button" className="tab-add" title="New request (⌘N)" onClick={() => newRequestTab()}><Icon name="plus" /><span>Request</span></button>
       {requestMenu && (() => {
         const request = requestTabs[requestMenu.tabId];
         if (!request?.collectionId || !request.relPath) return null;
