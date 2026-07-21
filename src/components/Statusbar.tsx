@@ -4,6 +4,7 @@ import { useApp } from "../store";
 import { api, type GhStatus } from "../lib/api";
 import { syncNow } from "../lib/ghSync";
 import { Icon } from "../ui/Icon";
+import { UpdateBadge } from "../lib/updateCheck";
 
 export function Statusbar() {
   // derived primitives — re-render on target/status changes, not on every store write
@@ -42,6 +43,7 @@ export function Statusbar() {
         )}
         <span>UTF-8</span>
         <span>v{__APP_VERSION__}</span>
+        <UpdateBadge repo="min-devtools/requests_min" />
         <a className="credit" href="https://www.linkedin.com/in/ngthminh-dev/" target="_blank" rel="noreferrer">by @ngthminhdev</a>
       </div>
     </footer>
