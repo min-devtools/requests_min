@@ -51,7 +51,7 @@ export function Sidebar() {
     return rt ? { collectionId: rt.collectionId, relPath: rt.relPath } : null;
   }));
 
-  useEffect(() => { void reloadCollections(); }, []);
+  useEffect(() => { void reloadCollections(); void useApp.getState().reloadProtoSources(); }, []);
 
   // Left dock collapse folds every collection; reopening unfolds them all. Skip initial mount to keep persisted state.
   const didMount = useRef(false);
@@ -216,7 +216,8 @@ export function Sidebar() {
               onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) { setDragOverCollection(null); setDropIndicator(null); } }}
               onDrop={(event) => onDropOnCollection(event, c.id)}
             >
-              <button type="button" className={`nav-item collection-node with-conn-dot ${c.id === activeCollectionId ? "active" : ""} ${dropIndicator === `collection:${c.id}` ? "drop-prefix" : ""}`} draggable onDragStart={(event) => { const item = { kind: "collection", id: c.id } as const; setDragging(item); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/json", JSON.stringify(item)); }} onDragEnd={() => { setDragging(null); setDropIndicator(null); setDragOverCollection(null); }} onClick={() => toggleCollection(c.id)} onContextMenu={(event) => { event.preventDefault(); setCollectionMenu({ id: c.id, x: event.clientX, y: event.clientY }); }} aria-expanded={!collapsed}>
+              {/* div, not <button>: WebKit refuses to start HTML5 drags from form controls */}
+              <div role="button" tabIndex={0} className={`nav-item collection-node with-conn-dot ${c.id === activeCollectionId ? "active" : ""} ${dropIndicator === `collection:${c.id}` ? "drop-prefix" : ""}`} draggable onDragStart={(event) => { const item = { kind: "collection", id: c.id } as const; setDragging(item); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/json", JSON.stringify(item)); }} onDragEnd={() => { setDragging(null); setDropIndicator(null); setDragOverCollection(null); }} onClick={() => toggleCollection(c.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggleCollection(c.id); } }} onContextMenu={(event) => { event.preventDefault(); setCollectionMenu({ id: c.id, x: event.clientX, y: event.clientY }); }} aria-expanded={!collapsed}>
                 <Icon name="chevron-down" className="collection-chevron" size={13} />
                 <span
                   className="conn-dot"
@@ -225,12 +226,13 @@ export function Sidebar() {
                 />
                 <span>{c.name}</span>
                 <Badge>{(requestsByCollection[c.id] ?? []).length || ""}</Badge>
-              </button>
+              </div>
               <div className="collection-requests">
                 {requests.length === 0 && <div className="empty-note collection-empty">No requests. Use ⌘N to add one.</div>}
                 {requests.map((r) => (
-                  <button
-                    type="button"
+                  <div
+                    role="button"
+                    tabIndex={0}
                     key={r.relPath}
                     className={`nav-item request-node ${activeRequest?.collectionId === c.id && activeRequest.relPath === r.relPath ? "active" : ""} ${selected?.collectionId === c.id && selected.request.relPath === r.relPath ? "selected" : ""} ${dropIndicator === `request:${c.id}:${r.relPath}` ? "drop-prefix" : ""}`}
                     title={r.relPath}
@@ -240,12 +242,13 @@ export function Sidebar() {
                     onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); if (dragging?.kind === "request" && dragging.collectionId === c.id) setDropIndicator(`request:${c.id}:${r.relPath}`); }}
                     onDrop={(event) => { event.preventDefault(); event.stopPropagation(); setDropIndicator(null); try { const from = JSON.parse(event.dataTransfer.getData("application/json")) as DragItem; if (from.kind === "request" && from.collectionId === c.id) { if (event.clientY < event.currentTarget.getBoundingClientRect().top + event.currentTarget.offsetHeight / 2) void reorderRequests(c.id, from.relPath, r.relPath); else void reorderRequests(c.id, from.relPath, requests[requests.findIndex((request) => request.relPath === r.relPath) + 1]?.relPath ?? null); } else onDropOnCollection(event, c.id); } catch { /* ignore malformed drop */ } }}
                      onClick={() => { setActiveCollection(c.id); void openRequestTab(c.id, r.relPath); }}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setActiveCollection(c.id); void openRequestTab(c.id, r.relPath); } }}
                     onContextMenu={(event) => openRequestMenu(event, c.id, r)}
                   >
                     <span className={`method-tag ${r.method}`}>{r.method}</span>
                     <span>{r.name}</span>
                     <span />
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>;

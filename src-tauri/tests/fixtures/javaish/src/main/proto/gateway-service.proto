@@ -1,0 +1,8 @@
+syntax = "proto3";
+package javaish;
+
+import "promotion-service.proto";
+
+service Gateway {
+  rpc GetPromo(Promo) returns (Promo);
+}

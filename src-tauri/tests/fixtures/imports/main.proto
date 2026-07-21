@@ -1,0 +1,5 @@
+syntax = "proto3";
+package demo;
+import "base.proto";
+message Wrap { base.Base b = 1; }
+service Wrapper { rpc Do(Wrap) returns (Wrap); }

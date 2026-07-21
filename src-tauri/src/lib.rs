@@ -4,6 +4,7 @@ mod github;
 mod grpc;
 mod http;
 mod import;
+mod proto_source;
 mod secrets;
 mod ws;
 
@@ -41,6 +42,7 @@ pub fn run() {
             http::http_request, http::cookies_for, http::cookies_clear,
             ws::ws_connect, ws::ws_send, ws::ws_close,
             grpc::grpc_describe, grpc::grpc_unary,
+            proto_source::proto_source_list, proto_source::proto_source_save, proto_source::proto_source_delete,
             import::import_curl, import::import_postman, import::import_openapi,
             import::export_postman, import::export_curl, import::col_save_draft,
             ai::ai_scan, ai::ai_generate, ai::ai_generate_cancel,

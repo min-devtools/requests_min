@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { api, emptyRequest, type CollectionMeta, type GrpcResponse, type HttpResponse, type Request } from "./lib/api";
+import { api, emptyRequest, type CollectionMeta, type GrpcResponse, type HttpResponse, type ProtoSource, type Request } from "./lib/api";
 import type { IconName } from "./ui/Icon";
 import { changeFontSize, clampFontSize, DEFAULT_FONT_SIZE } from "./lib/fontScale";
 import { isThemeId } from "./lib/themes";
@@ -95,6 +95,8 @@ interface AppState {
 
   collections: CollectionMeta[];
   reloadCollections: () => Promise<void>;
+  protoSources: ProtoSource[];
+  reloadProtoSources: () => Promise<void>;
   activeCollectionId: string | null;
   setActiveCollection: (id: string | null) => void;
   activeEnv: string | null;
@@ -302,6 +304,8 @@ export const useApp = create<AppState>((set, get) => ({
     // the collection set changed — any pending single-collection dirty mark no longer covers it
     set({ collections, reqListDirty: null });
   },
+  protoSources: [],
+  reloadProtoSources: async () => set({ protoSources: await api.protoSourceList() }),
   activeCollectionId: null,
   setActiveCollection: (id) => set({ activeCollectionId: id }),
   activeEnv: localStorage.getItem("requestsmin:active-env"),
@@ -382,7 +386,15 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
 
-  activateTab: (id) => { activationSequence++; set({ activeTabId: id }); },
+  activateTab: (id) => {
+    activationSequence++;
+    // follow the tab's collection so the sidebar highlight tracks ⌘-number / tab clicks,
+    // matching what clicking a request in the sidebar already does
+    set((s) => {
+      const colId = s.requestTabs[id]?.collectionId;
+      return colId ? { activeTabId: id, activeCollectionId: colId } : { activeTabId: id };
+    });
+  },
   confirmCloseTab: async (id) => {
     const rt = get().requestTabs[id];
     if (rt?.dirty && !(await get().openConfirm({

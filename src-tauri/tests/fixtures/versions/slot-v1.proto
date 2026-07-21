@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+message Spin { string code = 1; }
+
+service SlotV1 {
+  rpc Play(Spin) returns (Spin);
+}

@@ -1,0 +1,6 @@
+syntax = "proto3";
+package tree.entry;
+
+import "app/v1/common.proto";
+
+message Wrap { tree.v1.Base base = 1; }

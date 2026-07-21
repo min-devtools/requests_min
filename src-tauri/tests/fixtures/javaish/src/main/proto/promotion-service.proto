@@ -1,0 +1,4 @@
+syntax = "proto3";
+package javaish;
+
+message Promo { string code = 1; }

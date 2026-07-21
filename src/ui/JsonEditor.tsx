@@ -8,7 +8,7 @@ import { useApp } from "../store";
 
 type MonacoEditor = Parameters<OnMount>[0];
 
-export function JsonEditor({ value, onChange, language = "json", variableNames = [] }: { value: string; onChange: (value: string) => void; language?: "json" | "plaintext"; variableNames?: string[] }) {
+export function JsonEditor({ value, onChange, language = "json", variableNames = [], onFillSample }: { value: string; onChange: (value: string) => void; language?: "json" | "plaintext"; variableNames?: string[]; onFillSample?: () => void }) {
   const uiFontSize = useApp((state) => state.uiFontSize);
   const editorFont = useApp((state) => state.editorFont);
   const showToast = useApp((state) => state.showToast);
@@ -96,6 +96,7 @@ export function JsonEditor({ value, onChange, language = "json", variableNames =
           <span className={validation === "invalid" ? "invalid" : validation === "valid" ? "valid" : ""}>JSON {validation ?? ""}</span>
           <span />
           <button type="button" className={vimMode ? "active" : ""} onClick={toggleVimMode} title="Vim mode" aria-label="Vim mode" aria-pressed={vimMode}>vim</button>
+          {onFillSample && <button type="button" onClick={onFillSample} title="Fill sample from method" aria-label="Fill sample"><Icon name="zap" size={14} /></button>}
           <button type="button" onClick={format} title="Format" aria-label="Format"><Icon name="wand" size={14} /></button>
           <button type="button" onClick={minify} title="Minify" aria-label="Minify"><Icon name="minify" size={14} /></button>
           <button type="button" onClick={validate} title="Validate" aria-label="Validate"><Icon name="check" size={14} /></button>

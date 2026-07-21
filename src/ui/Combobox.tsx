@@ -1,4 +1,5 @@
 import { useId, useState, type KeyboardEvent } from "react";
+import { fuzzyMatch } from "../lib/fuzzy";
 
 type Props = {
   value: string;
@@ -13,7 +14,12 @@ export function Combobox({ value, options, placeholder, onChange, disabled = fal
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(-1);
-  const filtered = options.filter((option) => option.toLowerCase().includes(query.toLowerCase()));
+  // fuzzy (subsequence) match + rank; empty query scores 0 for all → original order kept
+  const filtered = options
+    .map((option) => ({ option, score: fuzzyMatch(query, option)?.score }))
+    .filter((x): x is { option: string; score: number } => x.score !== undefined)
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.option);
 
   const choose = (option: string) => {
     onChange(option);

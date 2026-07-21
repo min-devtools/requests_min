@@ -8,6 +8,7 @@ import {
   Copy,
   Code2,
   Database,
+  Download,
   FileCode2,
   Eye,
   FolderOpen,
@@ -39,6 +40,7 @@ import {
   Trash2,
   Wand2,
   X,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -50,6 +52,7 @@ const ICONS = {
   copy: Copy,
   code: Code2,
   database: Database,
+  download: Download,
   eye: Eye,
   folder: FolderOpen,
   github: GitBranch,
@@ -82,6 +85,7 @@ const ICONS = {
   wand: Wand2,
   ws: Radio,
   x: X,
+  zap: Zap,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;
