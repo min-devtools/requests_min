@@ -45,7 +45,7 @@ pub fn run() {
             grpc::grpc_describe, grpc::grpc_unary,
             proto_source::proto_source_list, proto_source::proto_source_save, proto_source::proto_source_delete,
             import::import_curl, import::import_postman, import::import_openapi,
-            import::export_postman, import::export_curl, import::col_save_draft,
+            import::export_postman, import::export_curl, import::col_save_draft, import::col_merge_draft,
             ai::ai_scan, ai::ai_generate, ai::ai_generate_cancel,
             flows::flow_list, flows::flow_read, flows::flow_write, flows::flow_delete, flows::flow_export,
             github::gh_set_token, github::gh_status, github::gh_configure, github::gh_push, github::gh_pull

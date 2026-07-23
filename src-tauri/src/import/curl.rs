@@ -95,7 +95,7 @@ pub fn parse(text: &str) -> Result<Request, String> {
     Ok(Request {
         name: url_name(&url),
         protocol: "http".into(),
-        http: Some(HttpPart { method, url, headers, params: vec![], auth, body, insecure: false }),
+        http: Some(HttpPart { method, url, headers, path_params: vec![], params: vec![], auth, body, insecure: false }),
         grpc: None, ws: None,
     })
 }

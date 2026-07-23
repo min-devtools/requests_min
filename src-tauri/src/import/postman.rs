@@ -53,7 +53,7 @@ fn build_request(name: &str, reqv: &Value) -> Request {
     super::hoist_auth_header(&mut headers, &mut auth);
     Request {
         name: name.to_string(), protocol: "http".into(),
-        http: Some(HttpPart { method, url, headers, params: vec![], auth, body, insecure: false }),
+        http: Some(HttpPart { method, url, headers, path_params: vec![], params: vec![], auth, body, insecure: false }),
         grpc: None, ws: None,
     }
 }

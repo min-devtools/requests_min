@@ -81,6 +81,26 @@ pub fn col_save_draft(draft: CollectionDraft) -> Result<CollectionMeta, String> 
     Ok(meta)
 }
 
+/// Add a draft to an existing collection without overwriting a request that shares its path.
+#[tauri::command]
+pub fn col_merge_draft(collection_id: String, draft: CollectionDraft) -> Result<(), String> {
+    let root = root_dir();
+    let mut existing: std::collections::HashSet<String> = crate::collection::list_requests(&root, &collection_id)?
+        .into_iter().map(|entry| entry.rel_path).collect();
+    for entry in &draft.requests {
+        let (stem, ext) = entry.rel_path.rsplit_once('.').unwrap_or((entry.rel_path.as_str(), "json"));
+        let mut rel_path = entry.rel_path.clone();
+        let mut n = 2;
+        while existing.contains(&rel_path) {
+            rel_path = format!("{stem}-{n}.{ext}");
+            n += 1;
+        }
+        write_request(&root, &collection_id, &rel_path, &entry.request)?;
+        existing.insert(rel_path);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

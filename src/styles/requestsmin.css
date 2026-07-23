@@ -311,9 +311,12 @@ body.resizing-x { user-select: none; cursor: col-resize; }
 .import-editor { min-height: 10rem; height: 10rem; width: 100%; resize: vertical; padding: 1.0769rem; border: 0; outline: 0; color: var(--editor-fg); background: var(--editor-bg); font: 0.9231rem/1.65 var(--font-mono); }
 .import-file { min-height: 10rem; display: grid; place-items: center; align-content: center; gap: 8px; padding: 24px; color: var(--text-3); background: var(--editor-bg); text-align: center; cursor: default; }
 .import-file:hover { color: var(--text-2); background: color-mix(in oklab, var(--editor-bg), var(--blue) 4%); }
+.import-file.selected { color: color-mix(in oklab, var(--green), var(--text-3) 50%); background: color-mix(in oklab, var(--green), var(--editor-bg) 4%); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--green), transparent 58%); }
+.import-file.selected strong { color: var(--text); }
 .import-file input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .import-file strong { color: var(--text); font-size: 1rem; }
 .import-file span { font-size: .8462rem; }
+.import-destination { margin-right: auto; color: var(--text-3); font-size: .8462rem; }
 .card-actions { min-height: 48px; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 9px 12px; border-top: 1px solid var(--line); }
 .card-actions .method-select { margin-right: auto; width: 190px; }
 .card-copy { display: grid; place-items: center; align-content: center; gap: 9px; padding: 30px; text-align: center; color: var(--text-3); }
@@ -694,3 +697,4 @@ body.flow-active:not(.right-collapsed):not(.inspector-unavailable) .resize-handl
   border-radius: 9px;
   background: var(--editor-bg);
 }
+.flow-result-response .json-tree-view { font-size: 0.9231rem; }

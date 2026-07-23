@@ -41,7 +41,7 @@ pub fn import(text: &str) -> Result<CollectionDraft, String> {
                     .unwrap_or_else(|| format!("{m} {path}"));
                 let request = Request {
                     name, protocol: "http".into(),
-                    http: Some(HttpPart { method: m.clone(), url, headers: vec![], params: vec![],
+                    http: Some(HttpPart { method: m.clone(), url, headers: vec![], path_params: vec![], params: vec![],
                         auth: json!({ "type": "none" }), body, insecure: false }),
                     grpc: None, ws: None,
                 };

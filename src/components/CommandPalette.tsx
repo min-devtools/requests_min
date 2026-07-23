@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useApp } from "../store";
-import { api, type FlowMeta } from "../lib/api";
 import { Icon, type IconName } from "../ui/Icon";
 import { fuzzyMatch, highlight } from "../lib/fuzzy";
+import { THEMES } from "../lib/themes";
+import { ToolButton } from "../ui/ToolButton";
 
 interface Command { icon: IconName; label: string; kbd?: string; action: () => void }
 
@@ -31,12 +32,12 @@ export function CommandPalette() {
   const [input, setInput] = useState("");
   const [cursor, setCursor] = useState(0);
   const [recents, setRecents] = useState<string[]>([]);
-  const [flows, setFlows] = useState<FlowMeta[]>([]);
+  const [themePicker, setThemePicker] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { commandOpen, setCommandOpen, collections, newRequestTab, openTab, openFlowTab, toggleLeft, toggleRight, setActiveCollection, showToast, vimMode } = useApp(useShallow((s) => ({
-    commandOpen: s.commandOpen, setCommandOpen: s.setCommandOpen, collections: s.collections,
-    newRequestTab: s.newRequestTab, openTab: s.openTab, openFlowTab: s.openFlowTab, toggleLeft: s.toggleLeft, toggleRight: s.toggleRight,
-    setActiveCollection: s.setActiveCollection, showToast: s.showToast, vimMode: s.vimMode,
+  const { commandOpen, setCommandOpen, newRequestTab, openTab, toggleLeft, toggleRight, vimMode, theme, setTheme } = useApp(useShallow((s) => ({
+    commandOpen: s.commandOpen, setCommandOpen: s.setCommandOpen,
+    newRequestTab: s.newRequestTab, openTab: s.openTab, toggleLeft: s.toggleLeft, toggleRight: s.toggleRight,
+    vimMode: s.vimMode, theme: s.theme, setTheme: s.setTheme,
   })));
 
   useEffect(() => {
@@ -44,7 +45,6 @@ export function CommandPalette() {
       setInput("");
       setCursor(0);
       setRecents(readRecents());
-      api.flowList().then(setFlows).catch(() => setFlows([]));
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [commandOpen]);
@@ -60,17 +60,12 @@ export function CommandPalette() {
       { icon: "github", label: "Open GitHub Sync", action: () => openTab("github-sync") },
       { icon: "wand", label: "Generate from folder", kbd: "⌘I", action: () => openTab("import-export") },
       { icon: "settings", label: "Open Settings", kbd: "⌘,", action: () => openTab("settings") },
+      { icon: "settings", label: "Theme picker", action: () => setThemePicker(true) },
       { icon: "panel-left", label: "Toggle sidebar", kbd: "⌘B", action: () => toggleLeft() },
       { icon: "panel-right", label: "Toggle inspector", kbd: "⌘R", action: () => toggleRight() },
     ];
-    for (const c of collections) {
-      base.push({ icon: "database", label: `Switch collection: ${c.name}`, action: () => setActiveCollection(c.id) });
-    }
-    for (const f of flows) {
-      base.push({ icon: "flow", label: `Open flow: ${f.name}`, action: () => void openFlowTab(f.id).catch((error) => showToast("Open failed", String(error), "err")) });
-    }
     return base;
-  }, [collections, flows, newRequestTab, openTab, openFlowTab, toggleLeft, toggleRight, setActiveCollection, showToast]);
+  }, [newRequestTab, openTab, toggleLeft, toggleRight]);
 
 const filtered = useMemo<Array<Command & { labelIdx: number[]; recent: boolean }>>(() => {
     const q = input.trim();
@@ -98,7 +93,7 @@ const filtered = useMemo<Array<Command & { labelIdx: number[]; recent: boolean }
     return out.slice(0, 12);
   }, [commands, input, recents]);
 
-  if (!commandOpen) return null;
+  if (!commandOpen && !themePicker) return null;
 
   const runCommand = (cmd: Command) => {
     setCommandOpen(false);
@@ -107,7 +102,8 @@ const filtered = useMemo<Array<Command & { labelIdx: number[]; recent: boolean }
   };
 
   return (
-    <div className="command" onMouseDown={(e) => { if (e.target === e.currentTarget) setCommandOpen(false); }}>
+    <>
+    {commandOpen && <div className="command" onMouseDown={(e) => { if (e.target === e.currentTarget) setCommandOpen(false); }}>
       <div className="palette">
         <input
           ref={inputRef}
@@ -137,6 +133,18 @@ const filtered = useMemo<Array<Command & { labelIdx: number[]; recent: boolean }
           {filtered.length === 0 && <div className="empty-note">No matching commands.</div>}
         </div>
       </div>
-    </div>
+    </div>}
+    {themePicker && <div className="modal" onMouseDown={(e) => { if (e.target === e.currentTarget) setThemePicker(false); }}>
+      <div className="prompt-dialog" role="dialog" aria-modal="true" aria-label="Theme picker">
+        <strong>Theme picker</strong>
+        <p className="prompt-dialog-msg">Changes apply immediately and are saved for this device.</p>
+        <select className="side-search" style={{ width: "100%" }} value={theme} autoFocus onChange={(event) => setTheme(event.target.value)}>
+          <optgroup label="Dark">{THEMES.filter((item) => item.base === "dark").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>
+          <optgroup label="Light">{THEMES.filter((item) => item.base === "light").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>
+        </select>
+        <div className="prompt-dialog-foot"><ToolButton variant="primary" onClick={() => setThemePicker(false)}>Done</ToolButton></div>
+      </div>
+    </div>}
+    </>
   );
 }

@@ -58,3 +58,9 @@ test("the flow panel layout keeps a zero-min-height canvas and embedded editor c
   assert.match(css, /\.flow-node-editor\s*\{[^}]*min-height:\s*0/s);
   assert.match(css, /\.flow-node-editor\s+\.request-screen\.embedded\s*\{[^}]*grid-template-rows:/s);
 });
+
+test("Step Result JSON uses the dock content font size", async () => {
+  const css = await read("styles/requestsmin.css");
+
+  assert.match(css, /\.flow-result-response \.json-tree-view\s*\{[^}]*font-size:\s*0\.9231rem/s);
+});
