@@ -14,8 +14,9 @@ import { startResize, toggleRequestEditorSize } from "../ResizeHandles";
 import { useApp } from "../../store";
 import {
   api, emptyGrpc, emptyHttp, emptyWs, onWsEvent,
-  type GrpcCatalog, type KV, type Request,
+  type GrpcCatalog, type KV, type ProtoSource, type Request,
 } from "../../lib/api";
+import { mergeIntoTemplate } from "../../lib/protoMerge";
 import { isGrpcurl, parseGrpcurl } from "../../lib/grpcurl";
 
 // URL <-> Params two-way sync (Postman-style). Params are canonical for send (backend
@@ -72,7 +73,7 @@ export function buildGrpcurl(request: Request): string {
   return parts.join(" ");
 }
 
-export function RequestView({ tabId, active }: { tabId: string; active: boolean }) {
+export function RequestView({ tabId, active, embedded = false }: { tabId: string; active: boolean; embedded?: boolean }) {
   const rt = useApp((s) => s.requestTabs[tabId]);
   const updateRequestTab = useApp((s) => s.updateRequestTab);
   const showToast = useApp((s) => s.showToast);
@@ -82,6 +83,9 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
   const [reqCookies, setReqCookies] = useState<KV[]>([]);
   const [catalog, setCatalog] = useState<GrpcCatalog | null>(null);
   const [describing, setDescribing] = useState(false);
+  const [descError, setDescError] = useState<string | null>(null); // persists in the panel; toasts vanish
+  const [protoMenu, setProtoMenu] = useState<{ x: number; y: number } | null>(null);
+  const [nameDraft, setNameDraft] = useState<string | null>(null); // source rename buffer, saved on blur
   const [wsLog, setWsLog] = useState<{ dir: "out" | "in" | "sys"; text: string; ts: number }[]>([]);
   const [wsConnected, setWsConnected] = useState(false);
   const [wsDraft, setWsDraft] = useState("");
@@ -90,6 +94,9 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
   const wsSid = useMemo(() => `ws-${tabId}`, [tabId]);
   const env = useApp((s) => s.activeEnv);
   const envVersion = useApp((s) => s.envVersion);
+  const protoSources = useApp((s) => s.protoSources);
+  const reloadProtoSources = useApp((s) => s.reloadProtoSources);
+  const openConfirm = useApp((s) => s.openConfirm);
   const requestHorizontal = useApp((s) => s.requestHorizontal);
   const toggleRequestLayout = useApp((s) => s.toggleRequestLayout);
 
@@ -99,6 +106,29 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
       .then(([vars, secrets]) => setVariableNames([...new Set([...Object.keys(vars), ...Object.keys(secrets)])]))
       .catch(() => setVariableNames([]));
   }, [env, envVersion]);
+
+  // Open a gRPC request → load its source's catalog straight from the backend cache (0 network
+  // unless the .proto files changed since last describe). Re-runs when the bound source or env changes.
+  useEffect(() => {
+    const sid = rt?.request.grpc?.sourceId;
+    if (!sid) return;
+    let live = true;
+    setDescribing(true);
+    api.grpcDescribe(env, sid, false, null, [], false)
+      .then((c) => { if (live) { setCatalog(c); setDescError(null); } })
+      .catch((e) => { if (live) { setDescError(String(e)); showToast("Describe failed", String(e), "err"); } })
+      .finally(() => { if (live) setDescribing(false); });
+    return () => { live = false; };
+  }, [tabId, rt?.request.grpc?.sourceId, env, envVersion]);
+
+  // close the proto "New source" menu on any outside click (same pattern as RequestContextMenu)
+  useEffect(() => {
+    if (!protoMenu) return;
+    const close = () => setProtoMenu(null);
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("blur", close);
+    return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("blur", close); };
+  }, [protoMenu]);
 
   // ponytail: 1000-entry cap keeps long ws sessions from growing the DOM/state unbounded
   const pushWs = (dir: "out" | "in" | "sys", text: string) =>
@@ -122,6 +152,10 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
   // keep the newest ws message in view
   useEffect(() => { wsLogRef.current?.scrollTo(0, wsLogRef.current.scrollHeight); }, [wsLog.length]);
 
+  // protocol can change from outside (the flow dock's Step-key protocol dropdown), so reset the
+  // editor tab to a tab that exists in the new protocol instead of leaving a stale (e.g. "proto") one
+  useEffect(() => { setEditorTab("body"); }, [rt?.request.protocol]);
+
   // cookies the jar will attach for this url (refresh on tab open / url change / after send)
   const reqUrl = rt?.request.http?.url ?? "";
   const lastResponse = rt?.response ?? null;
@@ -139,6 +173,12 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
   if (!rt) return null;
   const request = rt.request;
   const update = (patch: Partial<Request>) => updateRequestTab(tabId, { request: { ...request, ...patch } });
+  // merge into the FRESHEST grpc — importProtoFiles + describe patch grpc in the same tick,
+  // so building from the stale `request.grpc` snapshot would clobber the just-imported protoFiles.
+  const updateGrpc = (patch: Partial<NonNullable<Request["grpc"]>>) => {
+    const cur = useApp.getState().requestTabs[tabId]?.request;
+    if (cur?.grpc) updateRequestTab(tabId, { request: { ...cur, grpc: { ...cur.grpc, ...patch } } });
+  };
 
   const setProtocol = (protocol: Request["protocol"]) => {
     if (protocol === request.protocol) return;
@@ -161,16 +201,21 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
     return true;
   };
 
-  // Source is set by whichever Describe runs last — reflection (path bar) or files (Proto tab).
-  const describe = async (source: "reflection" | "files", selectedFiles?: string[]) => {
-    if (!request.grpc) return;
+  // Describe resolves the schema from the request's shared ProtoSource (cached on the backend;
+  // force=true re-describes). Falls back to the legacy inline endpoint/protoFiles for old requests.
+  const describe = async (force = false) => {
+    const g = request.grpc;
+    if (!g) return;
+    const useSource = !!g.sourceId;
+    if (!useSource && g.protoFiles.length === 0 && !g.endpoint.trim()) {
+      showToast("Describe failed", "Select a proto source, import .proto, or enter an endpoint.", "err");
+      return;
+    }
     setDescribing(true);
     try {
-      const files = source === "files" ? (selectedFiles ?? request.grpc.protoFiles) : [];
-      const endpoint = source === "reflection" ? request.grpc.endpoint : null;
-      const c = await api.grpcDescribe(env, endpoint, files, request.grpc.insecure);
+      const c = await api.grpcDescribe(env, g.sourceId ?? null, force,
+        useSource ? null : g.endpoint, useSource ? [] : g.protoFiles, g.insecure);
       setCatalog(c);
-      update({ grpc: { ...request.grpc, protoSource: source } }); // last describe wins
       showToast("Described", `${c.services.length} service(s) found.`);
     } catch (err) {
       showToast("Describe failed", String(err), "err");
@@ -179,20 +224,112 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
     }
   };
 
-  const importProtoFiles = async () => {
+  const pickProtoFiles = () => open({ multiple: true, filters: [{ name: "Protocol Buffers", extensions: ["proto"] }] })
+    .then((sel) => (sel ? (Array.isArray(sel) ? sel : [sel]) : []));
+
+  const pickProtoDir = () => open({ directory: true })
+    .then((sel) => (sel ? (Array.isArray(sel) ? sel : [sel]) : []));
+
+  const saveSource = async (src: ProtoSource) => { await api.protoSourceSave(src); await reloadProtoSources(); };
+
+  // Create a shared source from a folder (preferred: imports auto-resolve) or picked files.
+  const createFilesSource = async (folder: boolean) => {
     try {
-      const selected = await open({
-        multiple: true,
-        filters: [{ name: "Protocol Buffers", extensions: ["proto"] }],
-      });
-      if (!selected || !request.grpc) return;
-      const picked = Array.isArray(selected) ? selected : [selected];
-      const files = [...new Set([...request.grpc.protoFiles, ...picked])];
-      update({ grpc: { ...request.grpc, protoFiles: files } });
-      await describe("files", files);
+      const picked = folder ? await pickProtoDir() : await pickProtoFiles();
+      if (!picked.length) return;
+      const src: ProtoSource = {
+        id: crypto.randomUUID(),
+        name: picked[0].split("/").pop() ?? "proto",
+        kind: "files", files: picked, importPaths: [], endpoint: "", insecure: false,
+      };
+      await saveSource(src);
+      selectSource(src.id, true);
     } catch (err) {
       showToast("Import failed", String(err), "err");
     }
+  };
+
+  // Create a reflection source from the request's current endpoint.
+  const createReflectionSource = async () => {
+    const g = request.grpc;
+    if (!g) return;
+    const src: ProtoSource = {
+      id: crypto.randomUUID(),
+      name: (g.endpoint || "reflection").replace(/^https?:\/\//, ""),
+      kind: "reflection", files: [], importPaths: [], endpoint: g.endpoint, insecure: g.insecure,
+    };
+    await saveSource(src);
+    selectSource(src.id, true);
+  };
+
+  // Bind request → source. Reset service/method (they belong to the old schema); the effect re-describes.
+  const selectSource = (id: string, forceDescribe = false) => {
+    setCatalog(null);
+    setDescError(null);
+    updateGrpc({ sourceId: id, service: "", method: "" });
+    if (forceDescribe) void describeSource(id, true);
+  };
+
+  // Describe a specific source id (used right after create/select, before render state settles).
+  const describeSource = async (id: string, force: boolean) => {
+    setDescribing(true);
+    try {
+      const c = await api.grpcDescribe(env, id, force, null, [], false);
+      setCatalog(c);
+      setDescError(null);
+      showToast("Described", `${c.services.length} service(s) found.`);
+    } catch (err) {
+      setDescError(String(err));
+      showToast("Describe failed", String(err), "err");
+    } finally {
+      setDescribing(false);
+    }
+  };
+
+  const addFilesToSource = async (src: ProtoSource, folder: boolean) => {
+    try {
+      const picked = folder ? await pickProtoDir() : await pickProtoFiles();
+      if (!picked.length) return;
+      const files = [...new Set([...src.files, ...picked])];
+      await saveSource({ ...src, files });
+      await describeSource(src.id, true);
+    } catch (err) {
+      showToast("Import failed", String(err), "err");
+    }
+  };
+
+  // Extra include root (-I) for imports that don't live under a picked folder (monorepo protos).
+  const addImportPath = async (src: ProtoSource) => {
+    try {
+      const picked = await pickProtoDir();
+      if (!picked.length) return;
+      await saveSource({ ...src, importPaths: [...new Set([...src.importPaths, ...picked])] });
+      await describeSource(src.id, true);
+    } catch (err) {
+      showToast("Import failed", String(err), "err");
+    }
+  };
+
+  const deleteSource = async (src: ProtoSource) => {
+    if (!(await openConfirm({ title: "Delete Proto Source?", message: `"${src.name}" will be removed everywhere it's used.`, danger: true, confirmLabel: "Delete" }))) return;
+    await api.protoSourceDelete(src.id);
+    await reloadProtoSources();
+    if (request.grpc?.sourceId === src.id) { setCatalog(null); updateGrpc({ sourceId: undefined }); }
+  };
+
+  // Migrate a legacy request (inline protoFiles, no sourceId) into a shared source.
+  const convertLegacy = async () => {
+    const g = request.grpc;
+    if (!g?.protoFiles.length) return;
+    const src: ProtoSource = {
+      id: crypto.randomUUID(),
+      name: g.protoFiles[0].split("/").pop() ?? "proto",
+      kind: "files", files: g.protoFiles, importPaths: [], endpoint: "", insecure: false,
+    };
+    await saveSource(src);
+    setCatalog(null);
+    updateGrpc({ sourceId: src.id, protoFiles: [] });
+    void describeSource(src.id, true);
   };
 
   const wsConnect = async () => {
@@ -217,33 +354,38 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
 
   const grpc = request.grpc;
   const selectedService = catalog?.services.find((s) => s.name === grpc?.service);
-  const horizontal = requestHorizontal && request.protocol !== "ws";
+  const currentSource = protoSources.find((s) => s.id === grpc?.sourceId) ?? null;
+  const grpcMethodDef = selectedService?.methods.find((m) => m.name === grpc?.method) ?? null;
+  const horizontal = !embedded && requestHorizontal && request.protocol !== "ws";
 
   return (
-    <section className={`content request-screen protocol-${request.protocol} ${horizontal ? "layout-cols" : ""} ${active ? "active" : ""}`}>
-      <div className="protocol-rail">
-        <button type="button" className={`protocol-pill ${request.protocol === "http" ? "active" : ""}`} onClick={() => setProtocol("http")}>
-          <span className="status-dot" /> REST
-        </button>
-        <button type="button" className={`protocol-pill ${request.protocol === "grpc" ? "active" : ""}`} onClick={() => setProtocol("grpc")}>
-          <span className="status-dot orange" /> gRPC
-        </button>
-        <button type="button" className={`protocol-pill ${request.protocol === "ws" ? "active" : ""}`} onClick={() => setProtocol("ws")}>
-          <span className="status-dot purple" /> WebSocket
-        </button>
-        <span className="protocol-spacer" />
-        <input
-          className="path-input"
-          style={{ width: 220 }}
-          value={request.name}
-          onChange={(e) => update({ name: e.target.value })}
-        />
-        {request.protocol !== "ws" && (
-          <button type="button" className="tool-btn icon-only" title={requestHorizontal ? "Stack response below (rows)" : "Response beside editor (columns)"} aria-label="Toggle response layout" onClick={toggleRequestLayout}>
-            <Icon name={requestHorizontal ? "rows" : "panel-right"} />
+    <section className={`content request-screen protocol-${request.protocol} ${embedded ? "embedded" : ""} ${horizontal ? "layout-cols" : ""} ${active ? "active" : ""}`}>
+      {/* embedded (flow dock) drops the whole rail: protocol lives in the Step-key row, name == step key */}
+      {!embedded && (
+        <div className="protocol-rail">
+          <button type="button" className={`protocol-pill ${request.protocol === "http" ? "active" : ""}`} onClick={() => setProtocol("http")}>
+            <span className="status-dot" /> REST
           </button>
-        )}
-      </div>
+          <button type="button" className={`protocol-pill ${request.protocol === "grpc" ? "active" : ""}`} onClick={() => setProtocol("grpc")}>
+            <span className="status-dot orange" /> gRPC
+          </button>
+          <button type="button" className={`protocol-pill ${request.protocol === "ws" ? "active" : ""}`} onClick={() => setProtocol("ws")}>
+            <span className="status-dot purple" /> WebSocket
+          </button>
+          <span className="protocol-spacer" />
+          <input
+            className="path-input"
+            style={{ width: 220 }}
+            value={request.name}
+            onChange={(e) => update({ name: e.target.value })}
+          />
+          {request.protocol !== "ws" && (
+            <button type="button" className="tool-btn icon-only" title={requestHorizontal ? "Stack response below (rows)" : "Response beside editor (columns)"} aria-label="Toggle response layout" onClick={toggleRequestLayout}>
+              <Icon name={requestHorizontal ? "rows" : "panel-right"} />
+            </button>
+          )}
+        </div>
+      )}
 
       {request.protocol === "http" && request.http && (
         <>
@@ -281,7 +423,7 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
               }}
               onBlur={() => setUrlDraft(null)}
               placeholder="{{baseUrl}}/v1/resource" variableNames={variableNames} />
-            <ToolButton className="request-copy" onClick={() => navigator.clipboard?.writeText(buildCurl(request)).then(() => showToast("Copied", "cURL command copied."))}><Icon name="copy" /> Copy cURL</ToolButton>
+            <ToolButton iconOnly={embedded} className="request-copy" title="Copy cURL" onClick={() => navigator.clipboard?.writeText(buildCurl(request)).then(() => showToast("Copied", "cURL command copied."))}><Icon name="copy" />{!embedded && " Copy cURL"}</ToolButton>
             {/* pinned to the bottom edge of the head row; overlay, never a grid child (see .request-screen rows) */}
             <LoadingBar active={rt.running} />
           </div>
@@ -299,6 +441,22 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                       onClick={() => update({ http: { ...request.http!, body: { ...request.http!.body, type: t } } })}>{t}</button>
                   ))}
                 </div>
+              )}
+              {/* narrow-dock fallback: buttons collapse into these selects via @container (embedded only) */}
+              {embedded && (
+                <select className="editor-tab-select" value={editorTab} onChange={(e) => setEditorTab(e.target.value as typeof editorTab)}>
+                  <option value="body">Body</option>
+                  <option value="headers">Headers ({request.http.headers.length})</option>
+                  <option value="params">Params ({request.http.params.length})</option>
+                  <option value="auth">Auth</option>
+                  <option value="cookies">Cookies ({reqCookies.length})</option>
+                </select>
+              )}
+              {embedded && editorTab === "body" && (
+                <select className="body-type-select" value={request.http.body.type}
+                  onChange={(e) => update({ http: { ...request.http!, body: { ...request.http!.body, type: e.target.value as typeof request.http.body.type } } })}>
+                  {["none", "json", "text", "form"].map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
               )}
             </div>
             {editorTab === "body" && (
@@ -385,7 +543,9 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                   disabled={!selectedService}
                   onChange={(method) => {
                     const selectedMethod = selectedService?.methods.find((item) => item.name === method);
-                    update({ grpc: { ...grpc, method, message: selectedMethod?.inputTemplate ?? grpc.message } });
+                    // keep overlapping fields from the current payload instead of wiping it
+                    const message = selectedMethod ? mergeIntoTemplate(grpc.message, selectedMethod.inputTemplate) : grpc.message;
+                    update({ grpc: { ...grpc, method, message } });
                   }}
                 />
               </div>
@@ -396,29 +556,147 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
             <div className="editor-tabs">
               <button type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Message</button>
               <button type="button" className={editorTab === "metadata" ? "active" : ""} onClick={() => setEditorTab("metadata")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Metadata <span className="tab-count">{grpc.metadata.length}</span></button>
-              <button type="button" className={editorTab === "proto" ? "active" : ""} onClick={() => setEditorTab("proto")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Proto <span className="tab-count">{grpc.protoFiles.length}</span></button>
+              <button type="button" className={editorTab === "proto" ? "active" : ""} onClick={() => setEditorTab("proto")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Proto {currentSource && <span className={`proto-dot${descError ? " err" : catalog ? " ok" : ""}`} />}</button>
+              {embedded && (
+                <select className="editor-tab-select" value={editorTab === "metadata" || editorTab === "proto" ? editorTab : "body"} onChange={(e) => setEditorTab(e.target.value as typeof editorTab)}>
+                  <option value="body">Message</option>
+                  <option value="metadata">Metadata ({grpc.metadata.length})</option>
+                  <option value="proto">Proto</option>
+                </select>
+              )}
             </div>
             {editorTab === "body" && (
-              <JsonEditor value={grpc.message} onChange={(message) => update({ grpc: { ...grpc, message } })} variableNames={variableNames} />
+              <JsonEditor
+                value={grpc.message}
+                onChange={(message) => update({ grpc: { ...grpc, message } })}
+                variableNames={variableNames}
+                onFillSample={grpcMethodDef ? () => {
+                  let pretty = grpcMethodDef.inputTemplate;
+                  try { pretty = JSON.stringify(JSON.parse(grpcMethodDef.inputTemplate), null, 2); } catch { /* keep raw */ }
+                  update({ grpc: { ...grpc, message: pretty } });
+                } : undefined}
+              />
             )}
             {editorTab === "metadata" && <KvEditor items={grpc.metadata} onChange={(metadata) => update({ grpc: { ...grpc, metadata } })} keyPlaceholder="metadata key" />}
             {editorTab === "proto" && (
               <div className="proto-panel">
                 <div className="proto-actions">
-                  <ToolButton variant="primary" onClick={() => void importProtoFiles()} disabled={describing}><Icon name="braces" size={13} /> {describing ? "Describing…" : "Import .proto"}</ToolButton>
-                  <ToolButton onClick={() => void describe(grpc.protoFiles.length ? "files" : "reflection")} disabled={describing}>{grpc.protoFiles.length ? "Describe" : "Describe (reflection)"}</ToolButton>
-                </div>
-                {grpc.protoFiles.length === 0 ? (
-                  <div className="empty-note">No .proto files. Import to describe, or use Describe (reflection) to load from the endpoint.</div>
-                ) : (
-                  <ul className="proto-files">
-                    {grpc.protoFiles.map((f) => (
-                      <li key={f}>
-                        <span className="proto-path" title={f}>{f}</span>
-                        <button type="button" className="proto-remove" aria-label="Remove file" onClick={() => update({ grpc: { ...grpc, protoFiles: grpc.protoFiles.filter((p) => p !== f) } })}>✕</button>
-                      </li>
+                  <select
+                    className="method-select proto-source-select"
+                    value={grpc.sourceId ?? ""}
+                    onChange={(e) => { if (e.target.value) selectSource(e.target.value); }}
+                  >
+                    <option value="" disabled>Select proto source…</option>
+                    {protoSources.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name} · {s.kind === "files" ? "proto" : "reflection"}</option>
                     ))}
-                  </ul>
+                  </select>
+                  <ToolButton
+                    variant="primary"
+                    disabled={describing}
+                    onClick={(e) => {
+                      const r = e.currentTarget.getBoundingClientRect();
+                      setProtoMenu((m) => (m ? null : { x: r.left, y: r.bottom + 4 }));
+                    }}
+                  ><Icon name="plus" size={13} /> New</ToolButton>
+                  {currentSource && (
+                    <ToolButton iconOnly title="Re-describe" onClick={() => void describeSource(currentSource.id, true)} disabled={describing}>
+                      <Icon name="refresh" size={13} />
+                    </ToolButton>
+                  )}
+                </div>
+                {protoMenu && (
+                  <div className="index-context-menu" style={{ left: protoMenu.x, top: protoMenu.y }} onPointerDown={(e) => e.stopPropagation()}>
+                    <button type="button" className="context-item" onClick={() => { setProtoMenu(null); void createFilesSource(true); }}><Icon name="folder" /><strong>Import proto folder</strong></button>
+                    <button type="button" className="context-item" onClick={() => { setProtoMenu(null); void createFilesSource(false); }}><Icon name="braces" /><strong>Import .proto files</strong></button>
+                    <button type="button" className="context-item" onClick={() => { setProtoMenu(null); void createReflectionSource(); }}><Icon name="plug" /><strong>From reflection endpoint</strong></button>
+                  </div>
+                )}
+
+                {!currentSource ? (
+                  grpc.protoFiles.length ? (
+                    <div className="proto-source-detail">
+                      <div className="empty-note">Legacy request: {grpc.protoFiles.length} inline .proto file(s). Convert to a shared proto source for quick switching and caching.</div>
+                      <ul className="proto-files">
+                        {grpc.protoFiles.map((f) => (<li key={f}><span className="proto-path" title={f}>{f}</span></li>))}
+                      </ul>
+                      <div className="proto-source-foot">
+                        <ToolButton onClick={() => void describe(false)} disabled={describing}>{describing ? "Describing…" : "Describe"}</ToolButton>
+                        <ToolButton variant="primary" onClick={() => void convertLegacy()}>Convert to source</ToolButton>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="empty-note">
+                      No proto source. Create one from <b>.proto</b> files or a <b>reflection</b> endpoint — once created, pick it from the dropdown and reuse it across requests.
+                    </div>
+                  )
+                ) : (
+                  <div className="proto-source-detail">
+                    <input
+                      className="query-path-input"
+                      value={nameDraft ?? currentSource.name}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      onBlur={() => {
+                        const next = nameDraft?.trim();
+                        if (next && next !== currentSource.name) void saveSource({ ...currentSource, name: next });
+                        setNameDraft(null);
+                      }}
+                      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                      placeholder="Source name"
+                    />
+                    {currentSource.kind === "files" ? (
+                      <>
+                        <ul className="proto-files">
+                          {currentSource.files.map((f) => (
+                            <li key={f}>
+                              <Icon name={f.endsWith(".proto") ? "braces" : "folder"} size={13} />
+                              <span className="proto-path" title={f}>{f}</span>
+                              <button type="button" className="proto-remove" aria-label="Remove"
+                                onClick={() => void saveSource({ ...currentSource, files: currentSource.files.filter((p) => p !== f) }).then(() => describeSource(currentSource.id, true))}>✕</button>
+                            </li>
+                          ))}
+                          {currentSource.importPaths.map((p) => (
+                            <li key={p}>
+                              <Icon name="folder" size={13} />
+                              <span className="proto-path" title={p}>-I {p}</span>
+                              <button type="button" className="proto-remove" aria-label="Remove import path"
+                                onClick={() => void saveSource({ ...currentSource, importPaths: currentSource.importPaths.filter((x) => x !== p) }).then(() => describeSource(currentSource.id, true))}>✕</button>
+                            </li>
+                          ))}
+                          {currentSource.files.length === 0 && <li className="empty-note" style={{ border: 0 }}>No .proto files.</li>}
+                        </ul>
+                        <div className="proto-actions">
+                          <ToolButton onClick={() => void addFilesToSource(currentSource, true)} disabled={describing}><Icon name="folder" size={13} /> Add folder</ToolButton>
+                          <ToolButton onClick={() => void addFilesToSource(currentSource, false)} disabled={describing}><Icon name="braces" size={13} /> Add files</ToolButton>
+                          <ToolButton onClick={() => void addImportPath(currentSource)} disabled={describing} title="Extra include root (-I) for resolving imports">Add import path</ToolButton>
+                        </div>
+                      </>
+                    ) : (
+                      <EnvInput
+                        className="query-path-input"
+                        value={currentSource.endpoint}
+                        onChange={(endpoint) => void saveSource({ ...currentSource, endpoint })}
+                        placeholder="{{grpcHost}}:50051"
+                        variableNames={variableNames}
+                      />
+                    )}
+                    {catalog?.warnings?.length ? (
+                      <ul className="proto-files proto-warnings">
+                        {catalog.warnings.map((w) => (
+                          <li key={w}><Icon name="x" size={13} /><span className="proto-path">{w}</span></li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <div className="proto-source-foot">
+                      <span className={`proto-note${descError ? " err" : ""}`}>
+                        {describing ? "Describing…"
+                          : descError ?? (catalog
+                            ? `${catalog.services.length} service(s)${catalog.warnings?.length ? ` · ${catalog.warnings.length} file(s) skipped` : ""}`
+                            : "not described")}
+                      </span>
+                      <ToolButton variant="danger" onClick={() => void deleteSource(currentSource)}><Icon name="trash" size={13} /> Delete source</ToolButton>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -460,7 +738,7 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
         <>
           <div className="bottom-resizer" title="Resize response" onPointerDown={(event) => startResize(event, horizontal ? "request-x" : "request")} />
           <section className={`response ${rt.running ? "loading" : ""}`}>
-            <div className="response-head">
+            <div className="response-head" onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}>
               <strong>Response</strong>
               {rt.response && "status" in rt.response && (
                 <span className={`response-status ${rt.response.status < 300 ? "ok" : rt.response.status < 500 ? "warn" : "err"}`}>{rt.response.status}</span>
@@ -476,11 +754,11 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                       void navigator.clipboard?.writeText(shownTab === "pretty" ? prettyBody : body).then(() => showToast("Copied", "Response body copied."));
                     }}><Icon name="copy" size={13} /> Copy</button>
                 )}
-                <button type="button" className={shownTab === "pretty" ? "active" : ""} onClick={() => setResponseTab("pretty")}><Icon name="braces" size={13} /> Pretty</button>
-                <button type="button" className={shownTab === "raw" ? "active" : ""} onClick={() => setResponseTab("raw")}><Icon name="code" size={13} /> Raw</button>
-                {isHtml && <button type="button" className={shownTab === "preview" ? "active" : ""} onClick={() => setResponseTab("preview")}><Icon name="sparkles" size={13} /> Preview</button>}
-                <button type="button" className={shownTab === "headers" ? "active" : ""} onClick={() => setResponseTab("headers")}><Icon name="list" size={13} /> Headers</button>
-                <button type="button" className={shownTab === "cookies" ? "active" : ""} onClick={() => setResponseTab("cookies")}><Icon name="list" size={13} /> Cookies</button>
+                <button type="button" title="Pretty" className={shownTab === "pretty" ? "active" : ""} onClick={() => setResponseTab("pretty")}><Icon name="braces" size={13} /> Pretty</button>
+                <button type="button" title="Raw" className={shownTab === "raw" ? "active" : ""} onClick={() => setResponseTab("raw")}><Icon name="code" size={13} /> Raw</button>
+                {isHtml && <button type="button" title="Preview" className={shownTab === "preview" ? "active" : ""} onClick={() => setResponseTab("preview")}><Icon name="sparkles" size={13} /> Preview</button>}
+                <button type="button" title="Headers" className={shownTab === "headers" ? "active" : ""} onClick={() => setResponseTab("headers")}><Icon name="activity" size={13} /> Headers</button>
+                <button type="button" title="Cookies" className={shownTab === "cookies" ? "active" : ""} onClick={() => setResponseTab("cookies")}><Icon name="list" size={13} /> Cookies</button>
               </span>
             </div>
             <div className="response-body">

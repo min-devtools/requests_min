@@ -1,7 +1,10 @@
-// Slim build: core editor + JSON language only. The full "monaco-editor" entry drags in
-// ~80 basic-languages plus the css/html/ts language services the app never uses.
+// Slim build: core editor + JSON language, plus the JavaScript *basic* language for
+// flow transform scripts. The full "monaco-editor" entry drags in ~80 basic-languages
+// plus the css/html/ts language services the app never uses; the basic-languages/javascript
+// grammar is just a Monarch tokenizer + bracket config (highlighting + auto-close, no TS worker).
 import "monaco-editor/esm/vs/editor/edcore.main";
 import "monaco-editor/esm/vs/language/json/monaco.contribution";
+import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
@@ -31,6 +34,11 @@ export function retintMonaco(theme: "dark" | "light") {
       { token: "number", foreground: bare(color("--syntax-number", "#1f6feb")) },
       { token: "keyword.json", foreground: bare(color("--syntax-boolean", "#b794f4")) },
       { token: "delimiter", foreground: bare(color("--syntax-punctuation", "#717680")) },
+      // JavaScript (flow transform scripts)
+      { token: "keyword", foreground: bare(color("--syntax-boolean", "#b794f4")) },
+      { token: "string", foreground: bare(color("--syntax-string", "#58d68d")) },
+      { token: "comment", foreground: bare(color("--text-3", "#717680")), fontStyle: "italic" },
+      { token: "identifier", foreground: bare(color("--editor-fg", "#d7dce5")) },
     ],
     colors: {
       "editor.background": color("--editor-bg", theme === "dark" ? "#0d0f14" : "#fbfbfc"),
@@ -46,5 +54,12 @@ export function retintMonaco(theme: "dark" | "light") {
   });
   monaco.editor.setTheme(MONACO_THEME);
 }
+
+// {{var}}/{{steps.*}} tokens make request bodies technically-invalid JSON, so the
+// language service's squiggles are all noise here — JsonEditor's explicit Validate
+// button covers real syntax checks.
+(monaco.languages as unknown as {
+  json?: { jsonDefaults: { setDiagnosticsOptions: (options: object) => void } };
+}).json?.jsonDefaults.setDiagnosticsOptions({ validate: false });
 
 loader.config({ monaco });

@@ -15,7 +15,14 @@ export function KvEditor({ items, onChange, keyPlaceholder = "key", valuePlaceho
     <div className="kv-editor">
       <div className="kv-editor-head"><span>On</span><span>Key</span><span>Value</span><span /></div>
       {items.map((it, i) => (
-        <div key={i} className="kv-editor-row">
+        <div
+          key={i}
+          className="kv-editor-row"
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest("input, button")) return;
+            set(i, { enabled: it.enabled === false });
+          }}
+        >
           <input type="checkbox" className="row-check" checked={it.enabled !== false} onChange={(e) => set(i, { enabled: e.target.checked })} />
           <input className="path-input" placeholder={keyPlaceholder} value={it.key} onChange={(e) => set(i, { key: e.target.value })} />
           <input className="path-input" placeholder={valuePlaceholder} value={it.value} onChange={(e) => set(i, { value: e.target.value })} />

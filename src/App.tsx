@@ -17,8 +17,12 @@ import { SettingsView } from "./components/views/SettingsView";
 import { HistoryView } from "./components/views/HistoryView";
 import { ImportExportView } from "./components/views/ImportExportView";
 import { GithubSyncView } from "./components/views/GithubSyncView";
+import { FlowsView } from "./components/views/FlowsView";
+import { FlowView } from "./components/views/FlowView";
 import { useApp, type TabDef } from "./store";
 import { runActiveRequest, saveActiveRequest } from "./lib/runRequest";
+import { runActiveFlow } from "./lib/flow/engine";
+import { saveActiveFlow } from "./lib/flow/flowActions";
 import { Icon } from "./ui/Icon";
 import { retintMonaco } from "./lib/monaco";
 import { themeBase } from "./lib/themes";
@@ -28,6 +32,8 @@ function renderView(tab: TabDef, active: boolean) {
   switch (tab.kind) {
     case "welcome": return <WelcomeView key={tab.id} active={active} />;
     case "request": return <RequestView key={tab.id} tabId={tab.id} active={active} />;
+    case "flows": return <FlowsView key={tab.id} active={active} />;
+    case "flow": return <FlowView key={tab.id} tabId={tab.id} active={active} />;
     case "collections": return <CollectionsView key={tab.id} active={active} />;
     case "environments": return <EnvironmentsView key={tab.id} active={active} />;
     case "history": return <HistoryView key={tab.id} active={active} />;
@@ -56,11 +62,13 @@ export default function App() {
     document.body.classList.toggle("compact", compact);
     document.body.classList.toggle("left-collapsed", leftCollapsed);
     document.body.classList.toggle("right-collapsed", rightCollapsed);
+    // flow tabs host the full step editor in the dock — pin a min dock width so it can't collapse the editor UI
+    document.body.classList.toggle("flow-active", tabs.find((tab) => tab.id === activeTabId)?.kind === "flow");
     document.documentElement.style.setProperty("--ui-font-size", `${uiFontSize}px`);
     document.documentElement.style.setProperty("--font-body", uiFont ? `"${uiFont}", var(--font-body-default)` : "var(--font-body-default)");
     document.documentElement.style.setProperty("--font-mono", editorFont ? `"${editorFont}", var(--font-mono-default)` : "var(--font-mono-default)");
     retintMonaco(themeBase(theme));
-  }, [theme, compact, uiFontSize, uiFont, editorFont, leftCollapsed, rightCollapsed]);
+  }, [theme, compact, uiFontSize, uiFont, editorFont, leftCollapsed, rightCollapsed, tabs, activeTabId]);
 
   useEffect(() => { void startAutoSync(); }, []);
 
@@ -70,12 +78,28 @@ export default function App() {
       const key = e.key.toLowerCase();
       if (mod && key === "k") { e.preventDefault(); setCommandOpen(true); }
       if (mod && key === "n") { e.preventDefault(); newRequestTab(); }
-      if (mod && e.key === "Enter") { e.preventDefault(); void runActiveRequest(); }
+      if (mod && e.key === "Enter") {
+        e.preventDefault();
+        const activeTabKind = useApp.getState().tabs.find((tab) => tab.id === useApp.getState().activeTabId)?.kind;
+        if (activeTabKind === "flow") void runActiveFlow();
+        else void runActiveRequest();
+      }
       if (mod && key === "s") {
         e.preventDefault();
         const activeTab = useApp.getState().tabs.find((tab) => tab.id === useApp.getState().activeTabId);
         if (activeTab?.kind === "environments") window.dispatchEvent(new Event("requestsmin:save-environment"));
+        else if (activeTab?.kind === "flow") void saveActiveFlow();
         else void saveActiveRequest();
+      }
+      if (mod && key === "z") {
+        // let inputs / Monaco keep their native text undo; only the flow canvas gets graph undo
+        const el = document.activeElement as HTMLElement | null;
+        const editable = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+        const st = useApp.getState();
+        if (!editable && st.tabs.find((t) => t.id === st.activeTabId)?.kind === "flow") {
+          e.preventDefault();
+          if (e.shiftKey) st.redoFlow(st.activeTabId); else st.undoFlow(st.activeTabId);
+        }
       }
       if (mod && key === "b") { e.preventDefault(); toggleLeft(); }
       if (mod && key === "r") { e.preventDefault(); toggleRight(); }

@@ -22,8 +22,10 @@ pub struct HttpPart {
 #[serde(rename_all = "camelCase", default)]
 pub struct GrpcPart {
     pub endpoint: String,
-    pub proto_source: String,         // "reflection" | "files"
-    pub proto_files: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_id: Option<String>,    // → shared ProtoSource; None = legacy inline (proto_source/proto_files)
+    pub proto_source: String,         // legacy: "reflection" | "files"
+    pub proto_files: Vec<String>,     // legacy
     pub service: String,
     pub method: String,
     pub message: String,              // JSON text

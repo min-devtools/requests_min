@@ -19,6 +19,9 @@
 }
 .page-head h1 { margin: 0.1538rem 0 0.3077rem; font-size: 1.5385rem; letter-spacing: -0.01em; }
 .page-head p { margin: 0; color: var(--text-2); font-size: 0.9231rem; max-width: 62ch; }
+.flow-list-tools { display: flex; justify-content: flex-end; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.flow-list-tools .side-search { width: min(240px, 100%); }
+.flow-sort { padding: 0; border: 0; color: inherit; background: none; font: inherit; cursor: pointer; }
 
 .protocol-rail {
   display: flex;
@@ -118,12 +121,23 @@ body.resizing-x { user-select: none; cursor: col-resize; }
 .cookies-table td:first-child { color: var(--accent); white-space: nowrap; }
 
 .proto-panel { min-height: 0; overflow: auto; display: grid; align-content: start; gap: 10px; padding: 14px; }
-.proto-actions { display: flex; gap: 8px; }
+.proto-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.proto-source-select { flex: 1; min-width: 140px; }
+.proto-source-detail { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.proto-source-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .proto-files { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .proto-files li { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--pane-2); }
 .proto-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: .8462rem var(--font-mono); color: var(--text-2); }
 .proto-remove { flex: none; width: 22px; height: 22px; color: var(--text-3); background: transparent; border: 0; border-radius: 5px; cursor: default; }
 .proto-remove:hover { color: var(--red); background: color-mix(in oklab, var(--red), transparent 88%); }
+.proto-note { flex: 1; min-width: 0; color: var(--text-3); white-space: pre-line; overflow-wrap: anywhere; }
+.proto-warnings li { border-color: color-mix(in oklab, var(--red), transparent 70%); }
+.proto-warnings .proto-path { white-space: normal; overflow-wrap: anywhere; color: var(--red); }
+.proto-warnings svg { color: var(--red); }
+.proto-note.err { color: var(--red); }
+.proto-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); }
+.proto-dot.ok { background: var(--green); }
+.proto-dot.err { background: var(--red); }
 
 .kv-editor { min-height: 0; overflow: auto; display: grid; align-content: start; padding: 0 12px 12px; }
 .kv-editor-head, .kv-editor-row { display: grid; grid-template-columns: 38px minmax(140px, 1fr) minmax(180px, 1.4fr) 32px; gap: 8px; align-items: center; }
@@ -424,4 +438,259 @@ body.resizing-x { user-select: none; cursor: col-resize; }
   height: 100%;
   background: var(--blue);
   animation: run 900ms linear infinite;
+}
+
+/* ---- JSON tree panel (ported from redis_min value view) ---- */
+.json-dock {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.json-dock-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-3);
+  font: 0.8462rem/1.4 var(--font-mono);
+}
+
+.dock-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.json-tree-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--pane);
+  color: var(--text-3);
+  flex: none;
+}
+
+.json-tree-search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.8462rem;
+}
+
+.json-tree-search .case-toggle {
+  width: 24px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 0.7692rem;
+  font-weight: 600;
+  cursor: default;
+}
+
+.json-tree-search .case-toggle:hover { color: var(--text); background: var(--pane-3); }
+.json-tree-search .case-toggle.active {
+  color: var(--text);
+  border-color: var(--line-2);
+  background: var(--pane-2);
+}
+
+.json-tree-search .match-count {
+  font-family: var(--font-mono);
+  font-size: 0.7692rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.json-tree-view {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  font: 0.8462rem/1.6 var(--font-mono);
+  color: var(--text);
+  background: var(--editor-bg);
+  user-select: text;
+  cursor: text;
+}
+
+.json-tree-content {
+  min-width: max-content;
+  padding: 8px 10px 12px 4px;
+}
+
+.json-tree-line {
+  min-height: 20px;
+  display: flex;
+  align-items: baseline;
+  padding-right: 10px;
+  white-space: pre;
+}
+
+.json-tree-toggle,
+.json-tree-toggle-spacer {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin-right: 1px;
+}
+
+.json-tree-toggle {
+  align-self: center;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  color: var(--text-3);
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: default;
+  font-size: inherit;
+}
+
+.json-tree-toggle:hover { color: var(--text); background: var(--pane-3); }
+.json-tree-toggle svg { transition: transform 100ms ease; }
+.json-tree-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+
+.json-tree-view .tok-str { color: var(--green); }
+.json-tree-view .tok-num { color: var(--blue-2); }
+.json-tree-view .tok-bool { color: var(--purple); }
+.json-tree-view .tok-key { color: var(--blue); }
+.json-tree-view .tok-br-0 { color: var(--orange); }
+.json-tree-view .tok-br-1 { color: var(--purple); }
+.json-tree-view .tok-br-2 { color: var(--blue-2); }
+.json-tree-colon,
+.json-tree-punc { color: var(--text-3); }
+.json-tree-ellipsis { padding: 0 3px; color: var(--text-3); }
+.json-tree-summary { padding-left: 8px; color: var(--text-3); font-size: 0.7692rem; font-style: italic; }
+
+.json-tree-view mark {
+  background: color-mix(in oklab, var(--orange), transparent 60%);
+  color: var(--text);
+  border-radius: 2px;
+  padding: 0;
+}
+
+.json-tree-raw { color: var(--text-2); }
+
+.json-tree-raw-text {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* flow tab: step detail + resolved input live in the right dock as tabs */
+/* flow tabs host the full step editor in the dock — floor the dock width so it never squeezes the editor into a broken layout */
+body.flow-active:not(.right-collapsed):not(.inspector-unavailable) .main {
+  grid-template-columns: var(--left-w) minmax(520px, 1fr) max(440px, var(--right-w));
+}
+body.flow-active.left-collapsed:not(.right-collapsed):not(.inspector-unavailable) .main {
+  grid-template-columns: 48px minmax(620px, 1fr) max(440px, var(--right-w));
+}
+/* keep the drag handle glued to the floored edge, not the raw (possibly-smaller) stored width */
+body.flow-active:not(.right-collapsed):not(.inspector-unavailable) .resize-handle.right {
+  right: max(440px, var(--right-w));
+}
+
+.inspector .inspector-scroll:has(.inspector-flow) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.inspector-flow {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* dock tab switcher uses the shared .mini-tabs pill style (matches redis_min / kafka_min) */
+.inspector-flow > .mini-tabs { flex: none; }
+
+/* step-detail pane hosts Environment above the node editor */
+.inspector-flow-step-detail {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* inside the pane the env block is a plain header, not a sticky floating bar */
+.inspector-flow-step-detail .inspector-environment {
+  position: static;
+  padding: 12px 14px;
+  box-shadow: none;
+}
+
+.inspector-flow-step {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.inspector-flow-step .json-dock {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--editor-bg);
+}
+
+/* Step Result tab — run outcome (status/time), error, and response body */
+.inspector-flow-result {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+}
+.flow-result-summary { display: flex; align-items: center; gap: 8px; }
+.flow-result-badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font: 650 0.7692rem/1 var(--font-mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: var(--pane-3);
+}
+.flow-result-badge.status-success { color: var(--green); background: color-mix(in oklab, var(--green), transparent 86%); }
+.flow-result-badge.status-failed { color: var(--red); background: color-mix(in oklab, var(--red), transparent 86%); }
+.flow-result-badge.status-running { color: var(--blue); background: color-mix(in oklab, var(--blue), transparent 86%); }
+.flow-result-badge.status-skipped { color: var(--orange); background: color-mix(in oklab, var(--orange), transparent 86%); }
+.flow-result-time { color: var(--blue-2); font: 650 0.7692rem/1 var(--font-mono); }
+.flow-result-stale { color: var(--orange); font-size: 0.7692rem; text-transform: uppercase; letter-spacing: .06em; }
+.flow-result-copy { margin-left: auto; width: 28px; height: 26px; }
+.flow-result-response {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.flow-result-response .inspector-section-label { justify-content: space-between; }
+.flow-result-response .json-dock {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--editor-bg);
 }

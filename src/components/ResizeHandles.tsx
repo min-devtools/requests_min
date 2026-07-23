@@ -18,9 +18,12 @@ function restoreLayoutSizes() {
 export function startResize(event: React.PointerEvent, axis: "left" | "right" | "request" | "request-x") {
   event.preventDefault();
   const requestAxis = axis === "request" || axis === "request-x";
-  const container = document.querySelector(requestAxis ? ".request-screen.active" : ".main");
+  const handle = event.currentTarget as HTMLElement;
+  const container = requestAxis
+    ? handle.closest(".request-screen.active") as HTMLElement | null
+    : document.querySelector(".main") as HTMLElement | null;
   document.body.classList.add(axis === "request-x" ? "resizing-x" : requestAxis ? "resizing-y" : "resizing");
-  (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+  handle.setPointerCapture?.(event.pointerId);
   // delta-based resize: anchor to the editor pane's actual size + pointer movement,
   // so a click without drag doesn't snap to (clientY - grid top), which includes
   // the ~90px name+head rows above the editor and causes a jump
@@ -48,8 +51,11 @@ export function startResize(event: React.PointerEvent, axis: "left" | "right" | 
       document.body.style.setProperty("--left-w", `${Math.round(next)}px`);
       localStorage.setItem("requestsmin:left-w", String(Math.round(next)));
     } else {
-      const max = Math.min(560, rect.width - 760);
-      const next = clamp(rect.right - e.clientX, 260, max);
+      // uncapped: the dock hosts the flow step editor, so it may take most of the window
+      const max = Math.max(320, rect.width - 480);
+      // flow tabs need a wider floor so the embedded editor never breaks (matches the CSS min in requestsmin.css)
+      const min = document.body.classList.contains("flow-active") ? 440 : 260;
+      const next = clamp(rect.right - e.clientX, min, max);
       document.body.style.setProperty("--right-w", `${Math.round(next)}px`);
       localStorage.setItem("requestsmin:right-w", String(Math.round(next)));
     }

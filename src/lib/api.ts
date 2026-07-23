@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { ConnColor } from "./connColor";
+import type { Flow } from "./flow/types";
 
 export interface KV { key: string; value: string; enabled?: boolean }
 
@@ -27,10 +28,20 @@ export interface HttpPart {
   body: HttpBody;
   insecure: boolean;
 }
+export interface ProtoSource {
+  id: string;
+  name: string;
+  kind: "files" | "reflection";
+  files: string[];
+  importPaths: string[];
+  endpoint: string;   // supports {{var}}
+  insecure: boolean;
+}
 export interface GrpcPart {
   endpoint: string;
-  protoSource: "reflection" | "files";
-  protoFiles: string[];
+  sourceId?: string;               // → shared ProtoSource; absent = legacy inline
+  protoSource: "reflection" | "files"; // legacy
+  protoFiles: string[];            // legacy
   service: string;
   method: string;
   message: string;
@@ -53,6 +64,7 @@ export interface CollectionMeta {
   /** user-assigned identity color, drawn as the dot on every tab bound to this collection */
   color?: ConnColor;
 }
+export interface FlowMeta { id: string; name: string; nodeCount: number }
 export interface ReqEntry { relPath: string; name: string; protocol: string; method: string }
 
 export const emptyHttp = (): HttpPart => ({
@@ -104,10 +116,13 @@ export const api = {
   wsConnect: (sessionId: string, url: string, headers: KV[]) => invoke<void>("ws_connect", { sessionId, url, headers }),
   wsSend: (sessionId: string, text: string) => invoke<void>("ws_send", { sessionId, text }),
   wsClose: (sessionId: string) => invoke<void>("ws_close", { sessionId }),
-  grpcDescribe: (env: string | null, endpoint: string | null, protoFiles: string[], insecure: boolean) =>
-    invoke<GrpcCatalog>("grpc_describe", { env, endpoint, protoFiles, insecure }),
+  grpcDescribe: (env: string | null, sourceId: string | null, force: boolean, endpoint: string | null, protoFiles: string[], insecure: boolean) =>
+    invoke<GrpcCatalog>("grpc_describe", { env, sourceId, force, endpoint, protoFiles, insecure }),
   grpcUnary: (env: string | null, part: GrpcPart) =>
     invoke<GrpcResponse>("grpc_unary", { env, part }),
+  protoSourceList: () => invoke<ProtoSource[]>("proto_source_list"),
+  protoSourceSave: (source: ProtoSource) => invoke<void>("proto_source_save", { source }),
+  protoSourceDelete: (id: string) => invoke<void>("proto_source_delete", { id }),
   importCurl: (text: string) => invoke<Request>("import_curl", { text }),
   importPostman: (text: string) => invoke<CollectionDraft>("import_postman", { text }),
   importOpenapi: (text: string) => invoke<CollectionDraft>("import_openapi", { text }),
@@ -123,6 +138,11 @@ export const api = {
   ghConfigure: (repo: string) => invoke<void>("gh_configure", { repo }),
   ghPush: (message: string | null) => invoke<string>("gh_push", { message }),
   ghPull: (force: boolean) => invoke<PullResult>("gh_pull", { force }),
+  flowList: () => invoke<FlowMeta[]>("flow_list"),
+  flowRead: (id: string) => invoke<Flow>("flow_read", { id }),
+  flowWrite: (id: string, flow: Flow) => invoke<void>("flow_write", { id, flow }),
+  flowDelete: (id: string) => invoke<void>("flow_delete", { id }),
+  flowExport: (id: string, dest: string) => invoke<void>("flow_export", { id, dest }),
 };
 
 export interface ScanHit { path: string; reason: string }
@@ -135,7 +155,7 @@ export interface CollectionDraft { name: string; requests: DraftEntry[] }
 
 export interface GrpcMethod { name: string; inputType: string; outputType: string; clientStreaming: boolean; serverStreaming: boolean; inputTemplate: string }
 export interface GrpcService { name: string; methods: GrpcMethod[] }
-export interface GrpcCatalog { services: GrpcService[] }
+export interface GrpcCatalog { services: GrpcService[]; warnings?: string[] }
 export interface GrpcResponse { statusCode: string; headers: KV[]; trailers: KV[]; bodyJson: string; timeMs: number }
 
 export interface HttpResponse { status: number; headers: KV[]; body: string; timeMs: number; sizeBytes: number }

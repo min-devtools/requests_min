@@ -1,7 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import "./lib/monaco";
+import { retintMonaco } from "./lib/monaco";
+import { isThemeId, themeBase } from "./lib/themes";
 import "./styles/tokens.css";
 import "./styles/themes.css";
 import "./styles/base.css";
@@ -9,6 +10,12 @@ import "./styles/layout.css";
 import "./styles/components.css";
 import "./styles/views.css";
 import "./styles/requestsmin.css";
+
+const storedTheme = localStorage.getItem("requestsmin:theme");
+const initialTheme = storedTheme && isThemeId(storedTheme) ? storedTheme : "dark";
+document.body.dataset.theme = initialTheme;
+document.body.classList.toggle("light", themeBase(initialTheme) === "light");
+retintMonaco(themeBase(initialTheme));
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
