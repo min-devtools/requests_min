@@ -17,7 +17,10 @@ test("sidebar nests method-labelled requests inside collapsible collections", as
   assert.match(layout, /\.nav-item\.request-node \{[^}]*grid-template-columns: 38px minmax\(0, 1fr\) auto/s);
   assert.match(layout, /\.collection-node > span:nth-child\(2\), \.request-node > span:nth-child\(2\) \{[^}]*min-width: 0;[^}]*white-space: nowrap;[^}]*text-overflow: ellipsis/s);
   assert.match(sidebar, /kind: "collection", id: c\.id/);
-  assert.match(sidebar, /reorderCollections\(from, collectionId\)/);
+  assert.match(sidebar, /collectionDropTarget/);
+  assert.match(sidebar, /drop-before/);
+  assert.match(sidebar, /drop-after/);
+  assert.match(sidebar, /reorderCollections\(from, target\.beforeId\)/);
   assert.match(sidebar, /reorderRequests\(c\.id, from\.relPath, r\.relPath\)/);
   assert.match(sidebar, /dropIndicator/);
   assert.match(sidebar, /drop-prefix/);
@@ -31,4 +34,11 @@ test("Postman and OpenAPI import read a selected file", async () => {
   assert.match(view, /type="file"/);
   assert.match(view, /await file\.text\(\)/);
   assert.doesNotMatch(view, /Paste collection JSON or OpenAPI JSON\/YAML/);
+});
+
+test("a request can target another collection through any child request row", async () => {
+  const sidebar = await readFile(new URL("components/Sidebar.tsx", src), "utf8");
+  assert.match(sidebar, /if \(dragging\.collectionId === c\.id\) \{/);
+  assert.match(sidebar, /setDragOverCollection\(c\.id\)/);
+  assert.match(sidebar, /if \(from\.collectionId !== c\.id\) \{\s*void moveRequest\(from\.collectionId, from\.relPath, c\.id\)/s);
 });

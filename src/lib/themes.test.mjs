@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { THEMES, isThemeId, themeBase } from "./themes.ts";
 
@@ -18,4 +19,11 @@ test("legacy persisted ids stay valid and match their canonical base", () => {
     assert.ok(isThemeId(legacy), legacy);
     assert.equal(themeBase(legacy), themeBase(canonical));
   }
+});
+
+test("Monaco receives the persisted theme before React mounts", async () => {
+  const main = await readFile(new URL("../main.tsx", import.meta.url), "utf8");
+
+  assert.match(main, /retintMonaco\(themeBase\(initialTheme\)\);/);
+  assert.ok(main.indexOf("retintMonaco(themeBase(initialTheme));") < main.indexOf("ReactDOM.createRoot"));
 });

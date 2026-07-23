@@ -7,12 +7,12 @@ import { connStyle } from "../lib/connColor";
 
 export function TabsBar() {
   const {
-    tabs, activeTabId, activateTab, confirmCloseTab, requestTabs, newRequestTab, renameTab, reorderTab,
+    tabs, activeTabId, activateTab, confirmCloseTab, requestTabs, flowTabs, newRequestTab, renameTab, reorderTab,
     collections, openDialog, openConfirm, showToast, renameRequest, duplicateRequest, deleteRequest,
   } = useApp(useShallow((s) => ({
     collections: s.collections,
     tabs: s.tabs, activeTabId: s.activeTabId, activateTab: s.activateTab, confirmCloseTab: s.confirmCloseTab,
-    requestTabs: s.requestTabs, newRequestTab: s.newRequestTab, renameTab: s.renameTab, reorderTab: s.reorderTab,
+    requestTabs: s.requestTabs, flowTabs: s.flowTabs, newRequestTab: s.newRequestTab, renameTab: s.renameTab, reorderTab: s.reorderTab,
     openDialog: s.openDialog, openConfirm: s.openConfirm, showToast: s.showToast,
     renameRequest: s.renameRequest, duplicateRequest: s.duplicateRequest, deleteRequest: s.deleteRequest,
   })));
@@ -35,7 +35,8 @@ export function TabsBar() {
     <nav className="tabs">
       {tabs.map((tab) => {
         const rt = tab.kind === "request" ? requestTabs[tab.id] : null;
-        const dirty = rt?.dirty ?? false;
+        const ft = tab.kind === "flow" ? flowTabs[tab.id] : null;
+        const dirty = rt?.dirty ?? ft?.dirty ?? false;
         const method = rt?.request.protocol === "http"
           ? rt.request.http?.method ?? "HTTP"
           : rt?.request.protocol === "grpc" ? "RPC"
@@ -52,7 +53,7 @@ export function TabsBar() {
             onClick={() => activateTab(tab.id)}
             onContextMenu={(event) => { if (!rt?.collectionId || !rt.relPath) return; event.preventDefault(); setRequestMenu({ tabId: tab.id, x: event.clientX, y: event.clientY }); }}
             onAuxClick={(e) => { if (e.button === 1) void confirmCloseTab(tab.id); }}
-            onDoubleClick={() => { if (tab.kind === "request") { setEditingId(tab.id); setDraft(tab.title); } }}
+            onDoubleClick={() => { if (tab.kind === "request" || tab.kind === "flow") { setEditingId(tab.id); setDraft(tab.title); } }}
             onDragStart={(e) => { setDragId(tab.id); e.dataTransfer.setData("application/x-requestsmin-tab", tab.id); }}
             onDragEnd={() => { setDragId(null); setOverId(null); }}
             onDragOver={(e) => { if (dragId && dragId !== tab.id) { e.preventDefault(); setOverId(tab.id); } }}

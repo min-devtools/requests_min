@@ -8,7 +8,7 @@ import { useApp } from "../store";
 
 type MonacoEditor = Parameters<OnMount>[0];
 
-export function JsonEditor({ value, onChange, language = "json", variableNames = [], onFillSample }: { value: string; onChange: (value: string) => void; language?: "json" | "plaintext"; variableNames?: string[]; onFillSample?: () => void }) {
+export function JsonEditor({ value, onChange, language = "json", variableNames = [], onFillSample }: { value: string; onChange: (value: string) => void; language?: "json" | "plaintext" | "javascript"; variableNames?: string[]; onFillSample?: () => void }) {
   const uiFontSize = useApp((state) => state.uiFontSize);
   const editorFont = useApp((state) => state.editorFont);
   const showToast = useApp((state) => state.showToast);

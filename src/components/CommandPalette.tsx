@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useApp } from "../store";
+import { api, type FlowMeta } from "../lib/api";
 import { Icon, type IconName } from "../ui/Icon";
 import { fuzzyMatch, highlight } from "../lib/fuzzy";
 
@@ -30,11 +31,12 @@ export function CommandPalette() {
   const [input, setInput] = useState("");
   const [cursor, setCursor] = useState(0);
   const [recents, setRecents] = useState<string[]>([]);
+  const [flows, setFlows] = useState<FlowMeta[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { commandOpen, setCommandOpen, collections, newRequestTab, openTab, toggleLeft, toggleRight, setActiveCollection, vimMode } = useApp(useShallow((s) => ({
+  const { commandOpen, setCommandOpen, collections, newRequestTab, openTab, openFlowTab, toggleLeft, toggleRight, setActiveCollection, showToast, vimMode } = useApp(useShallow((s) => ({
     commandOpen: s.commandOpen, setCommandOpen: s.setCommandOpen, collections: s.collections,
-    newRequestTab: s.newRequestTab, openTab: s.openTab, toggleLeft: s.toggleLeft, toggleRight: s.toggleRight,
-    setActiveCollection: s.setActiveCollection, vimMode: s.vimMode,
+    newRequestTab: s.newRequestTab, openTab: s.openTab, openFlowTab: s.openFlowTab, toggleLeft: s.toggleLeft, toggleRight: s.toggleRight,
+    setActiveCollection: s.setActiveCollection, showToast: s.showToast, vimMode: s.vimMode,
   })));
 
   useEffect(() => {
@@ -42,6 +44,7 @@ export function CommandPalette() {
       setInput("");
       setCursor(0);
       setRecents(readRecents());
+      api.flowList().then(setFlows).catch(() => setFlows([]));
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [commandOpen]);
@@ -51,6 +54,7 @@ export function CommandPalette() {
       { icon: "plus", label: "New request", kbd: "⌘N", action: () => newRequestTab() },
       { icon: "database", label: "Open Collections", action: () => openTab("collections") },
       { icon: "key", label: "Open Environments", action: () => openTab("environments") },
+      { icon: "flow", label: "Open Flows", action: () => openTab("flows") },
       { icon: "history", label: "Open Request History", action: () => openTab("history") },
       { icon: "copy", label: "Open Import / Export", action: () => openTab("import-export") },
       { icon: "github", label: "Open GitHub Sync", action: () => openTab("github-sync") },
@@ -62,8 +66,11 @@ export function CommandPalette() {
     for (const c of collections) {
       base.push({ icon: "database", label: `Switch collection: ${c.name}`, action: () => setActiveCollection(c.id) });
     }
+    for (const f of flows) {
+      base.push({ icon: "flow", label: `Open flow: ${f.name}`, action: () => void openFlowTab(f.id).catch((error) => showToast("Open failed", String(error), "err")) });
+    }
     return base;
-  }, [collections, newRequestTab, openTab, toggleLeft, toggleRight, setActiveCollection]);
+  }, [collections, flows, newRequestTab, openTab, openFlowTab, toggleLeft, toggleRight, setActiveCollection, showToast]);
 
 const filtered = useMemo<Array<Command & { labelIdx: number[]; recent: boolean }>>(() => {
     const q = input.trim();

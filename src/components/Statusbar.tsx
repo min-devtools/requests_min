@@ -8,10 +8,13 @@ import { UpdateBadge } from "../lib/updateCheck";
 
 export function Statusbar() {
   // derived primitives — re-render on target/status changes, not on every store write
-  const { activeTabId, collectionName, env, syncDirty } = useApp(useShallow((s) => {
+  const { activeTabId, footerLabel, env, syncDirty } = useApp(useShallow((s) => {
+    const tab = s.tabs.find((t) => t.id === s.activeTabId);
+    const collectionName = s.collections.find((c) => c.id === s.activeCollectionId)?.name ?? null;
     return {
       activeTabId: s.activeTabId,
-      collectionName: s.collections.find((c) => c.id === s.activeCollectionId)?.name ?? null,
+      // flow tabs aren't scoped to a collection — surface the flow name instead
+      footerLabel: tab?.kind === "flow" ? tab.title : (collectionName ?? "no collection"),
       env: s.activeEnv,
       syncDirty: s.syncDirty,
     };
@@ -31,7 +34,7 @@ export function Statusbar() {
   return (
     <footer className="statusbar">
       <div>
-        <span>{collectionName ?? "no collection"}</span>
+        <span>{footerLabel}</span>
         <span style={{ color: env ? "var(--green)" : "var(--text-3)" }}>{env ?? "no environment"}</span>
       </div>
       <div className="right-status">

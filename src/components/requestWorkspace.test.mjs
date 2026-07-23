@@ -82,7 +82,8 @@ test("request navigation keeps sidebar actions and async tab opening on the acti
   assert.match(store, /let activationSequence = 0/);
   assert.match(store, /const activation = \+\+activationSequence;[\s\S]*await api\.reqRead/);
   assert.match(store, /activeTabId: activation === activationSequence \? id : s\.activeTabId/);
-  assert.match(store, /activateTab: \(id\) => \{ activationSequence\+\+; set\(\{ activeTabId: id \}\); \}/);
+  assert.match(store, /activateTab: \(id\) => \{\s*activationSequence\+\+;/);
+  assert.match(store, /const colId = s\.requestTabs\[id\]\?\.collectionId/);
   assert.doesNotMatch(sidebar, /const \[selected, setSelected\]/);
   assert.match(sidebar, /const selected = activeRequest\?\.collectionId/);
 });
@@ -164,12 +165,13 @@ test("responses use the shared theme-aware JSON view", async () => {
   assert.match(format, /syntax-key/);
 });
 
-test("response view tabs include distinct icons", async () => {
+test("response Header and Cookie tabs reuse their editor icons", async () => {
   const view = await readFile(new URL("components/views/RequestView.tsx", root), "utf8");
 
   assert.match(view, /<Icon name="braces" size=\{13\} \/> Pretty/);
   assert.match(view, /<Icon name="code" size=\{13\} \/> Raw/);
-  assert.match(view, /<Icon name="list" size=\{13\} \/> Headers/);
+  assert.match(view, /setResponseTab\("headers"\)}><Icon name="activity" size=\{13\} \/> Headers/);
+  assert.match(view, /setResponseTab\("cookies"\)}><Icon name="list" size=\{13\} \/> Cookies/);
 });
 
 test("response metadata uses theme-aware semantic colors", async () => {
@@ -310,10 +312,8 @@ test("gRPC imports multiple proto files, describes them immediately, and uses re
   assert.match(view, /import \{ open \} from "@tauri-apps\/plugin-dialog"/);
   assert.match(view, /multiple: true/);
   assert.match(view, /extensions: \["proto"\]/);
-  assert.match(view, /await describe\("files", files\)/);
+  assert.match(view, /await describeSource\(src\.id, true\)/);
   assert.match(view, /Import \.proto/);
-  // single Describe in the Proto tab picks the source: files if imported, else reflection from the endpoint
-  assert.match(view, /describe\(grpc\.protoFiles\.length \? "files" : "reflection"\)/);
   // reflection describe lives in the Proto tab now, not the path bar
   assert.match(view, /editorTab === "proto"/);
   assert.doesNotMatch(view, /void describe\("reflection"\)/);
@@ -338,7 +338,7 @@ test("gRPC service and method use searchable comboboxes on the editor tab row", 
   assert.doesNotMatch(view, /grpc-catalog-row/);
   assert.match(combobox, /role="combobox"/);
   assert.match(combobox, /aria-autocomplete="list"/);
-  assert.match(combobox, /toLowerCase\(\)\.includes/);
+  assert.match(combobox, /fuzzyMatch/);
   assert.match(combobox, /event\.key === "ArrowDown"/);
   assert.match(combobox, /event\.key === "Enter"/);
   assert.match(styles, /\.grpc-method-pickers/);

@@ -73,7 +73,7 @@ export function buildGrpcurl(request: Request): string {
   return parts.join(" ");
 }
 
-export function RequestView({ tabId, active }: { tabId: string; active: boolean }) {
+export function RequestView({ tabId, active, embedded = false }: { tabId: string; active: boolean; embedded?: boolean }) {
   const rt = useApp((s) => s.requestTabs[tabId]);
   const updateRequestTab = useApp((s) => s.updateRequestTab);
   const showToast = useApp((s) => s.showToast);
@@ -151,6 +151,10 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
 
   // keep the newest ws message in view
   useEffect(() => { wsLogRef.current?.scrollTo(0, wsLogRef.current.scrollHeight); }, [wsLog.length]);
+
+  // protocol can change from outside (the flow dock's Step-key protocol dropdown), so reset the
+  // editor tab to a tab that exists in the new protocol instead of leaving a stale (e.g. "proto") one
+  useEffect(() => { setEditorTab("body"); }, [rt?.request.protocol]);
 
   // cookies the jar will attach for this url (refresh on tab open / url change / after send)
   const reqUrl = rt?.request.http?.url ?? "";
@@ -352,33 +356,36 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
   const selectedService = catalog?.services.find((s) => s.name === grpc?.service);
   const currentSource = protoSources.find((s) => s.id === grpc?.sourceId) ?? null;
   const grpcMethodDef = selectedService?.methods.find((m) => m.name === grpc?.method) ?? null;
-  const horizontal = requestHorizontal && request.protocol !== "ws";
+  const horizontal = !embedded && requestHorizontal && request.protocol !== "ws";
 
   return (
-    <section className={`content request-screen protocol-${request.protocol} ${horizontal ? "layout-cols" : ""} ${active ? "active" : ""}`}>
-      <div className="protocol-rail">
-        <button type="button" className={`protocol-pill ${request.protocol === "http" ? "active" : ""}`} onClick={() => setProtocol("http")}>
-          <span className="status-dot" /> REST
-        </button>
-        <button type="button" className={`protocol-pill ${request.protocol === "grpc" ? "active" : ""}`} onClick={() => setProtocol("grpc")}>
-          <span className="status-dot orange" /> gRPC
-        </button>
-        <button type="button" className={`protocol-pill ${request.protocol === "ws" ? "active" : ""}`} onClick={() => setProtocol("ws")}>
-          <span className="status-dot purple" /> WebSocket
-        </button>
-        <span className="protocol-spacer" />
-        <input
-          className="path-input"
-          style={{ width: 220 }}
-          value={request.name}
-          onChange={(e) => update({ name: e.target.value })}
-        />
-        {request.protocol !== "ws" && (
-          <button type="button" className="tool-btn icon-only" title={requestHorizontal ? "Stack response below (rows)" : "Response beside editor (columns)"} aria-label="Toggle response layout" onClick={toggleRequestLayout}>
-            <Icon name={requestHorizontal ? "rows" : "panel-right"} />
+    <section className={`content request-screen protocol-${request.protocol} ${embedded ? "embedded" : ""} ${horizontal ? "layout-cols" : ""} ${active ? "active" : ""}`}>
+      {/* embedded (flow dock) drops the whole rail: protocol lives in the Step-key row, name == step key */}
+      {!embedded && (
+        <div className="protocol-rail">
+          <button type="button" className={`protocol-pill ${request.protocol === "http" ? "active" : ""}`} onClick={() => setProtocol("http")}>
+            <span className="status-dot" /> REST
           </button>
-        )}
-      </div>
+          <button type="button" className={`protocol-pill ${request.protocol === "grpc" ? "active" : ""}`} onClick={() => setProtocol("grpc")}>
+            <span className="status-dot orange" /> gRPC
+          </button>
+          <button type="button" className={`protocol-pill ${request.protocol === "ws" ? "active" : ""}`} onClick={() => setProtocol("ws")}>
+            <span className="status-dot purple" /> WebSocket
+          </button>
+          <span className="protocol-spacer" />
+          <input
+            className="path-input"
+            style={{ width: 220 }}
+            value={request.name}
+            onChange={(e) => update({ name: e.target.value })}
+          />
+          {request.protocol !== "ws" && (
+            <button type="button" className="tool-btn icon-only" title={requestHorizontal ? "Stack response below (rows)" : "Response beside editor (columns)"} aria-label="Toggle response layout" onClick={toggleRequestLayout}>
+              <Icon name={requestHorizontal ? "rows" : "panel-right"} />
+            </button>
+          )}
+        </div>
+      )}
 
       {request.protocol === "http" && request.http && (
         <>
@@ -416,7 +423,7 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
               }}
               onBlur={() => setUrlDraft(null)}
               placeholder="{{baseUrl}}/v1/resource" variableNames={variableNames} />
-            <ToolButton className="request-copy" onClick={() => navigator.clipboard?.writeText(buildCurl(request)).then(() => showToast("Copied", "cURL command copied."))}><Icon name="copy" /> Copy cURL</ToolButton>
+            <ToolButton iconOnly={embedded} className="request-copy" title="Copy cURL" onClick={() => navigator.clipboard?.writeText(buildCurl(request)).then(() => showToast("Copied", "cURL command copied."))}><Icon name="copy" />{!embedded && " Copy cURL"}</ToolButton>
             {/* pinned to the bottom edge of the head row; overlay, never a grid child (see .request-screen rows) */}
             <LoadingBar active={rt.running} />
           </div>
@@ -434,6 +441,22 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                       onClick={() => update({ http: { ...request.http!, body: { ...request.http!.body, type: t } } })}>{t}</button>
                   ))}
                 </div>
+              )}
+              {/* narrow-dock fallback: buttons collapse into these selects via @container (embedded only) */}
+              {embedded && (
+                <select className="editor-tab-select" value={editorTab} onChange={(e) => setEditorTab(e.target.value as typeof editorTab)}>
+                  <option value="body">Body</option>
+                  <option value="headers">Headers ({request.http.headers.length})</option>
+                  <option value="params">Params ({request.http.params.length})</option>
+                  <option value="auth">Auth</option>
+                  <option value="cookies">Cookies ({reqCookies.length})</option>
+                </select>
+              )}
+              {embedded && editorTab === "body" && (
+                <select className="body-type-select" value={request.http.body.type}
+                  onChange={(e) => update({ http: { ...request.http!, body: { ...request.http!.body, type: e.target.value as typeof request.http.body.type } } })}>
+                  {["none", "json", "text", "form"].map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
               )}
             </div>
             {editorTab === "body" && (
@@ -534,6 +557,13 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
               <button type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Message</button>
               <button type="button" className={editorTab === "metadata" ? "active" : ""} onClick={() => setEditorTab("metadata")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Metadata <span className="tab-count">{grpc.metadata.length}</span></button>
               <button type="button" className={editorTab === "proto" ? "active" : ""} onClick={() => setEditorTab("proto")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Proto {currentSource && <span className={`proto-dot${descError ? " err" : catalog ? " ok" : ""}`} />}</button>
+              {embedded && (
+                <select className="editor-tab-select" value={editorTab === "metadata" || editorTab === "proto" ? editorTab : "body"} onChange={(e) => setEditorTab(e.target.value as typeof editorTab)}>
+                  <option value="body">Message</option>
+                  <option value="metadata">Metadata ({grpc.metadata.length})</option>
+                  <option value="proto">Proto</option>
+                </select>
+              )}
             </div>
             {editorTab === "body" && (
               <JsonEditor
@@ -724,11 +754,11 @@ export function RequestView({ tabId, active }: { tabId: string; active: boolean 
                       void navigator.clipboard?.writeText(shownTab === "pretty" ? prettyBody : body).then(() => showToast("Copied", "Response body copied."));
                     }}><Icon name="copy" size={13} /> Copy</button>
                 )}
-                <button type="button" className={shownTab === "pretty" ? "active" : ""} onClick={() => setResponseTab("pretty")}><Icon name="braces" size={13} /> Pretty</button>
-                <button type="button" className={shownTab === "raw" ? "active" : ""} onClick={() => setResponseTab("raw")}><Icon name="code" size={13} /> Raw</button>
-                {isHtml && <button type="button" className={shownTab === "preview" ? "active" : ""} onClick={() => setResponseTab("preview")}><Icon name="sparkles" size={13} /> Preview</button>}
-                <button type="button" className={shownTab === "headers" ? "active" : ""} onClick={() => setResponseTab("headers")}><Icon name="list" size={13} /> Headers</button>
-                <button type="button" className={shownTab === "cookies" ? "active" : ""} onClick={() => setResponseTab("cookies")}><Icon name="list" size={13} /> Cookies</button>
+                <button type="button" title="Pretty" className={shownTab === "pretty" ? "active" : ""} onClick={() => setResponseTab("pretty")}><Icon name="braces" size={13} /> Pretty</button>
+                <button type="button" title="Raw" className={shownTab === "raw" ? "active" : ""} onClick={() => setResponseTab("raw")}><Icon name="code" size={13} /> Raw</button>
+                {isHtml && <button type="button" title="Preview" className={shownTab === "preview" ? "active" : ""} onClick={() => setResponseTab("preview")}><Icon name="sparkles" size={13} /> Preview</button>}
+                <button type="button" title="Headers" className={shownTab === "headers" ? "active" : ""} onClick={() => setResponseTab("headers")}><Icon name="activity" size={13} /> Headers</button>
+                <button type="button" title="Cookies" className={shownTab === "cookies" ? "active" : ""} onClick={() => setResponseTab("cookies")}><Icon name="list" size={13} /> Cookies</button>
               </span>
             </div>
             <div className="response-body">

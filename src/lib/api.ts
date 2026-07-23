@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { ConnColor } from "./connColor";
+import type { Flow } from "./flow/types";
 
 export interface KV { key: string; value: string; enabled?: boolean }
 
@@ -63,6 +64,7 @@ export interface CollectionMeta {
   /** user-assigned identity color, drawn as the dot on every tab bound to this collection */
   color?: ConnColor;
 }
+export interface FlowMeta { id: string; name: string; nodeCount: number }
 export interface ReqEntry { relPath: string; name: string; protocol: string; method: string }
 
 export const emptyHttp = (): HttpPart => ({
@@ -136,6 +138,11 @@ export const api = {
   ghConfigure: (repo: string) => invoke<void>("gh_configure", { repo }),
   ghPush: (message: string | null) => invoke<string>("gh_push", { message }),
   ghPull: (force: boolean) => invoke<PullResult>("gh_pull", { force }),
+  flowList: () => invoke<FlowMeta[]>("flow_list"),
+  flowRead: (id: string) => invoke<Flow>("flow_read", { id }),
+  flowWrite: (id: string, flow: Flow) => invoke<void>("flow_write", { id, flow }),
+  flowDelete: (id: string) => invoke<void>("flow_delete", { id }),
+  flowExport: (id: string, dest: string) => invoke<void>("flow_export", { id, dest }),
 };
 
 export interface ScanHit { path: string; reason: string }

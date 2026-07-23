@@ -1,5 +1,6 @@
 mod ai;
 mod collection;
+mod flows;
 mod github;
 mod grpc;
 mod http;
@@ -46,6 +47,7 @@ pub fn run() {
             import::import_curl, import::import_postman, import::import_openapi,
             import::export_postman, import::export_curl, import::col_save_draft,
             ai::ai_scan, ai::ai_generate, ai::ai_generate_cancel,
+            flows::flow_list, flows::flow_read, flows::flow_write, flows::flow_delete, flows::flow_export,
             github::gh_set_token, github::gh_status, github::gh_configure, github::gh_push, github::gh_pull
         ])
         .run(tauri::generate_context!())

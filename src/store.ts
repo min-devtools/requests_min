@@ -1,16 +1,18 @@
 import { create } from "zustand";
 import { api, emptyRequest, type CollectionMeta, type GrpcResponse, type HttpResponse, type ProtoSource, type Request } from "./lib/api";
+import { isFlow, type Flow, type FlowRun } from "./lib/flow/types";
 import type { IconName } from "./ui/Icon";
 import { changeFontSize, clampFontSize, DEFAULT_FONT_SIZE } from "./lib/fontScale";
 import { isThemeId } from "./lib/themes";
 
-export type TabKind = "welcome" | "request" | "collections" | "environments" | "history" | "import-export" | "github-sync" | "settings";
+export type TabKind = "welcome" | "request" | "flow" | "flows" | "collections" | "environments" | "history" | "import-export" | "github-sync" | "settings";
 
 export interface TabDef { id: string; kind: TabKind; title: string; icon: IconName }
 
-const TAB_META: Record<Exclude<TabKind, "request">, { title: string; icon: IconName }> = {
+const TAB_META: Record<Exclude<TabKind, "request" | "flow">, { title: string; icon: IconName }> = {
   welcome: { title: "Welcome", icon: "sparkles" },
   collections: { title: "Collections", icon: "database" },
+  flows: { title: "Flows", icon: "flow" },
   environments: { title: "Environments", icon: "key" },
   history: { title: "Request History", icon: "history" },
   "import-export": { title: "Import / Export", icon: "copy" },
@@ -31,6 +33,27 @@ export interface RequestTabState {
 
 const computeDirty = (rt: Pick<RequestTabState, "request" | "original">) => JSON.stringify(rt.request) !== rt.original;
 
+export interface FlowTabState {
+  flowId: string;
+  flow: Flow;
+  original: string;
+  dirty: boolean;
+  run: FlowRun | null;
+  running: boolean;
+  selectedNodeId: string | null;
+  /** node whose detail drawer is open; selection alone never opens the drawer */
+  panelNodeId: string | null;
+  /** which dock tab shows for the open step — canvas click → "step" editor, report row → "result" (session-only) */
+  dockTab?: "step" | "result";
+  /** graph-edit history for ⌘Z / ⌘⇧Z — snapshots of `flow` before each mutation (not persisted) */
+  undoStack: Flow[];
+  redoStack: Flow[];
+}
+
+const UNDO_CAP = 50;
+
+const computeFlowDirty = (ft: Pick<FlowTabState, "flow" | "original">) => JSON.stringify(ft.flow) !== ft.original;
+
 export interface ToastState { title: string; body?: string; kind?: "ok" | "warn" | "err" }
 export interface HistoryEntry {
   id: string;
@@ -50,7 +73,22 @@ export type DialogRequest =
 
 let tabCounter = 0;
 let activationSequence = 0;
+const pendingFlowReads = new Map<string, Promise<Flow>>();
 const nextId = (prefix: string) => `${prefix}-${++tabCounter}-${Date.now().toString(36)}`;
+
+const readFlowOnce = (flowId: string): Promise<Flow> => {
+  const existing = pendingFlowReads.get(flowId);
+  if (existing) return existing;
+  // flow files are hand-editable JSON; reject malformed shapes before they reach the UI
+  const pending = api.flowRead(flowId).then((flow) => {
+    if (!isFlow(flow)) throw new Error(`Flow "${flowId}" file is malformed`);
+    return flow;
+  });
+  pendingFlowReads.set(flowId, pending);
+  const clear = () => { if (pendingFlowReads.get(flowId) === pending) pendingFlowReads.delete(flowId); };
+  void pending.then(clear, clear);
+  return pending;
+};
 
 const requestIcon = (r: Request): IconName => (r.protocol === "grpc" ? "grpc" : r.protocol === "ws" ? "ws" : "request");
 
@@ -112,10 +150,16 @@ interface AppState {
   tabs: TabDef[];
   activeTabId: string;
   requestTabs: Record<string, RequestTabState>;
-  openTab: (kind: Exclude<TabKind, "request">) => void;
+  flowTabs: Record<string, FlowTabState>;
+  openTab: (kind: Exclude<TabKind, "request" | "flow">) => void;
   openRequestTab: (collectionId: string, relPath: string) => Promise<void>;
+  openFlowTab: (flowId: string) => Promise<void>;
   newRequestTab: (protocol?: Request["protocol"], collectionId?: string | null) => void;
+  ensureFlowNodeEditor: (editorId: string, request: Request, seed?: { response?: HttpResponse | GrpcResponse | null; error?: string | null }) => void;
   updateRequestTab: (tabId: string, patch: Partial<RequestTabState>) => void;
+  updateFlowTab: (tabId: string, patch: Partial<FlowTabState>) => void;
+  undoFlow: (tabId: string) => void;
+  redoFlow: (tabId: string) => void;
   activateTab: (id: string) => void;
   closeTab: (id: string) => void;
   confirmCloseTab: (id: string) => Promise<void>;
@@ -168,7 +212,7 @@ const storedHistory = (): HistoryEntry[] => {
 const SESSION_KEY = "requestsmin:session";
 
 /** Restore last session's open tabs from localStorage (responses are not persisted). */
-const loadSession = (): { tabs: TabDef[]; activeTabId: string; requestTabs: Record<string, RequestTabState> } | null => {
+const loadSession = (): { tabs: TabDef[]; activeTabId: string; requestTabs: Record<string, RequestTabState>; flowTabs: Record<string, FlowTabState> } | null => {
   try {
     const s = JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null");
     if (!s || !Array.isArray(s.tabs) || s.tabs.length === 0) return null;
@@ -185,16 +229,33 @@ const loadSession = (): { tabs: TabDef[]; activeTabId: string; requestTabs: Reco
         response: null, running: false, error: null,
       };
     }
+    const flowTabs: Record<string, FlowTabState> = {};
+    for (const [id, ft] of Object.entries<any>(s.flowTabs ?? {})) {
+      if (typeof ft?.flowId !== "string" || !ft.flowId || !isFlow(ft.flow)) continue;
+      const original = ft.original ?? "";
+      flowTabs[id] = {
+        flowId: ft.flowId,
+        flow: ft.flow,
+        original,
+        dirty: computeFlowDirty({ flow: ft.flow, original }),
+        run: null,
+        running: false,
+        selectedNodeId: null,
+        panelNodeId: null,
+        undoStack: [],
+        redoStack: [],
+      };
+    }
     const tabs: TabDef[] = s.tabs
-      .filter((tab: TabDef) => tab.kind !== "request" || requestTabs[tab.id])
+      .filter((tab: TabDef) => (tab.kind !== "request" || requestTabs[tab.id]) && (tab.kind !== "flow" || flowTabs[tab.id]))
       .map((tab: TabDef) => {
         if ((tab.kind as string) !== "ai-import") return tab;
         return { ...tab, kind: "import-export", ...TAB_META["import-export"] };
       })
-      // keep every request tab (each is unique); dedup only singleton kinds
-      .filter((tab: TabDef, index: number, all: TabDef[]) => tab.kind === "request" || all.findIndex((other) => other.kind === tab.kind) === index);
+      // keep every request/flow tab (each is unique); dedup only singleton kinds
+      .filter((tab: TabDef, index: number, all: TabDef[]) => tab.kind === "request" || tab.kind === "flow" || all.findIndex((other) => other.kind === tab.kind) === index);
     if (!tabs.length) return null;
-    return { tabs, activeTabId: tabs.some((t) => t.id === s.activeTabId) ? s.activeTabId : tabs[0].id, requestTabs };
+    return { tabs, activeTabId: tabs.some((t) => t.id === s.activeTabId) ? s.activeTabId : tabs[0].id, requestTabs, flowTabs };
   } catch { return null; }
 };
 
@@ -325,6 +386,7 @@ export const useApp = create<AppState>((set, get) => ({
   tabs: session?.tabs ?? [{ id: WELCOME_ID, kind: "welcome", title: "Welcome", icon: "sparkles" }],
   activeTabId: session?.activeTabId ?? WELCOME_ID,
   requestTabs: session?.requestTabs ?? {},
+  flowTabs: session?.flowTabs ?? {},
 
   openTab: (kind) => {
     activationSequence++;
@@ -361,6 +423,40 @@ export const useApp = create<AppState>((set, get) => ({
     }));
   },
 
+  openFlowTab: async (flowId) => {
+    const activation = ++activationSequence;
+    const existing = get().tabs.find((t) => t.kind === "flow" && get().flowTabs[t.id]?.flowId === flowId);
+    if (existing) {
+      set({ activeTabId: existing.id });
+      return;
+    }
+    const flow = await readFlowOnce(flowId);
+    const opened = get().tabs.find((t) => t.kind === "flow" && get().flowTabs[t.id]?.flowId === flowId);
+    if (opened) {
+      if (activation === activationSequence) set({ activeTabId: opened.id });
+      return;
+    }
+    const id = nextId("flow");
+    const state: FlowTabState = {
+      flowId,
+      flow,
+      original: JSON.stringify(flow),
+      dirty: false,
+      run: null,
+      running: false,
+      selectedNodeId: null,
+      panelNodeId: null,
+      undoStack: [],
+      redoStack: [],
+    };
+    const tab: TabDef = { id, kind: "flow", title: flow.name, icon: "flow" };
+    set((s) => ({
+      tabs: [...s.tabs, tab],
+      flowTabs: { ...s.flowTabs, [id]: state },
+      activeTabId: activation === activationSequence ? id : s.activeTabId,
+    }));
+  },
+
   newRequestTab: (protocol = "http", collectionId = null) => {
     activationSequence++;
     const request = emptyRequest(protocol);
@@ -375,6 +471,27 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({ tabs: [...s.tabs, tab], requestTabs: { ...s.requestTabs, [id]: state }, activeTabId: id }));
   },
 
+  ensureFlowNodeEditor: (editorId, request, seed) => set((s) => {
+    const existing = s.requestTabs[editorId];
+    if (existing && JSON.stringify(existing.request) === JSON.stringify(request)) return {};
+    const seeded = structuredClone(request);
+    return {
+      requestTabs: {
+        ...s.requestTabs,
+        [editorId]: {
+          collectionId: null,
+          relPath: null,
+          request: seeded,
+          original: JSON.stringify(request),
+          dirty: false,
+          response: existing?.response ?? seed?.response ?? null,
+          running: false,
+          error: existing?.error ?? seed?.error ?? null,
+        },
+      },
+    };
+  }),
+
   updateRequestTab: (tabId, patch) => {
     set((s) => {
       const cur = s.requestTabs[tabId];
@@ -382,7 +499,76 @@ export const useApp = create<AppState>((set, get) => ({
       const next = { ...cur, ...patch };
       if (patch.request !== undefined || patch.original !== undefined) next.dirty = computeDirty(next);
       const tabs = s.tabs.map((t) => (t.id === tabId ? { ...t, title: next.request.name, icon: requestIcon(next.request) } : t));
-      return { requestTabs: { ...s.requestTabs, [tabId]: next }, tabs };
+      const requestTabs = { ...s.requestTabs, [tabId]: next };
+      if (!tabId.startsWith("flowreq:") || patch.request === undefined) return { requestTabs, tabs };
+
+      const owner = Object.keys(s.flowTabs).find((flowTabId) => tabId.startsWith(`flowreq:${flowTabId}:`));
+      if (!owner) return { requestTabs, tabs };
+      const nodeId = tabId.slice(`flowreq:${owner}:`.length);
+      const flowTab = s.flowTabs[owner];
+      const node = flowTab.flow.nodes.find((item) => item.id === nodeId);
+      if (!node || node.type !== "request") return { requestTabs, tabs };
+      const flow = {
+        ...flowTab.flow,
+        nodes: flowTab.flow.nodes.map((item) => item.id === nodeId && item.type === "request"
+          ? { ...item, config: { ...item.config, request: structuredClone(next.request) } }
+          : item),
+      };
+      const updatedFlowTab = { ...flowTab, flow };
+      updatedFlowTab.dirty = computeFlowDirty(updatedFlowTab);
+      return { requestTabs, tabs, flowTabs: { ...s.flowTabs, [owner]: updatedFlowTab } };
+    });
+  },
+
+  updateFlowTab: (tabId, patch) => {
+    set((s) => {
+      const cur = s.flowTabs[tabId];
+      if (!cur) return {};
+      const next = { ...cur, ...patch };
+      if (patch.flow !== undefined || patch.original !== undefined) next.dirty = computeFlowDirty(next);
+      // a real graph edit snapshots the previous flow for undo and invalidates the redo branch
+      if (patch.flow !== undefined && patch.flow !== cur.flow && patch.undoStack === undefined) {
+        next.undoStack = [...(cur.undoStack ?? []), cur.flow].slice(-UNDO_CAP);
+        next.redoStack = [];
+      }
+      const tab = s.tabs.find((item) => item.id === tabId);
+      const tabs = tab && tab.title !== next.flow.name
+        ? s.tabs.map((item) => item.id === tabId ? { ...item, title: next.flow.name } : item)
+        : s.tabs;
+      let requestTabs = s.requestTabs;
+      if (patch.flow !== undefined) {
+        const remainingNodeIds = new Set(next.flow.nodes.map((node) => node.id));
+        const prefix = `flowreq:${tabId}:`;
+        for (const editorId of Object.keys(s.requestTabs)) {
+          if (!editorId.startsWith(prefix) || remainingNodeIds.has(editorId.slice(prefix.length))) continue;
+          if (requestTabs === s.requestTabs) requestTabs = { ...s.requestTabs };
+          delete requestTabs[editorId];
+        }
+        if (next.selectedNodeId && !remainingNodeIds.has(next.selectedNodeId)) next.selectedNodeId = null;
+        if (next.panelNodeId && !remainingNodeIds.has(next.panelNodeId)) next.panelNodeId = null;
+      }
+      return { flowTabs: { ...s.flowTabs, [tabId]: next }, requestTabs, tabs };
+    });
+  },
+
+  undoFlow: (tabId) => {
+    const ft = get().flowTabs[tabId];
+    if (!ft || ft.running || ft.undoStack.length === 0) return;
+    // explicit stacks make updateFlowTab skip its own push while reusing its node/editor cleanup
+    get().updateFlowTab(tabId, {
+      flow: ft.undoStack[ft.undoStack.length - 1],
+      undoStack: ft.undoStack.slice(0, -1),
+      redoStack: [...ft.redoStack, ft.flow].slice(-UNDO_CAP),
+    });
+  },
+
+  redoFlow: (tabId) => {
+    const ft = get().flowTabs[tabId];
+    if (!ft || ft.running || ft.redoStack.length === 0) return;
+    get().updateFlowTab(tabId, {
+      flow: ft.redoStack[ft.redoStack.length - 1],
+      redoStack: ft.redoStack.slice(0, -1),
+      undoStack: [...ft.undoStack, ft.flow].slice(-UNDO_CAP),
     });
   },
 
@@ -397,9 +583,11 @@ export const useApp = create<AppState>((set, get) => ({
   },
   confirmCloseTab: async (id) => {
     const rt = get().requestTabs[id];
-    if (rt?.dirty && !(await get().openConfirm({
+    const ft = get().flowTabs[id];
+    const dirtyName = rt?.dirty ? rt.request.name : ft?.dirty ? ft.flow.name : null;
+    if (dirtyName && !(await get().openConfirm({
       title: "Close without saving?",
-      message: `"${rt.request.name}" has unsaved changes.`,
+      message: `"${dirtyName}" has unsaved changes.`,
       danger: true,
       confirmLabel: "Close",
     }))) return;
@@ -413,8 +601,11 @@ export const useApp = create<AppState>((set, get) => ({
       const tabs = s.tabs.filter((t) => t.id !== id);
       const requestTabs = { ...s.requestTabs };
       delete requestTabs[id];
+      const flowTabs = { ...s.flowTabs };
+      delete flowTabs[id];
+      for (const key of Object.keys(requestTabs)) if (key.startsWith(`flowreq:${id}:`)) delete requestTabs[key];
       const activeTabId = s.activeTabId === id ? tabs[Math.min(index, tabs.length - 1)]?.id ?? WELCOME_ID : s.activeTabId;
-      return { tabs: tabs.length ? tabs : [{ id: WELCOME_ID, kind: "welcome", title: "Welcome", icon: "sparkles" }], requestTabs, activeTabId };
+      return { tabs: tabs.length ? tabs : [{ id: WELCOME_ID, kind: "welcome", title: "Welcome", icon: "sparkles" }], requestTabs, flowTabs, activeTabId };
     });
   },
   deleteRequest: async (collectionId, relPath) => {
@@ -480,7 +671,13 @@ export const useApp = create<AppState>((set, get) => ({
       next.dirty = computeDirty(next);
       requestTabs = { ...s.requestTabs, [id]: next };
     }
-    return { tabs: s.tabs.map((t) => t.id === id ? { ...t, title: clean } : t), requestTabs };
+    let flowTabs = s.flowTabs;
+    if (s.flowTabs[id]) {
+      const next = { ...s.flowTabs[id], flow: { ...s.flowTabs[id].flow, name: clean } };
+      next.dirty = computeFlowDirty(next);
+      flowTabs = { ...s.flowTabs, [id]: next };
+    }
+    return { tabs: s.tabs.map((t) => t.id === id ? { ...t, title: clean } : t), requestTabs, flowTabs };
   }),
   reorderTab: (id, beforeId) => set((s) => {
     const tab = s.tabs.find((t) => t.id === id);
@@ -517,15 +714,20 @@ const saveSession = () => {
   localStorage.setItem(SESSION_KEY, JSON.stringify({
     tabs: s.tabs,
     activeTabId: s.activeTabId,
-    requestTabs: Object.fromEntries(Object.entries(s.requestTabs).map(([id, rt]) => [id, {
-      collectionId: rt.collectionId, relPath: rt.relPath, request: rt.request, original: rt.original,
+    requestTabs: Object.fromEntries(Object.entries(s.requestTabs)
+      .filter(([id]) => !id.startsWith("flowreq:"))
+      .map(([id, rt]) => [id, {
+        collectionId: rt.collectionId, relPath: rt.relPath, request: rt.request, original: rt.original,
+      }])),
+    flowTabs: Object.fromEntries(Object.entries(s.flowTabs).map(([id, ft]) => [id, {
+      flowId: ft.flowId, flow: ft.flow, original: ft.original,
     }])),
   }));
 };
 let sessionTimer: number | undefined;
 let prevSession = useApp.getState();
 useApp.subscribe((s) => {
-  if (s.tabs !== prevSession.tabs || s.activeTabId !== prevSession.activeTabId || s.requestTabs !== prevSession.requestTabs) {
+  if (s.tabs !== prevSession.tabs || s.activeTabId !== prevSession.activeTabId || s.requestTabs !== prevSession.requestTabs || s.flowTabs !== prevSession.flowTabs) {
     window.clearTimeout(sessionTimer);
     sessionTimer = window.setTimeout(saveSession, 400);
   }
