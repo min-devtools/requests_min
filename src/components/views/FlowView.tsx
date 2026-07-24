@@ -1,8 +1,10 @@
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { autoLayoutNodes, createDelayFlowNode, createTransformFlowNode } from "../../lib/flow/canvas";
 import { runFlow } from "../../lib/flow/engine";
 import { saveActiveFlow } from "../../lib/flow/flowActions";
+import { fuzzyMatch, highlight } from "../../lib/fuzzy";
 import { useApp } from "../../store";
-import { Icon } from "../../ui/Icon";
+import { Icon, type IconName } from "../../ui/Icon";
 import { FlowCanvas } from "../flow/FlowCanvas";
 import { promptDelayMs } from "../flow/nodeActions";
 import { RunReport } from "../flow/RunReport";
@@ -10,9 +12,128 @@ import { RunReport } from "../flow/RunReport";
 const nextNodeId = () =>
   `n-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+interface ActionItem { key: "delay" | "transform"; label: string; icon: IconName }
+
+function renderHL(text: string, indices: number[]): ReactNode {
+  if (!indices.length) return text;
+  return highlight(text, indices).map((p, i) =>
+    p.mark ? <mark key={i}>{p.text}</mark> : <Fragment key={i}>{p.text}</Fragment>,
+  );
+}
+
+function ActionsMenu({ disabled, onPick }: { disabled: boolean; onPick: (key: ActionItem["key"]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const items: ActionItem[] = [
+    { key: "delay", label: "Add delay", icon: "timer" },
+    { key: "transform", label: "Add transform", icon: "braces" },
+  ];
+  const filtered = items
+    .map((item) => ({ item, match: fuzzyMatch(query, item.label) }))
+    .filter((x) => x.match !== null)
+    .sort((a, b) => (b.match?.score ?? 0) - (a.match?.score ?? 0))
+    .map((x) => x.item);
+
+  useEffect(() => {
+    if (open) {
+      setQuery("");
+      setActive(0);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const choose = (item: ActionItem) => {
+    setOpen(false);
+    onPick(item.key);
+  };
+
+  const onKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActive((i) => Math.min(i + 1, filtered.length - 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive((i) => Math.max(i - 1, 0));
+    } else if (event.key === "Enter" && filtered[active]) {
+      event.preventDefault();
+      choose(filtered[active]);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="actions-menu" ref={wrapRef}>
+      <button
+        type="button"
+        className="tool-btn"
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <Icon name="plus" />
+        Actions
+        <Icon name="chevron-down" size={13} />
+      </button>
+      {open && (
+        <div className="actions-menu-pop" role="menu">
+          <div className="actions-menu-search">
+            <Icon name="search" size={13} />
+            <input
+              ref={inputRef}
+              value={query}
+              placeholder="Search actions…"
+              onChange={(e) => { setQuery(e.target.value); setActive(0); }}
+              onKeyDown={onKey}
+            />
+          </div>
+          <div className="actions-menu-list">
+            {filtered.map((item, i) => {
+              const m = fuzzyMatch(query, item.label);
+              return (
+                <div
+                  key={item.key}
+                  role="menuitem"
+                  className={`actions-menu-item ${i === active ? "active" : ""}`}
+                  onMouseEnter={() => setActive(i)}
+                  onMouseDown={(e) => { e.preventDefault(); choose(item); }}
+                >
+                  <Icon name={item.icon} size={14} />
+                  <span>{renderHL(item.label, m?.indices ?? [])}</span>
+                </div>
+              );
+            })}
+            {filtered.length === 0 && <div className="actions-menu-empty">No actions</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function FlowView({ tabId, active }: { tabId: string; active: boolean }) {
   const ft = useApp((state) => state.flowTabs[tabId]);
   const updateFlowTab = useApp((state) => state.updateFlowTab);
+  const leftCollapsed = useApp((state) => state.leftCollapsed);
+  const rightCollapsed = useApp((state) => state.rightCollapsed);
+  const toggleLeft = useApp((state) => state.toggleLeft);
+  const toggleRight = useApp((state) => state.toggleRight);
+  const isCanvasFullscreen = leftCollapsed && rightCollapsed;
 
   if (!ft) return null;
 
@@ -70,26 +191,41 @@ export function FlowView({ tabId, active }: { tabId: string; active: boolean }) 
         </span>
         {ft.running && <span className="flow-running-badge">Running…</span>}
         <span className="spacer" />
-        <button type="button" className="tool-btn" onClick={arrange} disabled={ft.running || ft.flow.nodes.length === 0}>
+        <ActionsMenu
+          disabled={ft.running}
+          onPick={(key) => {
+            if (key === "delay") void addDelay();
+            else addTransform();
+          }}
+        />
+        <button type="button" className="tool-btn icon-only" onClick={arrange} disabled={ft.running || ft.flow.nodes.length === 0} title="Arrange">
           <Icon name="wand" />
-          Arrange
-        </button>
-        <button type="button" className="tool-btn" onClick={() => void addDelay()} disabled={ft.running}>
-          <Icon name="timer" />
-          Add delay
-        </button>
-        <button type="button" className="tool-btn" onClick={addTransform} disabled={ft.running}>
-          <Icon name="braces" />
-          Add transform
         </button>
         <button
           type="button"
-          className="tool-btn"
+          className="tool-btn icon-only"
+          onClick={() => {
+            if (isCanvasFullscreen) {
+              if (leftCollapsed) toggleLeft();
+              if (rightCollapsed) toggleRight();
+            } else {
+              if (!leftCollapsed) toggleLeft();
+              if (!rightCollapsed) toggleRight();
+            }
+          }}
+          title={isCanvasFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          aria-pressed={isCanvasFullscreen}
+        >
+          <Icon name="fullscreen" />
+        </button>
+        <button
+          type="button"
+          className="tool-btn icon-only"
           onClick={() => void saveActiveFlow().catch((error) => useApp.getState().showToast("Save failed", String(error), "err"))}
           disabled={ft.running || !ft.dirty}
+          title="Save"
         >
           <Icon name="save" />
-          Save
         </button>
       </div>
       <div className="flow-body">

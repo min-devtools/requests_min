@@ -793,6 +793,53 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
 .flow-saved { color: var(--text-muted); }
 .flow-running-badge { color: var(--accent-primary); border-color: color-mix(in oklab, var(--accent-primary), transparent 55%); }
 
+.actions-menu { position: relative; display: inline-flex; }
+.actions-menu > .tool-btn { gap: 6px; }
+.actions-menu-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 220px;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-popover, var(--surface-panel));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+}
+.actions-menu-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+  margin-bottom: 4px;
+}
+.actions-menu-search input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  outline: none;
+}
+.actions-menu-list { display: grid; gap: 1px; max-height: 260px; overflow: auto; }
+.actions-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: default;
+  color: var(--text-primary);
+}
+.actions-menu-item.active { background: var(--pane-3, var(--surface-window)); }
+.actions-menu-item mark { background: transparent; color: var(--accent-primary); }
+.actions-menu-empty { padding: 10px; color: var(--text-muted); font-size: 0.85rem; text-align: center; }
+
 .flow-canvas-wrap {
   min-width: 0;
   min-height: 0;
@@ -926,15 +973,29 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   flex-wrap: wrap;
 }
 
-.flow-node-editor .request-screen.embedded .protocol-rail .path-input { min-width: 100px; }
-.flow-node-editor .request-screen.embedded .request-head { flex-wrap: wrap; }
-.flow-node-editor .request-screen.embedded .request-head .query-path-input { min-width: 180px; }
-/* container so the tab row can trade buttons for a dropdown when the dock gets narrow */
-.flow-node-editor .request-screen.embedded .editor-pane { container: reqedit / inline-size; }
-.flow-node-editor .request-screen.embedded .editor-tabs { flex-wrap: nowrap; }
-.flow-node-editor .request-screen.embedded .editor-tabs > button { height: 34px; min-width: 0; white-space: nowrap; }
-.flow-node-editor .request-screen.embedded .body-type-tabs { padding-block: 4px; }
-/* the dropdown fallbacks only exist embedded; hidden until the container query trips */
+.request-screen.embedded .protocol-rail .path-input,
+.request-screen.layout-cols .protocol-rail .path-input { min-width: 100px; }
+
+.request-screen.embedded .request-head,
+.request-screen.layout-cols .request-head { flex-wrap: wrap; }
+
+.request-screen.embedded .request-head .query-path-input,
+.request-screen.layout-cols .request-head .query-path-input { min-width: 140px; }
+
+/* container so the tab row can trade buttons for a dropdown when the editor/dock gets narrow */
+.request-screen.embedded .editor-pane,
+.request-screen.layout-cols .editor-pane { container: reqedit / inline-size; }
+
+.request-screen.embedded .editor-tabs,
+.request-screen.layout-cols .editor-tabs { flex-wrap: nowrap; }
+
+.request-screen.embedded .editor-tabs > button,
+.request-screen.layout-cols .editor-tabs > button { height: 34px; min-width: 0; white-space: nowrap; }
+
+.request-screen.embedded .body-type-tabs,
+.request-screen.layout-cols .body-type-tabs { padding-block: 4px; }
+
+/* the dropdown fallbacks only exist embedded or in column mode; hidden until the container query trips */
 .editor-tab-select, .body-type-select {
   display: none;
   height: 28px;
@@ -960,11 +1021,20 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   .editor-tabs > .editor-tab-select { display: inline-flex; }
 }
 /* response head sits in a fixed 42px grid row — compact to icon-only instead of wrapping */
-.flow-node-editor .request-screen.embedded .response-head { gap: 8px; min-width: 0; }
-.flow-node-editor .request-screen.embedded .response-meta { gap: 3px; min-width: 0; }
-.flow-node-editor .request-screen.embedded .response-meta button { min-width: 30px; padding: 0 7px; gap: 0; font-size: 0; }
-.flow-node-editor .request-screen.embedded .metric-size { display: none; }
-.flow-node-editor .request-screen.embedded .json-response-tools { flex-wrap: wrap; row-gap: 4px; }
+.request-screen.embedded .response-head,
+.request-screen.layout-cols .response-head { gap: 8px; min-width: 0; }
+
+.request-screen.embedded .response-meta,
+.request-screen.layout-cols .response-meta { gap: 3px; min-width: 0; }
+
+.request-screen.embedded .response-meta button,
+.request-screen.layout-cols .response-meta button { min-width: 30px; padding: 0 7px; gap: 0; font-size: 0; }
+
+.request-screen.embedded .metric-size,
+.request-screen.layout-cols .metric-size { display: none; }
+
+.request-screen.embedded .json-response-tools,
+.request-screen.layout-cols .json-response-tools { flex-wrap: wrap; row-gap: 4px; }
 
 .flow-canvas-wrap > .react-flow { width: 100%; height: 100%; }
 .flow-canvas-wrap .react-flow__pane { cursor: default; }
@@ -1159,7 +1229,7 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   gap: 10px;
   padding: 6px 10px;
   color: var(--text-secondary);
-  cursor: pointer;
+  cursor: default;
   user-select: none;
 }
 
@@ -1240,7 +1310,7 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   border-radius: 0;
   color: var(--text-secondary);
   background: transparent;
-  cursor: pointer;
+  cursor: default;
   font: inherit;
 }
 

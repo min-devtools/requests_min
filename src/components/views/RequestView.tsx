@@ -452,7 +452,7 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
           />
           {request.protocol !== "ws" && (
             <button type="button" className="tool-btn icon-only" title={requestHorizontal ? "Stack response below (rows)" : "Response beside editor (columns)"} aria-label="Toggle response layout" onClick={toggleRequestLayout}>
-              <Icon name={requestHorizontal ? "rows" : "panel-right"} />
+              <Icon name={requestHorizontal ? "panel-bottom" : "panel-right"} />
             </button>
           )}
         </div>
@@ -494,7 +494,9 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
               }}
               onBlur={() => setUrlDraft(null)}
               placeholder="{{baseUrl}}/v1/resource" variableNames={variableNames} />
-            <ToolButton iconOnly={embedded} className="request-copy" title="Copy cURL" onClick={() => navigator.clipboard?.writeText(buildCurl(request)).then(() => showToast("Copied", "cURL command copied."))}><Icon name="copy" />{!embedded && " Copy cURL"}</ToolButton>
+            <ToolButton iconOnly={embedded || horizontal} className="request-copy" title="Copy cURL" onClick={() => navigator.clipboard?.writeText(buildCurl(request)).then(() => showToast("Copied", "cURL command copied."))}>
+              <Icon name="copy" />{!(embedded || horizontal) && " Copy cURL"}
+            </ToolButton>
             {/* pinned to the bottom edge of the head row; overlay, never a grid child (see .request-screen rows) */}
             <LoadingBar active={rt.running} />
           </div>
@@ -513,8 +515,8 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
                   ))}
                 </div>
               )}
-              {/* narrow-dock fallback: buttons collapse into these selects via @container (embedded only) */}
-              {embedded && (
+              {/* narrow-dock / column-mode fallback: buttons collapse into these selects via @container */}
+              {(embedded || horizontal) && (
                 <select className="editor-tab-select" value={editorTab} onChange={(e) => setEditorTab(e.target.value as typeof editorTab)}>
                   <option value="body">Body</option>
                   <option value="headers">Headers ({request.http.headers.length})</option>
@@ -523,7 +525,7 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
                   <option value="cookies">Cookies ({reqCookies.length})</option>
                 </select>
               )}
-              {embedded && editorTab === "body" && (
+              {(embedded || horizontal) && editorTab === "body" && (
                 <select className="body-type-select" value={request.http.body.type}
                   onChange={(e) => update({ http: { ...request.http!, body: { ...request.http!.body, type: e.target.value as typeof request.http.body.type } } })}>
                   {["none", "json", "text", "form"].map((t) => <option key={t} value={t}>{t}</option>)}
@@ -640,7 +642,7 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
               <button type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Message</button>
               <button type="button" className={editorTab === "metadata" ? "active" : ""} onClick={() => setEditorTab("metadata")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Metadata <span className="tab-count">{grpc.metadata.length}</span></button>
               <button type="button" className={editorTab === "proto" ? "active" : ""} onClick={() => setEditorTab("proto")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Proto {currentSource && <span className={`proto-dot${descError ? " err" : catalog ? " ok" : ""}`} />}</button>
-              {embedded && (
+              {(embedded || horizontal) && (
                 <select className="editor-tab-select" value={editorTab === "metadata" || editorTab === "proto" ? editorTab : "body"} onChange={(e) => setEditorTab(e.target.value as typeof editorTab)}>
                   <option value="body">Message</option>
                   <option value="metadata">Metadata ({grpc.metadata.length})</option>
