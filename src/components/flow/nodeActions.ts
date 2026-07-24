@@ -1,4 +1,5 @@
 import { removeGraphElements } from "../../lib/flow/canvas";
+import { MAX_LOOP_COUNT } from "../../lib/flow/types";
 import { useApp } from "../../store";
 
 /** Confirm-then-delete for a flow node; also drops every edge touching it. */
@@ -47,6 +48,41 @@ export async function editDelayNode(tabId: string, nodeId: string): Promise<void
       ...current.flow,
       nodes: current.flow.nodes.map((item) => item.id === nodeId && item.type === "delay"
         ? { ...item, config: { ms } }
+        : item),
+    },
+  });
+}
+
+/** Modal prompt for a loop iteration count; null means cancelled or invalid. */
+export async function promptLoopCount(title: string, defaultCount: number): Promise<number | null> {
+  const state = useApp.getState();
+  const raw = await state.openDialog({
+    title,
+    message: `How many times should the loop body run in total? (${1}–${MAX_LOOP_COUNT})`,
+    defaultValue: String(defaultCount),
+    confirmLabel: title === "Add loop" ? "Add" : "Save",
+  });
+  if (raw === null) return null;
+  const count = Math.floor(Number(raw.trim()));
+  if (!Number.isInteger(count) || count < 1 || count > MAX_LOOP_COUNT) {
+    state.showToast("Invalid loop count", `Enter a whole number from 1 to ${MAX_LOOP_COUNT}.`, "warn");
+    return null;
+  }
+  return count;
+}
+
+export async function editLoopNode(tabId: string, nodeId: string): Promise<void> {
+  const node = useApp.getState().flowTabs[tabId]?.flow.nodes.find((item) => item.id === nodeId);
+  if (!node || node.type !== "loop") return;
+  const count = await promptLoopCount("Edit loop", node.config.count);
+  if (count === null) return;
+  const current = useApp.getState().flowTabs[tabId];
+  if (!current || current.running) return;
+  useApp.getState().updateFlowTab(tabId, {
+    flow: {
+      ...current.flow,
+      nodes: current.flow.nodes.map((item) => item.id === nodeId && item.type === "loop"
+        ? { ...item, config: { count } }
         : item),
     },
   });

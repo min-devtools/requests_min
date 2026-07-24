@@ -92,7 +92,7 @@ export function SettingsView({ active }: { active: boolean }) {
           </div>
           <div className="settings-row">
             <span className="settings-icon"><Icon name="keyboard" size={15} /></span>
-            <div className="settings-copy"><strong>Vim mode</strong><span>Modal editing via monaco-vim in the query editor. Toggle also lives in the editor footer.</span></div>
+            <div className="settings-copy"><strong>Vim mode</strong><span>Modal editing via monaco-vim in the query editor.</span></div>
             <div className="settings-control"><label className="switch"><input type="checkbox" checked={vimMode} onChange={() => { toggleVimMode(); showToast("Vim mode", vimMode ? "Disabled." : "Enabled — NORMAL mode in query editor."); }} /><span /></label></div>
           </div>
         </section>

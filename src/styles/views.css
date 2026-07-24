@@ -887,6 +887,18 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
 
 .flow-panel-hint { padding: 14px; }
 
+/* loop step detail: pass count + the in/out anchor legend */
+.flow-loop-body { padding: 12px; display: grid; gap: 14px; align-content: start; }
+.flow-loop-passes { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 0.8462rem; }
+.flow-loop-passes strong { color: var(--orange, var(--accent-primary)); font: 700 1rem/1 var(--font-mono); }
+.flow-loop-passes .tool-btn { margin-left: auto; }
+.flow-loop-hint { display: grid; gap: 8px; }
+.flow-loop-hint-row { display: flex; gap: 8px; align-items: flex-start; color: var(--text-secondary); font-size: 0.8462rem; line-height: 1.45; }
+.flow-loop-hint-note { margin: 0; color: var(--text-muted); font-size: 0.7692rem; line-height: 1.5; }
+.flow-dot { flex: none; width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; }
+.flow-dot-in { background: var(--accent-primary); }
+.flow-dot-out { background: var(--orange, var(--accent-primary)); }
+
 .flow-node-panel-head {
   min-height: 44px;
   display: flex;
@@ -1168,6 +1180,49 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
 /* transform node: purple accent (JS), monospace code hint */
 .flow-node-transform .flow-node-kind { color: var(--purple, var(--accent-primary)); }
 .flow-node-transform .flow-node-head > svg { color: var(--purple, var(--accent-primary)); }
+.flow-node-loop .flow-node-kind { color: var(--orange, var(--accent-primary)); }
+.flow-node-loop .flow-node-head > svg { color: var(--orange, var(--accent-primary)); }
+
+/* loop anchors are color-coded: blue = in (wire enters), orange = out (loop-back/continue) */
+.flow-node-loop .react-flow__handle.handle-in { background: var(--accent-primary); }
+.flow-node-loop .react-flow__handle.handle-out { background: var(--orange, var(--accent-primary)); }
+
+/* live countdown pill on a looping block: remaining body passes, ticking down */
+.flow-node-loop-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--orange, var(--accent-primary));
+  color: #fff;
+  font: 700 0.6923rem/1 var(--font-mono);
+}
+
+/* while a wire is being dragged, every anchor that can accept it pulses scale + color */
+.is-linking-from-source .react-flow__handle.handle-in,
+.is-linking-from-target .react-flow__handle.handle-out {
+  pointer-events: auto;
+  animation: flow-handle-pulse 0.85s ease-in-out infinite;
+}
+/* the hovered, actually-valid anchor locks in green */
+.react-flow__handle.valid {
+  background: var(--status-success);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--status-success), transparent 70%);
+}
+@keyframes flow-handle-pulse {
+  /* scale + ring only, no background: loop in/out colors stay readable while pulsing */
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent-primary), transparent 55%);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.15);
+    box-shadow: 0 0 0 5px color-mix(in oklab, var(--accent-primary), transparent 84%);
+  }
+}
 .flow-node-code {
   margin-top: 7px;
   overflow: hidden;
@@ -1190,6 +1245,8 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   overflow: auto;
 }
 .flow-transform-io { display: flex; flex-direction: column; gap: 6px; }
+.flow-transform-io > summary { cursor: pointer; user-select: none; }
+.flow-transform-io > summary:hover { color: var(--text-primary); }
 .flow-transform-io .inspector-section-label,
 .flow-transform-code .inspector-section-label { gap: 5px; }
 .flow-transform-io .json-dock {
@@ -1361,6 +1418,37 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* loop pass pager in the run report summary: ‹ [n] / N passes › with a jump-to-page input */
+.flow-report-pager { display: inline-flex; align-items: center; gap: 4px; }
+.flow-report-pager button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.flow-report-pager button:disabled { opacity: 0.4; cursor: default; }
+.flow-report-pager button:not(:disabled):hover { color: var(--accent-primary); border-color: var(--accent-primary); }
+.flow-report-pager input {
+  width: 34px;
+  height: 20px;
+  padding: 0 2px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font: 650 0.6923rem/1 var(--font-mono);
+  text-align: center;
+}
+.flow-report-pager input:focus { border-color: var(--accent-primary); outline: none; }
+.flow-report-pager-total { color: var(--text-muted); }
 
 .flow-report-code {
   padding: 1px 7px;

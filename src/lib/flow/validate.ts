@@ -1,4 +1,4 @@
-import { isRequestNode } from "./types.ts";
+import { isRequestNode, MAX_LOOP_COUNT } from "./types.ts";
 import type { Flow, FlowEdge, FlowNode } from "./types.ts";
 
 export interface FlowIssue {
@@ -24,10 +24,109 @@ const isValidTransformConfig = (config: unknown): boolean => {
   return typeof (config as Record<string, unknown>).code === "string";
 };
 
+const isValidLoopConfig = (config: unknown): boolean => {
+  if (config === null || typeof config !== "object" || Array.isArray(config)) return false;
+  const count = (config as Record<string, unknown>).count;
+  return typeof count === "number"
+    && Number.isInteger(count)
+    && count >= 1
+    && count <= MAX_LOOP_COUNT;
+};
+
 const STEP_KEY_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export const isStepKey = (key: unknown): key is string =>
   typeof key === "string" && STEP_KEY_PATTERN.test(key);
+
+const reachesViaEdges = (edges: readonly FlowEdge[], from: string, to: string): boolean => {
+  const outgoing = new Map<string, string[]>();
+  for (const edge of edges) {
+    outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge.target]);
+  }
+  const seen = new Set<string>([from]);
+  const pending = [from];
+  while (pending.length > 0) {
+    const id = pending.pop()!;
+    for (const next of outgoing.get(id) ?? []) {
+      if (next === to) return true;
+      if (!seen.has(next)) {
+        seen.add(next);
+        pending.push(next);
+      }
+    }
+  }
+  return false;
+};
+
+/** Structural subset of Flow that graph walkers need (lets canvas helpers reuse them). */
+export type FlowGraph = { nodes: readonly FlowNode[]; edges: readonly FlowEdge[] };
+
+/**
+ * Loop back-edges per loop node: an outgoing edge L→T counts as a back-edge when T can
+ * still reach L without that edge — i.e. the edge closes a circle body…→L→T(→body).
+ */
+export function loopBackEdgeMap(graph: FlowGraph): Map<string, { edgeId: string; targetId: string }[]> {
+  const map = new Map<string, { edgeId: string; targetId: string }[]>();
+  for (const node of graph.nodes) {
+    if (node.type !== "loop") continue;
+    const backs: { edgeId: string; targetId: string }[] = [];
+    for (const edge of graph.edges) {
+      if (edge.source !== node.id) continue;
+      const rest = graph.edges.filter((candidate) => candidate.id !== edge.id);
+      if (reachesViaEdges(rest, edge.target, node.id)) {
+        backs.push({ edgeId: edge.id, targetId: edge.target });
+      }
+    }
+    map.set(node.id, backs);
+  }
+  return map;
+}
+
+/** Graph edges minus loop back-edges — the acyclic graph the scheduler and validators walk. */
+export function dagEdges(graph: FlowGraph): FlowEdge[] {
+  const backEdgeIds = new Set<string>();
+  for (const backs of loopBackEdgeMap(graph).values()) {
+    for (const back of backs) backEdgeIds.add(back.edgeId);
+  }
+  return graph.edges.filter((edge) => !backEdgeIds.has(edge.id));
+}
+
+/**
+ * Topo-ordered body of a loop: the back-edge target plus every node that is both reachable
+ * from it and able to reach the loop — the segment the loop re-runs count-1 extra times.
+ */
+export function loopBodyNodes(graph: FlowGraph, loopId: string): string[] {
+  const target = loopBackEdgeMap(graph).get(loopId)?.[0]?.targetId;
+  if (target === undefined) return [];
+  const edges = dagEdges(graph);
+
+  const descendants = new Set<string>([target]);
+  const forward = [target];
+  while (forward.length > 0) {
+    const id = forward.pop()!;
+    for (const edge of edges) {
+      if (edge.source !== id || descendants.has(edge.target)) continue;
+      descendants.add(edge.target);
+      forward.push(edge.target);
+    }
+  }
+
+  const ancestors = new Set<string>();
+  const backward = [loopId];
+  while (backward.length > 0) {
+    const id = backward.pop()!;
+    for (const edge of edges) {
+      if (edge.target !== id || ancestors.has(edge.source)) continue;
+      ancestors.add(edge.source);
+      backward.push(edge.source);
+    }
+  }
+
+  const body = new Set([...descendants].filter((id) => ancestors.has(id)));
+  const order = topoOrder(graph.nodes, edges);
+  if (!order) return [];
+  return order.filter((id) => body.has(id));
+}
 
 /** Kahn topological sort with a queue seeded in input-node order. */
 export function topoOrder(
@@ -74,12 +173,41 @@ export function validateFlow(flow: Flow): FlowIssue[] {
   for (const id of duplicateNodeIds) {
     issues.push({ level: "error", message: `Duplicate node id "${id}"` });
   }
+  // Cycles are only legal through a loop step's back-edge; everything else still deadlocks.
+  const graphEdges = dagEdges(flow);
   if (
     flow.nodes.length > 0
     && duplicateNodeIds.length === 0
-    && topoOrder(flow.nodes, flow.edges) === null
+    && topoOrder(flow.nodes, graphEdges) === null
   ) {
     issues.push({ level: "error", message: "Flow has a cycle" });
+  }
+
+  const loopBacks = loopBackEdgeMap(flow);
+  for (const node of flow.nodes) {
+    if (node.type !== "loop") continue;
+    const backs = loopBacks.get(node.id) ?? [];
+    if (backs.length === 0) {
+      issues.push({
+        level: "error",
+        nodeId: node.id,
+        message: `Step "${node.key}": Loop needs a connection from it back to an earlier step`,
+      });
+    } else if (backs.length > 1) {
+      issues.push({
+        level: "error",
+        nodeId: node.id,
+        message: `Step "${node.key}": Loop has multiple loop-back connections; keep exactly one`,
+      });
+    } else if (loopBodyNodes(flow, node.id).length === 0) {
+      issues.push({
+        level: "error",
+        nodeId: node.id,
+        message: `Step "${node.key}": Loop body is empty`,
+      });
+    }
+    // Note: genuinely nested loops always surface above as "multiple loop-back connections" —
+    // a loop inside another loop's re-run segment necessarily closes a second circle.
   }
 
   const keyCounts = new Map<string, number>();
@@ -107,7 +235,7 @@ export function validateFlow(flow: Flow): FlowIssue[] {
 
   const connections = new Map<string, { edge: FlowEdge; count: number }>();
   for (const edge of flow.edges) {
-    const connectionKey = JSON.stringify([edge.source, edge.target, edge.sourceHandle ?? null]);
+    const connectionKey = JSON.stringify([edge.source, edge.target, edge.sourceHandle ?? null, edge.targetHandle ?? null]);
     const existing = connections.get(connectionKey);
     if (existing) existing.count += 1;
     else connections.set(connectionKey, { edge, count: 1 });
@@ -160,6 +288,12 @@ export function validateFlow(flow: Flow): FlowIssue[] {
         level: "error",
         nodeId: node.id,
         message: `Step "${node.key}": Invalid delay configuration`,
+      });
+    } else if (node.type === "loop" && !isValidLoopConfig(node.config)) {
+      issues.push({
+        level: "error",
+        nodeId: node.id,
+        message: `Step "${node.key}": Invalid loop configuration; count must be a whole number from 1 to ${MAX_LOOP_COUNT}`,
       });
     } else if (node.type === "transform" && !isValidTransformConfig(node.config)) {
       issues.push({

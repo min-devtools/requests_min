@@ -22,7 +22,7 @@ export function RequestNode({ data, isConnectable }: NodeProps<RequestCanvasNode
 
   return (
     <div className={`flow-node flow-node-request status-${data.status}${data.stale ? " is-stale" : ""}`}>
-      <Handle type="target" position={Position.Left} isConnectable={isConnectable} />
+      <Handle type="target" position={Position.Left} className="handle-in" isConnectable={isConnectable} />
       <div className="flow-node-head">
         <Icon name={request.protocol === "grpc" ? "grpc" : "request"} size={13} />
         <span className={`method-tag ${method}`}>{method}</span>
@@ -59,7 +59,7 @@ export function RequestNode({ data, isConnectable }: NodeProps<RequestCanvasNode
       <div className="flow-node-sub">{request.name}</div>
       <div className="flow-node-target" title={target}>{target || "No target"}</div>
       <div className="flow-node-status">{data.status}{data.stale ? " · stale" : ""}</div>
-      <Handle type="source" position={Position.Right} isConnectable={isConnectable} />
+      <Handle type="source" position={Position.Right} className="handle-out" isConnectable={isConnectable} />
     </div>
   );
 }

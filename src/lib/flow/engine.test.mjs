@@ -652,3 +652,155 @@ test("live binding cancel reaches the active executor token", async () => {
   assert.equal(h.flowTab.run.steps.after.status, "skipped");
   assert.equal(h.httpCalls.length, 0);
 });
+
+const loopNode = (id, key, count) => ({
+  id,
+  key,
+  type: "loop",
+  position: { x: 0, y: 0 },
+  config: { count },
+});
+
+test("loop re-runs its body count-1 extra times and downstream sees the latest pass", async () => {
+  const body = httpNode("body", "poll");
+  const loop = loopNode("loop", "again", 3);
+  const after = httpNode("after", "done", "https://example.test/final-{{steps.poll.response.body.n}}");
+  const h = await makeHarness({
+    flow: makeFlow([body, loop, after], [edge("body", "loop"), edge("loop", "body"), edge("loop", "after")]),
+  });
+  h.setHttp(async (_env, _request, index) => httpResponse(200, JSON.stringify({ n: index })));
+  await h.executor.runFlow("tab-1");
+
+  assert.equal(h.httpCalls.length, 4); // body x3 passes + after once
+  assert.equal(h.httpCalls[3].request.http.url, "https://example.test/final-2");
+  assert.equal(h.flowTab.run.status, "success");
+  assert.equal(h.flowTab.run.steps.loop.status, "success");
+});
+
+test("loop with count 1 runs its body exactly once", async () => {
+  const body = httpNode("body", "once");
+  const loop = loopNode("loop", "single", 1);
+  const h = await makeHarness({
+    flow: makeFlow([body, loop], [edge("body", "loop"), edge("loop", "body")]),
+  });
+  await h.executor.runFlow("tab-1");
+
+  assert.equal(h.httpCalls.length, 1);
+  assert.equal(h.flowTab.run.steps.loop.status, "success");
+  assert.equal(h.flowTab.run.status, "success");
+});
+
+test("a failed body step aborts the loop and skips its exit steps", async () => {
+  const body = httpNode("body", "fragile");
+  const loop = loopNode("loop", "retry", 5);
+  const after = httpNode("after", "exit");
+  const h = await makeHarness({
+    flow: makeFlow([body, loop, after], [edge("body", "loop"), edge("loop", "body"), edge("loop", "after")]),
+  });
+  h.setHttp(async (_env, _request, index) => index === 0 ? httpResponse(200) : httpResponse(500));
+  await h.executor.runFlow("tab-1");
+
+  assert.equal(h.httpCalls.length, 2); // initial pass + the retry that failed
+  assert.equal(h.flowTab.run.status, "failed");
+  assert.equal(h.flowTab.run.steps.loop.status, "failed");
+  assert.match(h.flowTab.run.steps.loop.error, /Loop body step "fragile" failed/);
+  assert.equal(h.flowTab.run.steps.after.status, "skipped");
+});
+
+test("running a loop step solo executes its body count times from scratch", async () => {
+  const body = httpNode("body", "solo-body");
+  const loop = loopNode("loop", "solo", 2);
+  const h = await makeHarness({
+    flow: makeFlow([body, loop], [edge("body", "loop"), edge("loop", "body")]),
+  });
+  await h.executor.runFlow("tab-1", "loop");
+
+  assert.equal(h.httpCalls.length, 2);
+  assert.equal(h.flowTab.run.steps.loop.status, "success");
+  assert.equal(h.flowTab.run.status, "success");
+});
+
+test("cancelling mid-loop stops further passes and marks the loop skipped", async () => {
+  const body = httpNode("body", "cancel-body");
+  const loop = loopNode("loop", "stop", 5);
+  const h = await makeHarness({
+    flow: makeFlow([body, loop], [edge("body", "loop"), edge("loop", "body")]),
+  });
+  h.setHttp(async (_env, _request, index) => {
+    if (index === 1) h.executor.cancelFlow("tab-1");
+    return httpResponse(200);
+  });
+  await h.executor.runFlow("tab-1");
+
+  assert.equal(h.httpCalls.length, 2);
+  assert.equal(h.flowTab.run.status, "cancelled");
+  assert.equal(h.flowTab.run.steps.loop.status, "skipped");
+});
+
+test("loop publishes a live remaining-passes countdown and clears it when done", async () => {
+  const body = httpNode("body", "tick");
+  const loop = loopNode("loop", "countdown", 3);
+  const h = await makeHarness({
+    flow: makeFlow([body, loop], [edge("body", "loop"), edge("loop", "body")]),
+  });
+  await h.executor.runFlow("tab-1");
+
+  // count 3 with one scheduler pass done: countdown starts at 2, ticks to 1, then clears
+  assert.ok(h.updates.some((u) => u.run?.steps?.loop?.remaining === 2), "expected a push with remaining 2");
+  assert.ok(h.updates.some((u) => u.run?.steps?.loop?.remaining === 1), "expected a push with remaining 1");
+  assert.equal(h.flowTab.run.steps.loop.status, "success");
+  assert.equal(h.flowTab.run.steps.loop.remaining, undefined);
+});
+
+test("engine stamps which block fed each activation, including every loop pass", async () => {
+  const body = httpNode("body", "fed");
+  const loop = loopNode("loop", "feeder", 2);
+  const after = httpNode("after", "exit");
+  const h = await makeHarness({
+    flow: makeFlow([body, loop, after], [edge("body", "loop"), edge("loop", "body"), edge("loop", "after")]),
+  });
+  await h.executor.runFlow("tab-1");
+
+  const pulses = h.flowTab.run.pulses;
+  assert.equal(pulses.body.via, "loop");  // latest pass was fed by the loop through the back-edge
+  assert.equal(pulses.loop.via, "body");  // the loop itself was fed by the body tail
+  assert.equal(pulses.after.via, "loop"); // exit step fed by the loop finishing
+});
+
+test("loop records each pass's body results as pages for the run report", async () => {
+  const body = httpNode("body", "paged");
+  const loop = loopNode("loop", "pager", 3);
+  const h = await makeHarness({
+    flow: makeFlow([body, loop], [edge("body", "loop"), edge("loop", "body")]),
+  });
+  h.setHttp(async (_env, _request, index) => httpResponse(200, JSON.stringify({ n: index })));
+  await h.executor.runFlow("tab-1");
+
+  const steps = h.flowTab.run.steps;
+  assert.equal(steps.loop.loopPasses.length, 3);
+  assert.equal(steps.loop.loopPasses[0].body.response.body, JSON.stringify({ n: 0 }));
+  assert.equal(steps.loop.loopPasses[1].body.response.body, JSON.stringify({ n: 1 }));
+  assert.equal(steps.loop.loopPasses[2].body.response.body, JSON.stringify({ n: 2 }));
+  // the body's own latest result is still the last pass
+  assert.equal(steps.body.response.body, JSON.stringify({ n: 2 }));
+});
+
+test("loop pass pages stop at the failed pass and solo runs page every pass", async () => {
+  const body = httpNode("body", "flaky");
+  const loop = loopNode("loop", "retry", 5);
+  const h = await makeHarness({
+    flow: makeFlow([body, loop], [edge("body", "loop"), edge("loop", "body")]),
+  });
+  h.setHttp(async (_env, _request, index) => index === 0 ? httpResponse(200) : httpResponse(500));
+  await h.executor.runFlow("tab-1");
+
+  const failedSteps = h.flowTab.run.steps;
+  assert.equal(failedSteps.loop.loopPasses.length, 2); // initial pass + the failed retry
+  assert.equal(failedSteps.loop.loopPasses[1].body.status, "failed");
+
+  const solo = await makeHarness({
+    flow: makeFlow([body, loopNode("loop", "solo", 3)], [edge("body", "loop"), edge("loop", "body")]),
+  });
+  await solo.executor.runFlow("tab-1", "loop");
+  assert.equal(solo.flowTab.run.steps.loop.loopPasses.length, 3);
+});

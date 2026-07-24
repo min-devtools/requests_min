@@ -115,24 +115,24 @@ export function TransformPanel({ tabId }: { tabId: string }) {
       {result?.error && <div className="flow-step-error">{result.error}</div>}
 
       <div className="flow-transform-body">
-        <section className="flow-transform-io">
-          <div className="inspector-section-label"><Icon name="key" size={12} /> Wired input — what <code>{"{{steps.…}}"}</code> resolves to</div>
+        <details className="flow-transform-io">
+          <summary className="inspector-section-label"><Icon name="key" size={12} /> Wired input — what <code>{"{{steps.…}}"}</code> resolves to</summary>
           {inputValue !== undefined
             ? <JsonTreePanel value={inputValue} />
             : <div className="inspector-empty">Wire a step into this block and run the flow to preview its data.</div>}
-        </section>
+        </details>
 
         <section className="flow-transform-code">
           <div className="inspector-section-label"><Icon name="braces" size={12} /> Script — <code>{"{{steps.…}}"}</code> refs are inlined as JSON; <code>return</code> the output</div>
           <JsonEditor value={node.config.code} onChange={updateCode} language="javascript" />
         </section>
 
-        <section className="flow-transform-io">
-          <div className="inspector-section-label"><Icon name="activity" size={12} /> Return · output</div>
+        <details className="flow-transform-io">
+          <summary className="inspector-section-label"><Icon name="activity" size={12} /> Return · output</summary>
           {result?.status === "success"
             ? <JsonTreePanel value={result.output ?? null} />
             : <div className="inspector-empty">Run the flow to see this step's return.</div>}
-        </section>
+        </details>
 
         <SectionVeil on={ft.running} label="Flow running…" />
       </div>

@@ -30,13 +30,34 @@ test("run report rows open the step dock and stay accessible", async () => {
   const report = await read("components/flow/RunReport.tsx");
 
   assert.match(report, /if \(!ft\?\.run\) return null/);
-  assert.match(report, /topoOrder\(flow\.nodes, flow\.edges\) \?\? flow\.nodes\.map/);
+  // loop back-edges would make plain topoOrder bail; the report walks the acyclic remainder
+  assert.match(report, /topoOrder\(flow\.nodes, dagEdges\(flow\)\) \?\? flow\.nodes\.map/);
   assert.match(report, /<button[^>]+type="button"[^>]+className=\{`flow-report-row/s);
   // request & transform steps focus in the dock; delay rows just highlight
   assert.match(report, /panelNodeId: isRequestNode\(node\) \|\| isTransformNode\(node\) \? node\.id : ft\.panelNodeId/);
   assert.match(report, /`HTTP \$\{response\.status\}`/);
   assert.match(report, /`gRPC \$\{response\.statusCode\}`/);
   assert.doesNotMatch(report, /Final response/);
+});
+
+test("run report paginates loop passes with a jump-to-page input", async () => {
+  const [report, types, engine, css] = await Promise.all([
+    read("components/flow/RunReport.tsx"),
+    read("lib/flow/types.ts"),
+    read("lib/flow/engine.ts"),
+    read("styles/views.css"),
+  ]);
+  // the engine keeps one snapshot per pass; the report pages body rows by it
+  assert.match(types, /loopPasses\?: Record<string, StepResult>\[\]/);
+  assert.match(engine, /snapshotPass\(\)/);
+  assert.match(report, /loopBodyNodes\(flow, loopWithPasses\.id\)/);
+  assert.match(report, /className="flow-report-pager"/);
+  assert.match(report, /aria-label="Pass number"/);
+  assert.match(report, /aria-label="Previous pass"/);
+  assert.match(report, /aria-label="Next pass"/);
+  assert.match(report, /goToPage\(parsed - 1\)/); // typing a page number jumps straight to it
+  assert.match(report, /\/ \{pageCount\} passes/);
+  assert.match(css, /\.flow-report-pager input/);
 });
 
 test("run report is a bounded, resizable third flow row with semantic tokens", async () => {

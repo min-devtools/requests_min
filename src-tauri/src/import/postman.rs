@@ -82,6 +82,14 @@ fn build_request(name: &str, reqv: &Value) -> Request {
     if is_grpc {
         let (endpoint, service, method_name, insecure) = parse_grpc_url(&url);
         let message = reqv.get("body").and_then(|b| b.get("raw")).and_then(|r| r.as_str()).unwrap_or("").to_string();
+        let grpc_opts = reqv.get("grpcOptions");
+        let proto_files: Vec<String> = grpc_opts.and_then(|g| g.get("protoFiles")).and_then(|f| f.as_array()).map(|arr| {
+            arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
+        }).unwrap_or_default();
+        let proto_source: String = grpc_opts.and_then(|g| g.get("protoSource")).and_then(|s| s.as_str()).map(|s| s.to_string())
+            .unwrap_or_else(|| if !proto_files.is_empty() { "files".to_string() } else { "reflection".to_string() });
+        let source_id: Option<String> = grpc_opts.and_then(|g| g.get("sourceId")).and_then(|s| s.as_str().map(|v| v.to_string()));
+
         use crate::collection::GrpcPart;
         return Request {
             name: name.to_string(),
@@ -89,9 +97,9 @@ fn build_request(name: &str, reqv: &Value) -> Request {
             http: None,
             grpc: Some(GrpcPart {
                 endpoint,
-                source_id: None,
-                proto_source: "reflection".into(),
-                proto_files: vec![],
+                source_id,
+                proto_source,
+                proto_files,
                 service,
                 method: method_name,
                 message,
@@ -203,6 +211,13 @@ fn req_to_item(req: &Request) -> Value {
             });
             if !g.message.is_empty() {
                 request["body"] = json!({ "mode": "raw", "raw": g.message });
+            }
+            if !g.proto_files.is_empty() || g.source_id.is_some() || g.proto_source != "reflection" {
+                request["grpcOptions"] = json!({
+                    "protoFiles": g.proto_files,
+                    "protoSource": g.proto_source,
+                    "sourceId": g.source_id,
+                });
             }
             return json!({ "name": req.name, "request": request });
         }

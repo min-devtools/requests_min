@@ -83,3 +83,11 @@ test("Saved Flows uses Scenario runner as its only heading", async () => {
   assert.doesNotMatch(view, /<div className="eyebrow">Scenario runner<\/div>/);
   assert.doesNotMatch(view, /<h1>Flows<\/h1>/);
 });
+
+test("ActionsMenu in FlowView auto-closes on pointerdown capture and window blur", async () => {
+  const view = await source("components/views/FlowView.tsx");
+
+  assert.match(view, /window\.addEventListener\("pointerdown", onDown, true\)/);
+  assert.match(view, /window\.addEventListener\("blur", onBlur\)/);
+});
+

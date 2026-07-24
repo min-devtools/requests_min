@@ -51,8 +51,8 @@ test("path params normalize from the URL even when a loaded request's pathParams
 test("shared JSON editors expose format, minify, and validate actions", async () => {
   const editor = await readFile(new URL("ui/JsonEditor.tsx", root), "utf8");
 
-  assert.match(editor, /const format = \(\) => transform\(true\)/);
-  assert.match(editor, /const minify = \(\) => transform\(false\)/);
+  assert.match(editor, /formatJsonWithTemplates/);
+  assert.match(editor, /minifyJsonWithTemplates/);
   assert.match(editor, /const validate = \(\) =>/);
   // toolbar buttons are icon-only now — the action name lives in title/aria-label
   assert.match(editor, /title="Format" aria-label="Format"/);

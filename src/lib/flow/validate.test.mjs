@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { emptyFlow, isRequestNode } from "./types.ts";
-import { stepKeyFor, topoOrder, validateFlow } from "./validate.ts";
+import { dagEdges, loopBackEdgeMap, loopBodyNodes, stepKeyFor, topoOrder, validateFlow } from "./validate.ts";
 
 const node = (id, overrides = {}) => ({
   id,
@@ -246,4 +246,102 @@ test("isFlow accepts well-formed flows and rejects malformed shapes", async () =
     false, // transform without code
   );
   assert.equal(isFlow({ ...good, edges: [{ id: "e" }] }), false);
+});
+
+const loopNode = (id, count = 2) => node(id, { type: "loop", config: { count } });
+const messagesOf = (flow) => validateFlow(flow).map((issue) => issue.message).join(" | ");
+
+test("validateFlow accepts a loop closing a circle back to an earlier step", () => {
+  const flow = {
+    version: 1,
+    id: "f",
+    name: "f",
+    nodes: [node("a"), node("b"), loopNode("loop", 3), node("c")],
+    edges: [edge("a", "b"), edge("b", "loop"), edge("loop", "a"), edge("loop", "c")],
+  };
+  const errors = validateFlow(flow).filter((issue) => issue.level === "error");
+  assert.deepEqual(errors, []);
+});
+
+test("loopBackEdgeMap, dagEdges and loopBodyNodes agree on the wired circle", () => {
+  const flow = {
+    version: 1,
+    id: "f",
+    name: "f",
+    nodes: [node("a"), node("b"), loopNode("loop", 3), node("c")],
+    edges: [edge("a", "b"), edge("b", "loop"), edge("loop", "a"), edge("loop", "c")],
+  };
+  assert.deepEqual(loopBackEdgeMap(flow).get("loop"), [{ edgeId: "loop-a", targetId: "a" }]);
+  assert.deepEqual(dagEdges(flow).map((e) => e.id).sort(), ["a-b", "b-loop", "loop-c"]);
+  assert.deepEqual(loopBodyNodes(flow, "loop"), ["a", "b"]);
+});
+
+test("validateFlow requires exactly one loop-back connection", () => {
+  const missing = {
+    version: 1,
+    id: "f",
+    name: "f",
+    nodes: [node("a"), loopNode("loop")],
+    edges: [edge("a", "loop")],
+  };
+  assert.match(messagesOf(missing), /back to an earlier step/);
+
+  const multiple = {
+    version: 1,
+    id: "f",
+    name: "f",
+    nodes: [node("a"), node("b"), loopNode("loop")],
+    edges: [edge("a", "loop"), edge("b", "loop"), edge("loop", "a"), edge("loop", "b")],
+  };
+  assert.match(messagesOf(multiple), /multiple loop-back/);
+});
+
+test("validateFlow rejects tangled nested loops and invalid counts", () => {
+  // loop2 sits inside loop1's circle — that always closes a second circle for loop2
+  const tangled = {
+    version: 1,
+    id: "f",
+    name: "f",
+    nodes: [node("a"), loopNode("loop1"), loopNode("loop2")],
+    edges: [edge("a", "loop2"), edge("loop2", "loop1"), edge("loop1", "a"), edge("loop2", "a")],
+  };
+  const tangledMessages = messagesOf(tangled);
+  assert.match(tangledMessages, /multiple loop-back/);
+  assert.ok(validateFlow(tangled).some((issue) => issue.level === "error"));
+
+  for (const count of [0, -2, 1.5, 101, NaN]) {
+    const flow = {
+      version: 1,
+      id: "f",
+      name: "f",
+      nodes: [node("a"), loopNode("loop", count)],
+      edges: [edge("a", "loop"), edge("loop", "a")],
+    };
+    assert.match(messagesOf(flow), /Invalid loop configuration/, `count ${count} must be rejected`);
+  }
+});
+
+test("validateFlow still flags cycles that do not pass through a loop step", () => {
+  const flow = {
+    version: 1,
+    id: "f",
+    name: "f",
+    nodes: [node("a"), node("b")],
+    edges: [edge("a", "b"), edge("b", "a")],
+  };
+  assert.match(messagesOf(flow), /cycle/);
+});
+
+test("edges between the same nodes via different target handles are not duplicates", () => {
+  const issues = validateFlow({
+    version: 1,
+    id: "f",
+    name: "f",
+    nodes: [node("a"), loopNode("loop")],
+    edges: [
+      edge("a", "loop", { id: "one" }),
+      edge("a", "loop", { id: "two", targetHandle: "in-right" }),
+    ],
+  });
+  assert.equal(issues.find((issue) => issue.message.includes("Duplicate edge connection")), undefined);
 });

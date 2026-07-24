@@ -21,7 +21,7 @@ const codePreview = (code: string): string => {
 export function TransformNode({ data, isConnectable }: NodeProps<TransformCanvasNode>) {
   return (
     <div className={`flow-node flow-node-transform status-${data.status}${data.stale ? " is-stale" : ""}`}>
-      <Handle type="target" position={Position.Left} isConnectable={isConnectable} />
+      <Handle type="target" position={Position.Left} className="handle-in" isConnectable={isConnectable} />
       <div className="flow-node-head">
         <Icon name="braces" size={13} />
         <span className="flow-node-kind">Transform</span>
@@ -43,7 +43,7 @@ export function TransformNode({ data, isConnectable }: NodeProps<TransformCanvas
       </div>
       <div className="flow-node-sub flow-node-code" title="Click to edit in the dock">{codePreview(data.node.config.code)}</div>
       <div className="flow-node-status">{data.status}{data.stale ? " · stale" : ""}</div>
-      <Handle type="source" position={Position.Right} isConnectable={isConnectable} />
+      <Handle type="source" position={Position.Right} className="handle-out" isConnectable={isConnectable} />
     </div>
   );
 }

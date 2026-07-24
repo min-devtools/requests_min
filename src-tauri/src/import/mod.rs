@@ -273,4 +273,38 @@ mod tests {
         assert!(exported.contains("grpcs://{{HISTORY_GRPC_HOST}}/HistoryController/getUserHistoryArcade"));
         assert!(exported.contains("game_rai_u_1"));
     }
+
+    #[test]
+    fn postman_import_and_export_grpc_with_proto_options() {
+        use crate::collection::GrpcPart;
+        let dir = tempfile::tempdir().unwrap();
+        let meta = create_collection(dir.path(), "Proto Test").unwrap();
+        let req = Request {
+            name: "get user".into(),
+            protocol: "grpc".into(),
+            http: None,
+            grpc: Some(GrpcPart {
+                endpoint: "localhost:50051".into(),
+                source_id: Some("src-99".into()),
+                proto_source: "files".into(),
+                proto_files: vec!["/path/to/service.proto".into()],
+                service: "UserService".into(),
+                method: "GetUser".into(),
+                message: "{}".into(),
+                metadata: vec![],
+                insecure: true,
+            }),
+            ws: None,
+        };
+        write_request(dir.path(), &meta.id, "user.json", &req).unwrap();
+        let exported = postman::export(dir.path(), &meta.id).unwrap();
+        assert!(exported.contains("/path/to/service.proto"));
+        assert!(exported.contains("src-99"));
+
+        let imported = postman::import(&exported).unwrap();
+        let g = imported.requests[0].request.grpc.as_ref().unwrap();
+        assert_eq!(g.proto_files, vec!["/path/to/service.proto".to_string()]);
+        assert_eq!(g.proto_source, "files");
+        assert_eq!(g.source_id, Some("src-99".to_string()));
+    }
 }

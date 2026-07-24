@@ -2,7 +2,7 @@ import type { GrpcPart, GrpcResponse, HttpResponse, Request } from "../api";
 import { buildStepCtx, substituteRequest } from "./stepRefs.ts";
 import { runTransformCode } from "./transform.ts";
 import type { Flow, FlowRun, StepResult } from "./types.ts";
-import { topoOrder, validateFlow } from "./validate.ts";
+import { dagEdges, loopBodyNodes, topoOrder, validateFlow } from "./validate.ts";
 
 type Response = HttpResponse | GrpcResponse;
 
@@ -117,10 +117,17 @@ export function createFlowExecutor(dependencies: FlowExecutorDependencies): Flow
       return;
     }
 
-    const order = topoOrder(flow.nodes, flow.edges);
+    // Loop back-edges close circles on purpose; the scheduler walks the remaining acyclic
+    // graph and loop steps re-run their own body (see runNode's loop branch).
+    const graphEdges = dagEdges(flow);
+    const order = topoOrder(flow.nodes, graphEdges);
     if (!order) {
       dependencies.showToast("Flow invalid", "Flow has no deterministic execution order", "err");
       return;
+    }
+    const loopBodies = new Map<string, string[]>();
+    for (const node of flow.nodes) {
+      if (node.type === "loop") loopBodies.set(node.id, loopBodyNodes(flow, node.id));
     }
 
     if (onlyNodeId && !flow.nodes.some((node) => node.id === onlyNodeId)) {
@@ -153,7 +160,7 @@ export function createFlowExecutor(dependencies: FlowExecutorDependencies): Flow
     }
 
     const startedAt = now();
-    const run: FlowRun = { startedAt, status: "running", steps };
+    const run: FlowRun = { startedAt, status: "running", steps, pulses: {} };
     const env = dependencies.getActiveEnv();
     const nodes = new Map(flow.nodes.map((node) => [node.id, node]));
     const push = (running: boolean): void => {
@@ -162,9 +169,11 @@ export function createFlowExecutor(dependencies: FlowExecutorDependencies): Flow
 
     // Execute one node: resolve refs, call the backend, record the result. Gating (skip / when to
     // start) is the scheduler's job below — this just runs whatever node it's handed.
-    const runNode = async (nodeId: string): Promise<void> => {
+    const runNode = async (nodeId: string, via?: string): Promise<void> => {
       const node = nodes.get(nodeId)!;
       run.steps[nodeId] = { status: "running" };
+      // stamp the handoff: the wire from the feeding block flashes briefly in the canvas
+      run.pulses![nodeId] = { at: now(), via: via ?? null };
       push(true);
       const stepStartedAt = now();
       let resolvedRequest: Request | undefined;
@@ -183,6 +192,45 @@ export function createFlowExecutor(dependencies: FlowExecutorDependencies): Flow
             timeMs: now() - stepStartedAt,
             output,
           };
+        } else if (node.type === "loop") {
+          // The body already ran once through the scheduler (zero times when this loop step is
+          // run solo); re-run it until total passes reach config.count. Each pass overwrites the
+          // body steps' results, so downstream {{steps.*}} refs always see the latest pass —
+          // while loopPasses keeps a per-pass snapshot for the run report's pager.
+          const body = loopBodies.get(nodeId) ?? [];
+          const loopPasses: Record<string, StepResult>[] = [];
+          const snapshotPass = () => {
+            loopPasses.push(Object.fromEntries(
+              body
+                .filter((bodyId) => run.steps[bodyId])
+                .map((bodyId) => [bodyId, structuredClone(run.steps[bodyId])]),
+            ));
+          };
+          if (onlyNodeId !== nodeId) snapshotPass(); // the scheduler's first pass
+          let failedBody: string | null = null;
+          for (let pass = onlyNodeId === nodeId ? 0 : 1; pass < node.config.count; pass += 1) {
+            if (token.cancelled) break;
+            // live countdown on the block: passes left including the one about to run
+            run.steps[nodeId] = { status: "running", remaining: node.config.count - pass };
+            push(true);
+            let via = nodeId; // each pass, the loop itself feeds the body head (back-edge flash)
+            for (const bodyId of body) {
+              if (token.cancelled) break;
+              await runNode(bodyId, via);
+              via = bodyId;
+              const bodyNode = nodes.get(bodyId);
+              const tolerated = bodyNode?.type === "request" && bodyNode.config.onError === "continue";
+              if (run.steps[bodyId]?.status === "failed" && !tolerated) {
+                failedBody = bodyNode?.key ?? bodyId;
+                break;
+              }
+            }
+            snapshotPass();
+            if (failedBody) break;
+          }
+          run.steps[nodeId] = failedBody
+            ? { status: "failed", timeMs: now() - stepStartedAt, error: `Loop body step "${failedBody}" failed`, loopPasses }
+            : { status: token.cancelled ? "skipped" : "success", timeMs: now() - stepStartedAt, loopPasses };
         } else {
           resolvedRequest = substituteRequest(node.config.request, buildStepCtx(flow, run));
           let response: Response;
@@ -245,7 +293,7 @@ export function createFlowExecutor(dependencies: FlowExecutorDependencies): Flow
     // parent is onError:"continue") or the run was cancelled — that scopes failures to descendants.
     const parentsOf = new Map<string, string[]>(flow.nodes.map((node) => [node.id, []]));
     const childrenOf = new Map<string, string[]>(flow.nodes.map((node) => [node.id, []]));
-    for (const graphEdge of flow.edges) {
+    for (const graphEdge of graphEdges) {
       parentsOf.get(graphEdge.target)?.push(graphEdge.source);
       childrenOf.get(graphEdge.source)?.push(graphEdge.target);
     }
@@ -263,7 +311,7 @@ export function createFlowExecutor(dependencies: FlowExecutorDependencies): Flow
 
     const launched = new Set<string>();
     const pending: Promise<void>[] = [];
-    const launch = (nodeId: string): void => {
+    const launch = (nodeId: string, via?: string): void => {
       if (launched.has(nodeId)) return;
       launched.add(nodeId);
       pending.push((async () => {
@@ -271,11 +319,11 @@ export function createFlowExecutor(dependencies: FlowExecutorDependencies): Flow
           run.steps[nodeId] = { status: "skipped" };
           push(true);
         } else {
-          await runNode(nodeId);
+          await runNode(nodeId, via);
         }
         for (const child of childrenOf.get(nodeId)!) {
           remainingParents.set(child, remainingParents.get(child)! - 1);
-          if (remainingParents.get(child) === 0) launch(child);
+          if (remainingParents.get(child) === 0) launch(child, nodeId);
         }
       })());
     };

@@ -1,18 +1,17 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { autoLayoutNodes, createDelayFlowNode, createTransformFlowNode } from "../../lib/flow/canvas";
+import { autoLayoutNodes, createDelayFlowNode, createLoopFlowNode, createTransformFlowNode } from "../../lib/flow/canvas";
 import { runFlow } from "../../lib/flow/engine";
-import { saveActiveFlow } from "../../lib/flow/flowActions";
 import { fuzzyMatch, highlight } from "../../lib/fuzzy";
 import { useApp } from "../../store";
 import { Icon, type IconName } from "../../ui/Icon";
 import { FlowCanvas } from "../flow/FlowCanvas";
-import { promptDelayMs } from "../flow/nodeActions";
+import { promptDelayMs, promptLoopCount } from "../flow/nodeActions";
 import { RunReport } from "../flow/RunReport";
 
 const nextNodeId = () =>
   `n-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
-interface ActionItem { key: "delay" | "transform"; label: string; icon: IconName }
+interface ActionItem { key: "delay" | "transform" | "loop"; label: string; icon: IconName }
 
 function renderHL(text: string, indices: number[]): ReactNode {
   if (!indices.length) return text;
@@ -31,6 +30,7 @@ function ActionsMenu({ disabled, onPick }: { disabled: boolean; onPick: (key: Ac
   const items: ActionItem[] = [
     { key: "delay", label: "Add delay", icon: "timer" },
     { key: "transform", label: "Add transform", icon: "braces" },
+    { key: "loop", label: "Add loop", icon: "repeat" },
   ];
   const filtered = items
     .map((item) => ({ item, match: fuzzyMatch(query, item.label) }))
@@ -48,11 +48,19 @@ function ActionsMenu({ disabled, onPick }: { disabled: boolean; onPick: (key: Ac
 
   useEffect(() => {
     if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) setOpen(false);
+    const onDown = (event: PointerEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
     };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    const onBlur = () => setOpen(false);
+
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("blur", onBlur);
+    };
   }, [open]);
 
   const choose = (item: ActionItem) => {
@@ -155,6 +163,24 @@ export function FlowView({ tabId, active }: { tabId: string; active: boolean }) 
     });
   };
 
+  const addLoop = async () => {
+    const count = await promptLoopCount("Add loop", 3);
+    if (count === null) return;
+    const current = useApp.getState().flowTabs[tabId];
+    if (!current || current.running) return;
+    const loopCount = current.flow.nodes.filter((node) => node.type === "loop").length;
+    const node = createLoopFlowNode(
+      nextNodeId(),
+      new Set(current.flow.nodes.map((item) => item.key)),
+      { x: 80 + (loopCount % 4) * 28, y: 200 + (loopCount % 6) * 28 },
+    );
+    node.config.count = count;
+    updateFlowTab(tabId, {
+      flow: { ...current.flow, nodes: [...current.flow.nodes, node] },
+      selectedNodeId: node.id,
+    });
+  };
+
   const addTransform = () => {
     const current = useApp.getState().flowTabs[tabId];
     if (!current || current.running) return;
@@ -195,6 +221,7 @@ export function FlowView({ tabId, active }: { tabId: string; active: boolean }) 
           disabled={ft.running}
           onPick={(key) => {
             if (key === "delay") void addDelay();
+            else if (key === "loop") void addLoop();
             else addTransform();
           }}
         />
@@ -217,15 +244,6 @@ export function FlowView({ tabId, active }: { tabId: string; active: boolean }) 
           aria-pressed={isCanvasFullscreen}
         >
           <Icon name="fullscreen" />
-        </button>
-        <button
-          type="button"
-          className="tool-btn icon-only"
-          onClick={() => void saveActiveFlow().catch((error) => useApp.getState().showToast("Save failed", String(error), "err"))}
-          disabled={ft.running || !ft.dirty}
-          title="Save"
-        >
-          <Icon name="save" />
         </button>
       </div>
       <div className="flow-body">
