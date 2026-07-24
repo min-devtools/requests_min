@@ -94,8 +94,10 @@ test("saved requests expose open and delete actions from their context menus", a
   assert.match(sidebar, /onContextMenu=\{\(event\) => openRequestMenu\(event, c\.id, r\)\}/);
   assert.match(tabs, /onContextMenu=\{\(event\) => \{ if \(!rt\?\.collectionId \|\| !rt\.relPath\) return;/);
   assert.match(menu, /<strong>Open request<\/strong>/);
-  assert.match(menu, /<strong>Delete request<\/strong>/);
   assert.match(store, /deleteRequest: \(collectionId: string, relPath: string\) => Promise<void>/);
+  assert.match(store, /deleteCollection: \(id: string\) => Promise<void>/);
+  assert.match(store, /await api\.colDelete\(id\)/);
+  assert.match(store, /requestTab\?\.collectionId === id/);
   assert.match(store, /await api\.reqDelete\(collectionId, relPath\)/);
   assert.match(store, /closeTab\(tab\.id\)/);
 });
@@ -393,3 +395,12 @@ test("GitHub setup defaults to requests_min_collections and initializes first sy
   assert.match(github, /\/contents\/\.requestsmin/);
   assert.match(github, /ref_status == 404 \|\| ref_status == 409/, "empty repo (409) must get an initial commit like a missing branch (404)");
 });
+
+test("queryToParams in RequestView URL-decodes query string values like datetime percent-encoding", async () => {
+  const view = await readFile(new URL("components/views/RequestView.tsx", root), "utf8");
+
+  assert.match(view, /const safeDecode = \(s: string\): string =>/);
+  assert.match(view, /decodeURIComponent\(s\.replace\(/);
+  assert.match(view, /safeDecode\(seg\.slice\(eq \+ 1\)\)/);
+});
+

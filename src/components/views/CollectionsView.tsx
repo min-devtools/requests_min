@@ -11,12 +11,12 @@ import { connStyle } from "../../lib/connColor";
 export function CollectionsView({ active }: { active: boolean }) {
   const {
     collections, reloadCollections, activeCollectionId, setActiveCollection, newRequestTab,
-    openRequestTab, openDialog, openConfirm, showToast, reqListVersion, bumpReqList, renameRequest, duplicateRequest, deleteRequest,
+    openRequestTab, openDialog, openConfirm, showToast, reqListVersion, bumpReqList, renameRequest, duplicateRequest, deleteRequest, deleteCollection: deleteCollectionStore,
   } = useApp(useShallow((s) => ({
     collections: s.collections, reloadCollections: s.reloadCollections, activeCollectionId: s.activeCollectionId,
     setActiveCollection: s.setActiveCollection, newRequestTab: s.newRequestTab, openRequestTab: s.openRequestTab,
     openDialog: s.openDialog, openConfirm: s.openConfirm, showToast: s.showToast, reqListVersion: s.reqListVersion,
-    bumpReqList: s.bumpReqList, renameRequest: s.renameRequest, duplicateRequest: s.duplicateRequest, deleteRequest: s.deleteRequest,
+    bumpReqList: s.bumpReqList, renameRequest: s.renameRequest, duplicateRequest: s.duplicateRequest, deleteRequest: s.deleteRequest, deleteCollection: s.deleteCollection,
   })));
   const [requests, setRequests] = useState<ReqEntry[]>([]);
   const [menu, setMenu] = useState<{ request: ReqEntry; x: number; y: number } | null>(null);
@@ -49,9 +49,7 @@ export function CollectionsView({ active }: { active: boolean }) {
   };
   const deleteCollection = async () => {
     if (!collection || !await openConfirm({ title: "Delete collection", message: `Delete "${collection.name}" and all its requests? This cannot be undone.`, danger: true, confirmLabel: "Delete" })) return;
-    await api.colDelete(collection.id);
-    setActiveCollection(null);
-    await reloadCollections();
+    await deleteCollectionStore(collection.id);
   };
   const rename = async (request: ReqEntry) => {
     if (!collection) return;

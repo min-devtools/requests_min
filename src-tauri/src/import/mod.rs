@@ -158,6 +158,50 @@ mod tests {
     }
 
     #[test]
+    fn curl_parse_get_with_data_urlencode() {
+        let curl_cmd = r#"curl -G 'http://10.104.0.95:50008/top-winner/getTopWinnersDetailBO' \
+  --data-urlencode 'userId=game_12test' \
+  --data-urlencode 'serviceId=l00001' \
+  --data-urlencode 'startDate=2019-01-01T00:00:00.000-02:00' \
+  --data-urlencode 'endDate=2026-07-24T00:30:17.303-03:00' \
+  --data-urlencode 'type=to' \
+  --data-urlencode 'serviceType=live' \
+  --data-urlencode 'from=0' \
+  --data-urlencode 'size=0'"#;
+
+        let r = curl::parse(curl_cmd).unwrap();
+        let h = r.http.unwrap();
+        assert_eq!(h.method, "GET");
+        assert_eq!(h.url, "http://10.104.0.95:50008/top-winner/getTopWinnersDetailBO");
+        assert_eq!(h.params.len(), 8);
+        assert_eq!(h.params[0].key, "userId");
+        assert_eq!(h.params[0].value, "game_12test");
+        assert_eq!(h.params[1].key, "serviceId");
+        assert_eq!(h.params[1].value, "l00001");
+        assert_eq!(h.params[2].key, "startDate");
+        assert_eq!(h.params[2].value, "2019-01-01T00:00:00.000-02:00");
+        assert_eq!(h.params[3].key, "endDate");
+        assert_eq!(h.params[3].value, "2026-07-24T00:30:17.303-03:00");
+        assert_eq!(h.params[4].key, "type");
+        assert_eq!(h.params[4].value, "to");
+        assert_eq!(h.params[5].key, "serviceType");
+        assert_eq!(h.params[5].value, "live");
+        assert_eq!(h.params[6].key, "from");
+        assert_eq!(h.params[6].value, "0");
+        assert_eq!(h.params[7].key, "size");
+        assert_eq!(h.params[7].value, "0");
+    }
+
+    #[test]
+    fn curl_parse_multiple_data_body() {
+        let curl_cmd = r#"curl -X POST 'http://example.com/api' -d 'a=1' --data-urlencode 'b=hello world'"#;
+        let r = curl::parse(curl_cmd).unwrap();
+        let h = r.http.unwrap();
+        assert_eq!(h.method, "POST");
+        assert_eq!(h.body["content"], "a=1&b=hello world");
+    }
+
+    #[test]
     fn postman_import_nested_folders() {
         let text = std::fs::read_to_string(fixture("postman21.json")).unwrap();
         let d = postman::import(&text).unwrap();
@@ -189,5 +233,44 @@ mod tests {
         let out = postman::export(dir.path(), &meta.id).unwrap();
         assert!(out.contains("get users"));
         assert!(!out.contains("LEAKME"));
+    }
+
+    #[test]
+    fn postman_import_and_export_grpc() {
+        let json_text = r#"{
+          "info": { "name": "[GRPC] Game History", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" },
+          "item": [
+            {
+              "name": "Arcade",
+              "request": {
+                "body": { "mode": "raw", "raw": "{\"userId\": \"game_rai_u_1\"}" },
+                "header": [],
+                "method": "POST",
+                "url": { "raw": "grpcs://{{HISTORY_GRPC_HOST}}/HistoryController/getUserHistoryArcade" }
+              }
+            }
+          ]
+        }"#;
+
+        let d = postman::import(json_text).unwrap();
+        assert_eq!(d.name, "[GRPC] Game History");
+        assert_eq!(d.requests.len(), 1);
+        let req = &d.requests[0].request;
+        assert_eq!(req.name, "Arcade");
+        assert_eq!(req.protocol, "grpc");
+
+        let g = req.grpc.as_ref().unwrap();
+        assert_eq!(g.endpoint, "{{HISTORY_GRPC_HOST}}");
+        assert_eq!(g.service, "HistoryController");
+        assert_eq!(g.method, "getUserHistoryArcade");
+        assert_eq!(g.insecure, false);
+        assert!(g.message.contains("game_rai_u_1"));
+
+        let dir = tempfile::tempdir().unwrap();
+        let meta = create_collection(dir.path(), &d.name).unwrap();
+        write_request(dir.path(), &meta.id, &d.requests[0].rel_path, req).unwrap();
+        let exported = postman::export(dir.path(), &meta.id).unwrap();
+        assert!(exported.contains("grpcs://{{HISTORY_GRPC_HOST}}/HistoryController/getUserHistoryArcade"));
+        assert!(exported.contains("game_rai_u_1"));
     }
 }

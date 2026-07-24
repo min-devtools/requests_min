@@ -70,6 +70,21 @@ export default function App() {
     retintMonaco(themeBase(theme));
   }, [theme, compact, uiFontSize, uiFont, editorFont, leftCollapsed, rightCollapsed, tabs, activeTabId]);
 
+  useEffect(() => {
+    const preventFileDrop = (e: DragEvent) => {
+      // Prevent browser from navigating when dropping files anywhere on the app
+      if (e.dataTransfer?.types.includes("Files")) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("dragover", preventFileDrop);
+    window.addEventListener("drop", preventFileDrop);
+    return () => {
+      window.removeEventListener("dragover", preventFileDrop);
+      window.removeEventListener("drop", preventFileDrop);
+    };
+  }, []);
+
   useEffect(() => { void startAutoSync(); }, []);
 
   useEffect(() => {

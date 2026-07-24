@@ -34,6 +34,34 @@ fn walk(items: &[Value], prefix: &str, out: &mut Vec<DraftEntry>) {
     }
 }
 
+fn parse_grpc_url(url: &str) -> (String, String, String, bool) {
+    let (insecure, rest) = if let Some(r) = url.strip_prefix("grpcs://") {
+        (false, r)
+    } else if let Some(r) = url.strip_prefix("grpc://") {
+        (true, r)
+    } else if let Some(r) = url.strip_prefix("https://") {
+        (false, r)
+    } else if let Some(r) = url.strip_prefix("http://") {
+        (true, r)
+    } else {
+        (true, url)
+    };
+
+    let parts: Vec<&str> = rest.split('/').filter(|s| !s.is_empty()).collect();
+    if parts.is_empty() {
+        (rest.to_string(), String::new(), String::new(), insecure)
+    } else if parts.len() == 1 {
+        (parts[0].to_string(), String::new(), String::new(), insecure)
+    } else if parts.len() == 2 {
+        (parts[0].to_string(), parts[1].to_string(), String::new(), insecure)
+    } else {
+        let endpoint = parts[0].to_string();
+        let service = parts[1..parts.len() - 1].join("/");
+        let method = parts[parts.len() - 1].to_string();
+        (endpoint, service, method, insecure)
+    }
+}
+
 fn build_request(name: &str, reqv: &Value) -> Request {
     let method = reqv.get("method").and_then(|m| m.as_str()).unwrap_or("GET").to_string();
     let url = match reqv.get("url") {
@@ -41,12 +69,54 @@ fn build_request(name: &str, reqv: &Value) -> Request {
         Some(o) => o.get("raw").and_then(|r| r.as_str()).unwrap_or("").to_string(),
         None => String::new(),
     };
+    let is_grpc = url.starts_with("grpc://") || url.starts_with("grpcs://") || method.eq_ignore_ascii_case("grpc");
+    let is_ws = url.starts_with("ws://") || url.starts_with("wss://") || method.eq_ignore_ascii_case("ws") || method.eq_ignore_ascii_case("websocket");
+
     let mut headers: Vec<KV> = reqv.get("header").and_then(|h| h.as_array()).map(|arr| arr.iter().filter_map(|x| {
         let k = x.get("key")?.as_str()?.to_string();
         let v = x.get("value").and_then(|v| v.as_str()).unwrap_or("").to_string();
         let enabled = !x.get("disabled").and_then(|d| d.as_bool()).unwrap_or(false);
         Some(KV { key: k, value: v, enabled: Some(enabled) })
     }).collect()).unwrap_or_default();
+
+    if is_grpc {
+        let (endpoint, service, method_name, insecure) = parse_grpc_url(&url);
+        let message = reqv.get("body").and_then(|b| b.get("raw")).and_then(|r| r.as_str()).unwrap_or("").to_string();
+        use crate::collection::GrpcPart;
+        return Request {
+            name: name.to_string(),
+            protocol: "grpc".into(),
+            http: None,
+            grpc: Some(GrpcPart {
+                endpoint,
+                source_id: None,
+                proto_source: "reflection".into(),
+                proto_files: vec![],
+                service,
+                method: method_name,
+                message,
+                metadata: headers,
+                insecure,
+            }),
+            ws: None,
+        };
+    }
+
+    if is_ws {
+        use crate::collection::WsPart;
+        return Request {
+            name: name.to_string(),
+            protocol: "ws".into(),
+            http: None,
+            grpc: None,
+            ws: Some(WsPart {
+                url,
+                headers,
+                saved_messages: vec![],
+            }),
+        };
+    }
+
     let body = build_body(reqv.get("body"));
     let mut auth = build_auth(reqv.get("auth"));
     // a postman `auth` block wins over an Authorization header on the same request
@@ -110,14 +180,56 @@ fn to_items(folder: Folder) -> Vec<Value> {
 }
 
 fn req_to_item(req: &Request) -> Value {
-    let h = req.http.as_ref().unwrap();
-    let header: Vec<Value> = h.headers.iter().filter(|k| k.enabled.unwrap_or(true))
-        .map(|kv| json!({ "key": kv.key, "value": kv.value })).collect();
-    let mut request = json!({ "method": h.method, "header": header, "url": { "raw": h.url } });
-    if let Some(c) = h.body.get("content").and_then(|v| v.as_str()) {
-        if !c.is_empty() { request["body"] = json!({ "mode": "raw", "raw": c }); }
+    if req.protocol == "grpc" {
+        if let Some(g) = &req.grpc {
+            let header: Vec<Value> = g.metadata.iter().filter(|k| k.enabled.unwrap_or(true))
+                .map(|kv| json!({ "key": kv.key, "value": kv.value })).collect();
+            let endpoint = if g.endpoint.starts_with("grpc://") || g.endpoint.starts_with("grpcs://") || g.endpoint.starts_with("http://") || g.endpoint.starts_with("https://") {
+                g.endpoint.clone()
+            } else if g.insecure {
+                format!("grpc://{}", g.endpoint)
+            } else {
+                format!("grpcs://{}", g.endpoint)
+            };
+            let raw_url = if !g.service.is_empty() && !g.method.is_empty() {
+                format!("{}/{}/{}", endpoint, g.service, g.method)
+            } else {
+                endpoint
+            };
+            let mut request = json!({
+                "method": "POST",
+                "header": header,
+                "url": { "raw": raw_url },
+            });
+            if !g.message.is_empty() {
+                request["body"] = json!({ "mode": "raw", "raw": g.message });
+            }
+            return json!({ "name": req.name, "request": request });
+        }
+    } else if req.protocol == "ws" {
+        if let Some(w) = &req.ws {
+            let header: Vec<Value> = w.headers.iter().filter(|k| k.enabled.unwrap_or(true))
+                .map(|kv| json!({ "key": kv.key, "value": kv.value })).collect();
+            let request = json!({
+                "method": "GET",
+                "header": header,
+                "url": { "raw": w.url },
+            });
+            return json!({ "name": req.name, "request": request });
+        }
     }
-    json!({ "name": req.name, "request": request })
+
+    if let Some(h) = &req.http {
+        let header: Vec<Value> = h.headers.iter().filter(|k| k.enabled.unwrap_or(true))
+            .map(|kv| json!({ "key": kv.key, "value": kv.value })).collect();
+        let mut request = json!({ "method": h.method, "header": header, "url": { "raw": h.url } });
+        if let Some(c) = h.body.get("content").and_then(|v| v.as_str()) {
+            if !c.is_empty() { request["body"] = json!({ "mode": "raw", "raw": c }); }
+        }
+        return json!({ "name": req.name, "request": request });
+    }
+
+    json!({ "name": req.name, "request": { "method": "GET", "url": { "raw": "" } } })
 }
 
 pub fn export(root: &Path, collection_id: &str) -> Result<String, String> {
@@ -128,7 +240,6 @@ pub fn export(root: &Path, collection_id: &str) -> Result<String, String> {
     let mut tree = Folder::default();
     for entry in list_requests(root, collection_id)? {
         let req = read_request(root, collection_id, &entry.rel_path)?;
-        if req.protocol != "http" { continue; } // grpc/ws not representable in Postman v2.1
         let comps: Vec<&str> = entry.rel_path.trim_end_matches(".json").split('/').collect();
         insert(&mut tree, &comps, req_to_item(&req));
     }

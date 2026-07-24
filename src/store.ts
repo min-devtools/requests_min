@@ -163,6 +163,7 @@ interface AppState {
   activateTab: (id: string) => void;
   closeTab: (id: string) => void;
   confirmCloseTab: (id: string) => Promise<void>;
+  deleteCollection: (id: string) => Promise<void>;
   deleteRequest: (collectionId: string, relPath: string) => Promise<void>;
   renameRequest: (collectionId: string, relPath: string, name: string) => Promise<void>;
   duplicateRequest: (collectionId: string, relPath: string, name: string) => Promise<void>;
@@ -607,6 +608,17 @@ export const useApp = create<AppState>((set, get) => ({
       const activeTabId = s.activeTabId === id ? tabs[Math.min(index, tabs.length - 1)]?.id ?? WELCOME_ID : s.activeTabId;
       return { tabs: tabs.length ? tabs : [{ id: WELCOME_ID, kind: "welcome", title: "Welcome", icon: "sparkles" }], requestTabs, flowTabs, activeTabId };
     });
+  },
+  deleteCollection: async (id) => {
+    await api.colDelete(id);
+    for (const tab of get().tabs) {
+      const requestTab = get().requestTabs[tab.id];
+      if (requestTab?.collectionId === id) get().closeTab(tab.id);
+    }
+    if (get().activeCollectionId === id) {
+      set({ activeCollectionId: null });
+    }
+    await get().reloadCollections();
   },
   deleteRequest: async (collectionId, relPath) => {
     await api.reqDelete(collectionId, relPath);

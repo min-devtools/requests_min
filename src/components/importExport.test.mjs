@@ -23,7 +23,8 @@ test("collection imports show a selected-file success state and export owns coll
   assert.match(view, /Icon name=\{fileName \? "check" : "folder"\}/);
   assert.match(view, /Collection file ready/);
   assert.match(view, /exportCollectionId/);
-  assert.match(view, /Copy collection JSON/);
+  assert.match(view, /Copy JSON/);
+  assert.match(view, /handleDownloadJson/);
   assert.match(view, /importCollectionId/);
   assert.match(view, /Create new collection/);
   assert.match(view, /api\.colMergeDraft/);

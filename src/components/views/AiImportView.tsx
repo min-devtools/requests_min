@@ -9,14 +9,14 @@ import { api, type DraftEntry, type ScanHit } from "../../lib/api";
 export function AiImportView({ active, embedded = false }: { active: boolean; embedded?: boolean }) {
   const { collections, activeCollectionId, setActiveCollection, reloadCollections, showToast, openTab, openSelect, openDialog, aiEndpoint, aiModel, aiApiKey } = useApp(useShallow((s) => ({
     collections: s.collections, activeCollectionId: s.activeCollectionId, setActiveCollection: s.setActiveCollection,
-    reloadCollections: s.reloadCollections, showToast: s.showToast, openTab: s.openTab, openSelect: s.openSelect,
-    openDialog: s.openDialog, aiEndpoint: s.aiEndpoint, aiModel: s.aiModel, aiApiKey: s.aiApiKey,
+    reloadCollections: s.reloadCollections, newRequestTab: s.newRequestTab, updateRequestTab: s.updateRequestTab, showToast: s.showToast,
+    openTab: s.openTab, openSelect: s.openSelect, openDialog: s.openDialog, aiEndpoint: s.aiEndpoint, aiModel: s.aiModel, aiApiKey: s.aiApiKey,
   })));
   const [dir, setDir] = useState("");
   const [scanning, setScanning] = useState(false);
   const [files, setFiles] = useState<ScanHit[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [anchor, setAnchor] = useState<number | null>(null); // for shift-range selection
+  const [anchor, setAnchor] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState<DraftEntry[]>([]);
 
@@ -48,7 +48,6 @@ export function AiImportView({ active, embedded = false }: { active: boolean; em
     return next;
   });
 
-  // plain click = select only this; cmd/ctrl-click = toggle; shift-click = range from the anchor
   const clickRow = (e: React.MouseEvent, index: number) => {
     const path = files[index].path;
     if (e.shiftKey && anchor !== null) {
@@ -84,8 +83,7 @@ export function AiImportView({ active, embedded = false }: { active: boolean; em
 
   const addToCollection = async () => {
     if (draft.length === 0) return;
-    const NEW = "\0new"; // sentinel: create a new collection
-    // active collection first so it's the default pick
+    const NEW = "\0new";
     const ordered = activeCollectionId
       ? [...collections.filter((c) => c.id === activeCollectionId), ...collections.filter((c) => c.id !== activeCollectionId)]
       : collections;
@@ -96,7 +94,7 @@ export function AiImportView({ active, embedded = false }: { active: boolean; em
         options: [...ordered.map((c) => ({ label: c.name, value: c.id })), { label: "＋ New collection…", value: NEW }],
         confirmLabel: "Add",
       });
-      if (choice === null) return; // cancelled
+      if (choice === null) return;
     }
     let collectionId: string;
     if (choice === NEW) {
@@ -112,6 +110,50 @@ export function AiImportView({ active, embedded = false }: { active: boolean; em
     showToast("Added", `${draft.length} request(s) written to the collection.`);
     setDraft([]);
   };
+
+  // Feature temporarily disabled -> Coming Soon
+  const DISABLE_FEATURE = true;
+
+  if (DISABLE_FEATURE) {
+    return (
+      <section className={`${embedded ? "" : "content "}ai-import-view ${active ? "active" : ""}`} style={{ overflow: "auto", padding: 14 }}>
+        <div
+          className="workspace-card"
+          style={{
+            padding: "24px 20px",
+            textAlign: "center",
+            display: "grid",
+            placeItems: "center",
+            gap: 12,
+            borderStyle: "dashed",
+            opacity: 0.85,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            <Icon name="sparkles" size={20} style={{ color: "var(--blue)" }} />
+            <h2 style={{ margin: 0, fontSize: "1.1rem", color: "var(--text)" }}>Generate collection from local folder</h2>
+            <span
+              style={{
+                fontSize: "0.72rem",
+                padding: "3px 9px",
+                borderRadius: 12,
+                background: "color-mix(in oklab, var(--blue), transparent 80%)",
+                color: "var(--blue)",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+              }}
+            >
+              Coming Soon
+            </span>
+          </div>
+          <p style={{ margin: 0, maxWidth: 520, color: "var(--text-3)", fontSize: "0.85rem", lineHeight: 1.6 }}>
+            Reads route declarations and protocol files, then drafts requests for review before writing to a collection.
+          </p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className={`${embedded ? "" : "content "}ai-import-view ${active ? "active" : ""}`} style={{ overflow: "auto", padding: 18 }}>

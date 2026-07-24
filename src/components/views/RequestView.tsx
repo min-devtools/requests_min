@@ -34,10 +34,15 @@ const extractPathParams = (url: string, previous: KV[] = []): KV[] => {
 const renderPathParams = (url: string, params: KV[] = []): string =>
   params.filter((param) => param.enabled !== false && param.key)
     .reduce((target, param) => target.replaceAll(`:${param.key}`, param.value), url);
+const safeDecode = (s: string): string => {
+  try { return decodeURIComponent(s.replace(/\+/g, " ")); } catch { return s; }
+};
 const queryToParams = (query: string): KV[] =>
   query === "" ? [] : query.split("&").map((seg) => {
     const eq = seg.indexOf("=");
-    return eq === -1 ? { key: seg, value: "", enabled: true } : { key: seg.slice(0, eq), value: seg.slice(eq + 1), enabled: true };
+    return eq === -1
+      ? { key: safeDecode(seg), value: "", enabled: true }
+      : { key: safeDecode(seg.slice(0, eq)), value: safeDecode(seg.slice(eq + 1)), enabled: true };
   });
 const paramsToQuery = (params: KV[]): string =>
   params.filter((p) => p.enabled !== false && (p.key || p.value)).map((p) => `${p.key}=${p.value}`).join("&");
@@ -115,19 +120,43 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
       .catch(() => setVariableNames([]));
   }, [env, envVersion]);
 
-  // Open a gRPC request → load its source's catalog straight from the backend cache (0 network
-  // unless the .proto files changed since last describe). Re-runs when the bound source or env changes.
+  // Open a gRPC request → load its source's catalog straight from the backend cache or describe endpoint
   useEffect(() => {
-    const sid = rt?.request.grpc?.sourceId;
-    if (!sid) return;
+    const g = rt?.request.grpc;
+    if (!g) return;
     let live = true;
+
+    const matchedSource = g.sourceId ? null : protoSources.find((source) => {
+      if (g.protoFiles.length > 0 && source.kind === "files") {
+        return source.files.length === g.protoFiles.length && source.files.every((f) => g.protoFiles.includes(f));
+      }
+      if (source.endpoint && g.endpoint) {
+        const cleanSrc = source.endpoint.replace(/^grpcs?:\/\//i, "").replace(/^https?:\/\//i, "").trim().toLowerCase();
+        const cleanReq = g.endpoint.replace(/^grpcs?:\/\//i, "").replace(/^https?:\/\//i, "").trim().toLowerCase();
+        return Boolean(cleanSrc) && cleanSrc === cleanReq;
+      }
+      return false;
+    });
+
+    const sid = g.sourceId || matchedSource?.id;
+    if (!sid && !g.endpoint.trim() && g.protoFiles.length === 0) return;
+
     setDescribing(true);
-    api.grpcDescribe(env, sid, false, null, [], false)
-      .then((c) => { if (live) { setCatalog(c); setDescError(null); } })
-      .catch((e) => { if (live) { setDescError(String(e)); showToast("Describe failed", String(e), "err"); } })
+    const useSource = !!sid;
+    api.grpcDescribe(env, sid ?? null, false, useSource ? null : g.endpoint, useSource ? [] : g.protoFiles, g.insecure)
+      .then((c) => {
+        if (live) {
+          setCatalog(c);
+          setDescError(null);
+          if (matchedSource && !g.sourceId) {
+            updateGrpc({ sourceId: matchedSource.id });
+          }
+        }
+      })
+      .catch((e) => { if (live) { setDescError(String(e)); } })
       .finally(() => { if (live) setDescribing(false); });
     return () => { live = false; };
-  }, [tabId, rt?.request.grpc?.sourceId, env, envVersion]);
+  }, [tabId, rt?.request.grpc?.sourceId, rt?.request.grpc?.endpoint, rt?.request.grpc?.service, env, envVersion, protoSources]);
 
   // close the proto "New source" menu on any outside click (same pattern as RequestContextMenu)
   useEffect(() => {
