@@ -260,10 +260,12 @@ mod tests {
         assert_eq!(req.protocol, "grpc");
 
         let g = req.grpc.as_ref().unwrap();
-        assert_eq!(g.endpoint, "{{HISTORY_GRPC_HOST}}");
+        // the https:// prefix is what switches grpc::channel to TLS — a bare host here would
+        // quietly turn an imported grpcs:// request into a plaintext one
+        assert_eq!(g.endpoint, "https://{{HISTORY_GRPC_HOST}}");
         assert_eq!(g.service, "HistoryController");
         assert_eq!(g.method, "getUserHistoryArcade");
-        assert_eq!(g.insecure, false);
+        assert!(!g.insecure);
         assert!(g.message.contains("game_rai_u_1"));
 
         let dir = tempfile::tempdir().unwrap();

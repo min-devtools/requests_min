@@ -33,8 +33,12 @@ test("run report rows open the step dock and stay accessible", async () => {
   // loop back-edges would make plain topoOrder bail; the report walks the acyclic remainder
   assert.match(report, /topoOrder\(flow\.nodes, dagEdges\(flow\)\) \?\? flow\.nodes\.map/);
   assert.match(report, /<button[^>]+type="button"[^>]+className=\{`flow-report-row/s);
-  // request & transform steps focus in the dock; delay rows just highlight
-  assert.match(report, /panelNodeId: isRequestNode\(node\) \|\| isTransformNode\(node\) \? node\.id : ft\.panelNodeId/);
+  // every row focuses its step: requests/transforms land on Step Result, loop/delay on Step detail
+  assert.match(report, /panelNodeId: node\.id/);
+  assert.match(report, /dockTab: hasResult \? "result" : "step"/);
+  // row glyphs mirror the canvas blocks via the shared stepIcon helper
+  assert.match(report, /stepIcon\(node\)/);
+  assert.match(report, /import \{ stepIcon, stepTypeClass \} from "\.\/nodeBits"/);
   assert.match(report, /`HTTP \$\{response\.status\}`/);
   assert.match(report, /`gRPC \$\{response\.statusCode\}`/);
   assert.doesNotMatch(report, /Final response/);
@@ -50,7 +54,10 @@ test("run report paginates loop passes with a jump-to-page input", async () => {
   // the engine keeps one snapshot per pass; the report pages body rows by it
   assert.match(types, /loopPasses\?: Record<string, StepResult>\[\]/);
   assert.match(engine, /snapshotPass\(\)/);
-  assert.match(report, /loopBodyNodes\(flow, loopWithPasses\.id\)/);
+  // every loop that ran gets paged, not just the first one on the canvas
+  assert.match(report, /loopsWithPasses/);
+  assert.match(report, /for \(const bodyId of loopBodyNodes\(flow, entry\.node\.id\)\) passesByBodyStep\.set/);
+  assert.match(report, /passes\[Math\.min\(safePage, passes\.length - 1\)\]/);
   assert.match(report, /className="flow-report-pager"/);
   assert.match(report, /aria-label="Pass number"/);
   assert.match(report, /aria-label="Previous pass"/);

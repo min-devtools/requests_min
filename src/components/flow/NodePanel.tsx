@@ -15,7 +15,7 @@ export function NodePanel({ tabId }: { tabId: string }) {
   const updateRequestTab = useApp((state) => state.updateRequestTab);
   const ensureFlowNodeEditor = useApp((state) => state.ensureFlowNodeEditor);
   const opened = ft?.flow.nodes.find((item) => item.id === ft.panelNodeId);
-  // the editor is request-only: delay nodes edit through their on-node modal
+  // the editor is request-only: loop & delay steps get their own compact panels
   const node = opened && isRequestNode(opened) ? opened : undefined;
   const editorId = node ? `flowreq:${tabId}:${node.id}` : null;
   const stepResult = node ? ft?.run?.steps[node.id] : undefined;

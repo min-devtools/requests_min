@@ -40,9 +40,9 @@ import { LoopNode, type LoopCanvasNode } from "./LoopNode";
 import { RequestNode, type RequestCanvasNode } from "./RequestNode";
 import { TransformNode, type TransformCanvasNode } from "./TransformNode";
 
-// request & transform nodes open the dock editor on click, loop opens its info panel there;
-// delay still edits in its own modal
-const opensDock = (node: FlowNode): boolean => isRequestNode(node) || isTransformNode(node) || isLoopNode(node);
+// every step type opens the dock on click: request/transform edit there, while loop & delay
+// show compact panels whose values (pass count, duration) edit inline — no more modals
+const opensDock = (node: FlowNode): boolean => isRequestNode(node) || isTransformNode(node) || isLoopNode(node) || node.type === "delay";
 
 type CanvasNode = RequestCanvasNode | DelayCanvasNode | TransformCanvasNode | LoopCanvasNode;
 type CanvasEdge = Edge<{ tabId: string }, "flow">;

@@ -18,14 +18,14 @@ export async function confirmDeleteNode(tabId: string, nodeId: string, key: stri
   useApp.getState().updateFlowTab(tabId, { flow: { ...current.flow, ...graph } });
 }
 
-/** Modal prompt for a delay duration; null means cancelled or invalid. */
+/** Modal prompt for a delay duration (used when adding a block); null means cancelled or invalid. */
 export async function promptDelayMs(title: string, defaultMs: number): Promise<number | null> {
   const state = useApp.getState();
   const raw = await state.openDialog({
     title,
     message: "How long should the flow pause, in milliseconds?",
     defaultValue: String(defaultMs),
-    confirmLabel: title === "Add delay" ? "Add" : "Save",
+    confirmLabel: "Add",
   });
   if (raw === null) return null;
   const ms = Math.floor(Number(raw.trim()));
@@ -36,31 +36,29 @@ export async function promptDelayMs(title: string, defaultMs: number): Promise<n
   return ms;
 }
 
-export async function editDelayNode(tabId: string, nodeId: string): Promise<void> {
-  const node = useApp.getState().flowTabs[tabId]?.flow.nodes.find((item) => item.id === nodeId);
-  if (!node || node.type !== "delay") return;
-  const ms = await promptDelayMs("Edit delay", node.config.ms);
-  if (ms === null) return;
+/** Inline edit from the Step detail tab: set a delay step's duration (clamped to >= 0). */
+export function setDelayMs(tabId: string, nodeId: string, ms: number): void {
   const current = useApp.getState().flowTabs[tabId];
   if (!current || current.running) return;
+  const safe = Math.max(0, Math.floor(ms));
   useApp.getState().updateFlowTab(tabId, {
     flow: {
       ...current.flow,
       nodes: current.flow.nodes.map((item) => item.id === nodeId && item.type === "delay"
-        ? { ...item, config: { ms } }
+        ? { ...item, config: { ms: safe } }
         : item),
     },
   });
 }
 
-/** Modal prompt for a loop iteration count; null means cancelled or invalid. */
+/** Modal prompt for a loop iteration count (used when adding a block); null means cancelled or invalid. */
 export async function promptLoopCount(title: string, defaultCount: number): Promise<number | null> {
   const state = useApp.getState();
   const raw = await state.openDialog({
     title,
     message: `How many times should the loop body run in total? (${1}–${MAX_LOOP_COUNT})`,
     defaultValue: String(defaultCount),
-    confirmLabel: title === "Add loop" ? "Add" : "Save",
+    confirmLabel: "Add",
   });
   if (raw === null) return null;
   const count = Math.floor(Number(raw.trim()));
@@ -71,19 +69,34 @@ export async function promptLoopCount(title: string, defaultCount: number): Prom
   return count;
 }
 
-export async function editLoopNode(tabId: string, nodeId: string): Promise<void> {
-  const node = useApp.getState().flowTabs[tabId]?.flow.nodes.find((item) => item.id === nodeId);
-  if (!node || node.type !== "loop") return;
-  const count = await promptLoopCount("Edit loop", node.config.count);
-  if (count === null) return;
+/** Inline edit from the Step detail tab: set how many times a loop body runs (clamped 1..MAX_LOOP_COUNT). */
+export function setLoopCount(tabId: string, nodeId: string, count: number): void {
   const current = useApp.getState().flowTabs[tabId];
   if (!current || current.running) return;
+  const safe = Math.min(MAX_LOOP_COUNT, Math.max(1, Math.floor(count)));
   useApp.getState().updateFlowTab(tabId, {
     flow: {
       ...current.flow,
       nodes: current.flow.nodes.map((item) => item.id === nodeId && item.type === "loop"
-        ? { ...item, config: { count } }
+        ? { ...item, config: { count: safe } }
         : item),
+    },
+  });
+}
+
+/** Block-face switch: flip a step on/off. An off step is a pass-through — the run skips it
+    without failing, and its descendants keep going. Blocked while a run is in flight. */
+export function setNodeEnabled(tabId: string, nodeId: string, enabled: boolean): void {
+  const current = useApp.getState().flowTabs[tabId];
+  if (!current) return;
+  if (current.running) {
+    useApp.getState().showToast("Flow is running", "Wait for the run to finish before changing the graph.", "warn");
+    return;
+  }
+  useApp.getState().updateFlowTab(tabId, {
+    flow: {
+      ...current.flow,
+      nodes: current.flow.nodes.map((item) => item.id === nodeId ? { ...item, enabled } : item),
     },
   });
 }

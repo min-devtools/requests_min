@@ -71,7 +71,7 @@ test("flow blocks open a right-click context menu with a copy option", async () 
   assert.match(canvas, /copyBlocks\(new Set\(\[nodeMenu\.nodeId\]\)\)/);
 });
 
-test("Add loop action creates a loop block edited through a modal like Add delay", async () => {
+test("Add loop action creates a loop block whose count edits inline in the step detail tab", async () => {
   const [view, canvas, node, actions, helper, icon] = await Promise.all([
     readFile(new URL("components/views/FlowView.tsx", src), "utf8"),
     readFile(new URL("components/flow/FlowCanvas.tsx", src), "utf8"),
@@ -84,10 +84,11 @@ test("Add loop action creates a loop block edited through a modal like Add delay
   assert.match(view, /promptLoopCount\("Add loop", 3\)/);
   assert.match(view, /createLoopFlowNode\(/);
   assert.match(canvas, /loop: LoopNode/);
-  assert.match(node, /editLoopNode\(data\.tabId, data\.node\.id\)/);
+  // no pencil on the block face: the pass count edits inline in the step detail tab
+  assert.doesNotMatch(node, /pencil|editLoopNode/);
   assert.match(node, /run body ×\{data\.node\.config\.count\}/);
   assert.match(actions, /export async function promptLoopCount/);
-  assert.match(actions, /export async function editLoopNode/);
+  assert.match(actions, /export function setLoopCount/);
   assert.match(helper, /export function createLoopFlowNode/);
   assert.match(helper, /stepKeyFor\("loop", takenKeys\)/);
   assert.match(icon, /repeat: Repeat/);
@@ -113,10 +114,29 @@ test("loop anchors are color-coded and the step detail tab explains the circle w
   assert.match(panel, /flow-loop-hint/);
   assert.match(panel, /flow-dot flow-dot-in/);
   assert.match(panel, /flow-dot flow-dot-out/);
-  assert.match(panel, /editLoopNode\(tabId, node\.id\)/);
+  assert.match(panel, /setLoopCount\(tabId, node\.id/);
+  assert.match(panel, /CommitNumberInput/);
   // the panel's legend dots use the same colors as the canvas anchors
   assert.match(css, /\.flow-dot-in \{ background: var\(--accent-primary\); \}/);
   assert.match(css, /\.flow-dot-out \{ background: var\(--orange/);
+});
+
+test("delay blocks open the step detail tab and edit their duration inline", async () => {
+  const [delay, panel, canvas, inspector, actions] = await Promise.all([
+    readFile(new URL("components/flow/DelayNode.tsx", src), "utf8"),
+    readFile(new URL("components/flow/DelayPanel.tsx", src), "utf8"),
+    readFile(new URL("components/flow/FlowCanvas.tsx", src), "utf8"),
+    readFile(new URL("components/Inspector.tsx", src), "utf8"),
+    readFile(new URL("components/flow/nodeActions.ts", src), "utf8"),
+  ]);
+  // no pencil on the block face; clicking the block opens the dock (opensDock covers delay)
+  assert.doesNotMatch(delay, /pencil|editDelayNode/);
+  assert.match(delay, /confirmDeleteNode\(data\.tabId, data\.node\.id, data\.node\.key\)/);
+  assert.match(canvas, /\|\| node\.type === "delay"/);
+  assert.match(inspector, /panelNode\?\.type === "delay"\s*\?\s*<DelayPanel tabId=\{activeTabId\} \/>/);
+  assert.match(panel, /setDelayMs\(tabId, node\.id/);
+  assert.match(panel, /CommitNumberInput/);
+  assert.match(actions, /export function setDelayMs/);
 });
 
 test("loop block drops its key, shows a live countdown, and accepts wires from both sides", async () => {
@@ -199,4 +219,49 @@ test("loop steps run their body count times via back-edge aware scheduling and v
   assert.match(engine, /loopBodyNodes\(flow, node\.id\)/);
   assert.match(engine, /node\.type === "loop"/);
   assert.match(types, /MAX_LOOP_COUNT = 100/);
+});
+
+test("loop, delay and transform blocks read left-to-right and carry an on/off switch", async () => {
+  const [loop, delay, transform, bits, actions, css, types, engine] = await Promise.all([
+    readFile(new URL("components/flow/LoopNode.tsx", src), "utf8"),
+    readFile(new URL("components/flow/DelayNode.tsx", src), "utf8"),
+    readFile(new URL("components/flow/TransformNode.tsx", src), "utf8"),
+    readFile(new URL("components/flow/nodeBits.tsx", src), "utf8"),
+    readFile(new URL("components/flow/nodeActions.ts", src), "utf8"),
+    readFile(new URL("styles/views.css", src), "utf8"),
+    readFile(new URL("lib/flow/types.ts", src), "utf8"),
+    readFile(new URL("lib/flow/engine.ts", src), "utf8"),
+  ]);
+
+  // compact blocks align left like every other block — no centered identity row left over
+  assert.match(css, /\.flow-node-delay \.flow-node-head \{ justify-content: flex-start; \}/);
+  assert.doesNotMatch(css, /\.flow-node-delay \.flow-node-head \{ justify-content: center; \}/);
+  assert.match(css, /\.flow-node-loop \.flow-node-sub \{ text-align: left; \}/);
+
+  // the switch is a real ARIA switch pinned top-right, and it edits the persisted `enabled` flag
+  assert.match(bits, /role="switch"/);
+  assert.match(bits, /className="flow-node-toggle nodrag nopan"/);
+  assert.match(css, /\.flow-node-toggle\[aria-checked="true"\]/);
+  assert.match(types, /enabled\?: boolean/);
+  assert.match(actions, /export function setNodeEnabled/);
+  for (const node of [loop, delay, transform]) {
+    assert.match(node, /<NodeToggle/);
+    assert.match(node, /setNodeEnabled\(data\.tabId, data\.node\.id, next\)/);
+    assert.match(node, /is-off/);
+  }
+
+  // an off step is a pass-through: skipped without running, and it never blocks its descendants
+  assert.match(engine, /if \(!isNodeEnabled\(node\)\)/);
+  assert.match(engine, /status: "skipped", disabled: true/);
+  assert.match(engine, /if \(step\?\.disabled\) return false;/);
+});
+
+test("steps hanging off a loop body wait for the loop, not for the body's first pass", async () => {
+  const engine = await readFile(new URL("lib/flow/engine.ts", src), "utf8");
+  // the scheduler re-parents body-exit edges onto the loop so nothing reads a step mid-re-run
+  assert.match(engine, /const schedulerEdges = \[\.\.\.graphEdges\];/);
+  assert.match(engine, /source: loopId, target: edge\.target/);
+  assert.match(engine, /for \(const graphEdge of schedulerEdges\)/);
+  // an unexplained skip must not be reported as a green run
+  assert.match(engine, /step\.status === "skipped" && !step\.disabled/);
 });

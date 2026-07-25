@@ -1,7 +1,9 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { StepStatus, TransformFlowNode } from "../../lib/flow/types";
+import { isNodeEnabled } from "../../lib/flow/types";
 import { Icon } from "../../ui/Icon";
-import { confirmDeleteNode } from "./nodeActions";
+import { NodeActions, NodeToggle, StatusLine } from "./nodeBits";
+import { confirmDeleteNode, setNodeEnabled } from "./nodeActions";
 
 export interface TransformNodeData extends Record<string, unknown> {
   node: TransformFlowNode;
@@ -19,30 +21,38 @@ const codePreview = (code: string): string => {
 };
 
 export function TransformNode({ data, isConnectable }: NodeProps<TransformCanvasNode>) {
+  const enabled = isNodeEnabled(data.node);
   return (
-    <div className={`flow-node flow-node-transform status-${data.status}${data.stale ? " is-stale" : ""}`}>
+    <div className={`flow-node flow-node-transform status-${data.status}${data.stale ? " is-stale" : ""}${enabled ? "" : " is-off"}`}>
       <Handle type="target" position={Position.Left} className="handle-in" isConnectable={isConnectable} />
       <div className="flow-node-head">
-        <Icon name="braces" size={13} />
+        <span className="flow-win-dots" aria-hidden><i /><i /><i /></span>
+        <span className="flow-node-emblem" aria-hidden>
+          <Icon name="braces" size={13} />
+        </span>
         <span className="flow-node-kind">Transform</span>
         <span className="flow-node-key">{data.node.key}</span>
-        <span className="flow-node-actions">
-          <button
-            type="button"
-            className="tool-btn flow-node-btn danger nodrag nopan"
-            title="Delete step"
-            aria-label={`Delete step ${data.node.key}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              void confirmDeleteNode(data.tabId, data.node.id, data.node.key);
-            }}
-          >
-            <Icon name="trash" size={11} />
-          </button>
-        </span>
+        <NodeActions items={[
+          {
+            icon: "trash",
+            title: "Delete step",
+            ariaLabel: `Delete step ${data.node.key}`,
+            danger: true,
+            onClick: () => { void confirmDeleteNode(data.tabId, data.node.id, data.node.key); },
+          },
+        ]} />
+        <NodeToggle
+          enabled={enabled}
+          stepKey={data.node.key}
+          onChange={(next) => setNodeEnabled(data.tabId, data.node.id, next)}
+        />
       </div>
-      <div className="flow-node-sub flow-node-code" title="Click to edit in the dock">{codePreview(data.node.config.code)}</div>
-      <div className="flow-node-status">{data.status}{data.stale ? " · stale" : ""}</div>
+      {/* mini editor window: purple ƒ watermark + the script's first meaningful line */}
+      <div className="flow-node-code" title="Click to edit in the dock">
+        <span className="flow-node-fn" aria-hidden>ƒ</span>
+        <span className="flow-node-code-line">{codePreview(data.node.config.code)}</span>
+      </div>
+      <StatusLine status={data.status} stale={data.stale} />
       <Handle type="source" position={Position.Right} className="handle-out" isConnectable={isConnectable} />
     </div>
   );

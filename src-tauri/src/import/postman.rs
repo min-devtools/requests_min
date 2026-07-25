@@ -34,6 +34,12 @@ fn walk(items: &[Value], prefix: &str, out: &mut Vec<DraftEntry>) {
     }
 }
 
+/// Splits a Postman gRPC URL into (endpoint, service, method, insecure).
+///
+/// The endpoint keeps an `https://` prefix for TLS targets: `grpc::channel` decides TLS purely
+/// from that prefix and ignores the `insecure` flag, so handing it a bare `host:443` would
+/// silently downgrade an imported `grpcs://` request to plaintext. Same convention the grpcurl
+/// parser uses (`src/lib/grpcurl.ts`): `https://host` = TLS, bare host = plaintext.
 fn parse_grpc_url(url: &str) -> (String, String, String, bool) {
     let (insecure, rest) = if let Some(r) = url.strip_prefix("grpcs://") {
         (false, r)
@@ -47,15 +53,17 @@ fn parse_grpc_url(url: &str) -> (String, String, String, bool) {
         (true, url)
     };
 
+    let with_scheme = |host: &str| if insecure { host.to_string() } else { format!("https://{host}") };
+
     let parts: Vec<&str> = rest.split('/').filter(|s| !s.is_empty()).collect();
     if parts.is_empty() {
-        (rest.to_string(), String::new(), String::new(), insecure)
+        (with_scheme(rest), String::new(), String::new(), insecure)
     } else if parts.len() == 1 {
-        (parts[0].to_string(), String::new(), String::new(), insecure)
+        (with_scheme(parts[0]), String::new(), String::new(), insecure)
     } else if parts.len() == 2 {
-        (parts[0].to_string(), parts[1].to_string(), String::new(), insecure)
+        (with_scheme(parts[0]), parts[1].to_string(), String::new(), insecure)
     } else {
-        let endpoint = parts[0].to_string();
+        let endpoint = with_scheme(parts[0]);
         let service = parts[1..parts.len() - 1].join("/");
         let method = parts[parts.len() - 1].to_string();
         (endpoint, service, method, insecure)
@@ -192,8 +200,14 @@ fn req_to_item(req: &Request) -> Value {
         if let Some(g) = &req.grpc {
             let header: Vec<Value> = g.metadata.iter().filter(|k| k.enabled.unwrap_or(true))
                 .map(|kv| json!({ "key": kv.key, "value": kv.value })).collect();
-            let endpoint = if g.endpoint.starts_with("grpc://") || g.endpoint.starts_with("grpcs://") || g.endpoint.starts_with("http://") || g.endpoint.starts_with("https://") {
+            // always emit a grpc:// or grpcs:// scheme — an https:// URL would come back through
+            // the importer as a plain HTTP request, since is_grpc only recognises the grpc schemes
+            let endpoint = if g.endpoint.starts_with("grpc://") || g.endpoint.starts_with("grpcs://") {
                 g.endpoint.clone()
+            } else if let Some(host) = g.endpoint.strip_prefix("https://") {
+                format!("grpcs://{host}")
+            } else if let Some(host) = g.endpoint.strip_prefix("http://") {
+                format!("grpc://{host}")
             } else if g.insecure {
                 format!("grpc://{}", g.endpoint)
             } else {
@@ -263,4 +277,37 @@ pub fn export(root: &Path, collection_id: &str) -> Result<String, String> {
         "item": to_items(tree),
     });
     serde_json::to_string_pretty(&out).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_grpc_url;
+
+    #[test]
+    fn grpcs_url_keeps_the_tls_scheme_on_the_endpoint() {
+        // grpc::channel turns TLS on only for an https:// endpoint, so importing grpcs:// must
+        // produce one — a bare host:443 here would silently downgrade the request to plaintext
+        let (endpoint, service, method, insecure) =
+            parse_grpc_url("grpcs://api.example.com:443/pkg.Svc/Method");
+        assert_eq!(endpoint, "https://api.example.com:443");
+        assert_eq!(service, "pkg.Svc");
+        assert_eq!(method, "Method");
+        assert!(!insecure);
+    }
+
+    #[test]
+    fn plaintext_grpc_url_stays_bare() {
+        let (endpoint, service, method, insecure) =
+            parse_grpc_url("grpc://localhost:50051/pkg.Svc/Method");
+        assert_eq!(endpoint, "localhost:50051");
+        assert_eq!(service, "pkg.Svc");
+        assert_eq!(method, "Method");
+        assert!(insecure);
+    }
+
+    #[test]
+    fn endpoint_only_urls_still_carry_their_scheme() {
+        assert_eq!(parse_grpc_url("grpcs://api.example.com").0, "https://api.example.com");
+        assert_eq!(parse_grpc_url("localhost:50051").0, "localhost:50051");
+    }
 }
