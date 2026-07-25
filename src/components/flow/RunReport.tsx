@@ -5,6 +5,7 @@ import { isRequestNode, isTransformNode } from "../../lib/flow/types";
 import { dagEdges, loopBodyNodes, topoOrder } from "../../lib/flow/validate";
 import { useApp } from "../../store";
 import { Icon } from "../../ui/Icon";
+import { stepIcon, stepTypeClass } from "./nodeBits";
 
 type Response = HttpResponse | GrpcResponse;
 
@@ -19,13 +20,6 @@ const responseStatusClass = (response: Response): string => {
   return response.statusCode === "OK" ? "ok" : "err";
 };
 
-const responseIcon = (node: FlowNode): "timer" | "grpc" | "request" | "braces" | "repeat" => {
-  if (node.type === "delay") return "timer";
-  if (node.type === "loop") return "repeat";
-  if (node.type === "transform") return "braces";
-  return node.config.request.protocol === "grpc" ? "grpc" : "request";
-};
-
 export function RunReport({ tabId }: { tabId: string }) {
   const ft = useApp((state) => state.flowTabs[tabId]);
   const updateFlowTab = useApp((state) => state.updateFlowTab);
@@ -37,11 +31,13 @@ export function RunReport({ tabId }: { tabId: string }) {
   const [page, setPage] = useState(0);
   const [pageText, setPageText] = useState("1");
   const [pinned, setPinned] = useState(false);
-  const loopWithPasses = ft?.flow.nodes.find(
-    (node) => node.type === "loop" && (ft.run?.steps[node.id]?.loopPasses?.length ?? 0) > 0,
-  );
-  const passesForPager = loopWithPasses && ft?.run ? ft.run.steps[loopWithPasses.id]?.loopPasses : undefined;
-  const pageCount = passesForPager?.length ?? 0;
+  // every loop that ran, not just the first: each body step maps to its own loop's snapshots,
+  // and one pager drives them all (each clamped to its own pass count)
+  const loopsWithPasses = (ft?.flow.nodes ?? [])
+    .map((node) => ({ node, passes: ft?.run?.steps[node.id]?.loopPasses }))
+    .filter((entry): entry is { node: FlowNode; passes: Record<string, StepResult>[] } =>
+      entry.node.type === "loop" && (entry.passes?.length ?? 0) > 0);
+  const pageCount = loopsWithPasses.reduce((max, entry) => Math.max(max, entry.passes.length), 0);
   const runId = ft?.run?.startedAt ?? 0;
   useEffect(() => setPinned(false), [runId]);
   useEffect(() => {
@@ -64,11 +60,15 @@ export function RunReport({ tabId }: { tabId: string }) {
   const freshTotal = nodes.length - staleCount;
 
   // paged rows: loop body steps show the viewed pass's snapshot; everything else shows latest
-  const passes = passesForPager ?? null;
-  const bodyIds = loopWithPasses ? new Set(loopBodyNodes(flow, loopWithPasses.id)) : null;
+  const passesByBodyStep = new Map<string, Record<string, StepResult>[]>();
+  for (const entry of loopsWithPasses) {
+    for (const bodyId of loopBodyNodes(flow, entry.node.id)) passesByBodyStep.set(bodyId, entry.passes);
+  }
   const safePage = Math.min(page, Math.max(0, pageCount - 1));
   const resultFor = (node: FlowNode): StepResult | undefined => {
-    if (passes && bodyIds?.has(node.id)) return passes[safePage]?.[node.id];
+    const passes = passesByBodyStep.get(node.id);
+    // a shorter loop just pins to its own last pass rather than blanking out
+    if (passes) return passes[Math.min(safePage, passes.length - 1)]?.[node.id];
     return run.steps[node.id];
   };
   const goToPage = (next: number) => {
@@ -106,11 +106,13 @@ export function RunReport({ tabId }: { tabId: string }) {
   };
 
   const openStep = (node: FlowNode) => {
-    // request steps jump to the Step Result tab (response/time/error); delay steps just highlight
+    // requests/transforms land on their Step Result (response/time/error); loop & delay produce
+    // no result, so their rows open the Step detail tab — where their values now edit inline
+    const hasResult = isRequestNode(node) || isTransformNode(node);
     updateFlowTab(tabId, {
       selectedNodeId: node.id,
-      panelNodeId: isRequestNode(node) || isTransformNode(node) ? node.id : ft.panelNodeId,
-      dockTab: "result",
+      panelNodeId: node.id,
+      dockTab: hasResult ? "result" : "step",
     });
   };
 
@@ -125,7 +127,7 @@ export function RunReport({ tabId }: { tabId: string }) {
         <span className={successCount === freshTotal ? "flow-report-count all-ok" : "flow-report-count"}>
           {successCount}/{freshTotal} steps successful{staleCount > 0 ? ` · ${staleCount} stale` : ""}
         </span>
-        {passes && pageCount > 1 && (
+        {pageCount > 1 && (
           <span className="flow-report-pager" aria-label="Loop pass pages">
             <button
               type="button"
@@ -189,7 +191,7 @@ export function RunReport({ tabId }: { tabId: string }) {
                 onClick={() => openStep(node)}
                 aria-label={`Open ${node.key}, ${result?.status ?? "idle"}${result?.stale ? " (stale)" : ""}`}
               >
-                <Icon name={responseIcon(node)} size={13} />
+                <Icon name={stepIcon(node)} size={13} className={`flow-report-type flow-report-type-${stepTypeClass(node)}`} />
                 <span className="flow-report-key">{node.key}</span>
                 <span className="flow-report-status">{result?.status ?? "idle"}</span>
                 <span>{result?.timeMs != null ? `${result.timeMs} ms` : "—"}</span>

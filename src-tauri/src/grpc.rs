@@ -206,8 +206,23 @@ pub fn describe_from_files(paths: &[String]) -> Result<GrpcCatalog, String> {
     Ok(catalog_from_pool(&pool_from_files(paths)?))
 }
 
+/// A `{{VAR}}` endpoint can expand to a value that already carries its own scheme, leaving a
+/// doubled prefix like `https://http://host:443`. The inner scheme is the one the user actually
+/// configured for that host, so collapse onto it.
+fn collapse_scheme(endpoint: &str) -> &str {
+    for prefix in ["https://", "http://"] {
+        if let Some(rest) = endpoint.strip_prefix(prefix) {
+            if rest.starts_with("http://") || rest.starts_with("https://") {
+                return collapse_scheme(rest);
+            }
+        }
+    }
+    endpoint
+}
+
 /// gRPC channel: plaintext for `http://`, TLS (native roots) for `https://`.
 pub(crate) async fn channel(endpoint: &str, insecure: bool) -> Result<Channel, String> {
+    let endpoint = collapse_scheme(endpoint);
     let mut ep = Channel::from_shared(endpoint.to_string()).map_err(|e| e.to_string())?;
     if endpoint.starts_with("https") {
         // ponytail: insecure TLS (skip cert verify) not wired; add a rustls custom verifier if a self-signed host needs it
@@ -657,5 +672,23 @@ mod tests {
         let mut ctx = HashMap::new();
         ctx.insert("grpcHost".into(), "http://localhost".into());
         assert_eq!(describe_endpoint(Some("{{grpcHost}}:50051".into()), &ctx).unwrap(), Some("http://localhost:50051".into()));
+    }
+}
+
+#[cfg(test)]
+mod scheme_tests {
+    use super::collapse_scheme;
+
+    #[test]
+    fn a_doubled_scheme_collapses_onto_the_inner_one() {
+        // an endpoint of "https://{{HOST}}" where HOST itself expands to "http://box:50051"
+        assert_eq!(collapse_scheme("https://http://box:50051"), "http://box:50051");
+        assert_eq!(collapse_scheme("http://https://box:443"), "https://box:443");
+    }
+
+    #[test]
+    fn ordinary_endpoints_pass_through_untouched() {
+        assert_eq!(collapse_scheme("https://api.example.com:443"), "https://api.example.com:443");
+        assert_eq!(collapse_scheme("localhost:50051"), "localhost:50051");
     }
 }

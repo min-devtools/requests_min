@@ -40,7 +40,9 @@ const downloadJsonFile = (filename: string, content: string) => {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // WKWebView (Tauri on macOS) can cancel an in-flight download if the blob URL is revoked in the
+  // same tick as the click — hand the save off first, then release it
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 };
 
 export function ImportExportView({ active }: { active: boolean }) {
@@ -137,7 +139,9 @@ export function ImportExportView({ active }: { active: boolean }) {
     setFileName(file.name);
     const content = await file.text();
     setText(content);
-    const isYaml = file.name.endsWith(".yaml") || file.name.endsWith(".yml") || content.includes("openapi:") || content.includes("swagger:");
+    // anchor the key to the start of a line: a Postman JSON whose URL or body merely contains
+    // "openapi:" is not a YAML spec, and misrouting it hands JSON to the OpenAPI/YAML importer
+    const isYaml = /\.ya?ml$/i.test(file.name) || /^\s*(openapi|swagger)\s*:/m.test(content);
     if (kind === "command" || (kind === "postman" && isYaml)) {
       setKind(isYaml ? "openapi" : "postman");
     }

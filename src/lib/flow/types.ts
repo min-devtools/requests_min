@@ -29,6 +29,8 @@ export interface FlowNodeBase {
   id: string;
   key: string;
   position: { x: number; y: number };
+  /** Off = the run treats this step as a pass-through. Absent means on, so old flows stay valid. */
+  enabled?: boolean;
 }
 
 export interface RequestFlowNode extends FlowNodeBase {
@@ -84,6 +86,8 @@ export interface StepResult {
   remaining?: number;
   /** Loop steps only: per-pass snapshots of the body steps' results, for paged run reports. */
   loopPasses?: Record<string, StepResult>[];
+  /** Skipped because the step is switched off — a deliberate pass-through, not a failure. */
+  disabled?: boolean;
   /** Carried over from a previous run for display; never usable as a {{steps.*}} source. */
   stale?: boolean;
 }
@@ -139,12 +143,16 @@ export const isLoopNode = (node: unknown): node is LoopFlowNode =>
   && isRecord(node.config)
   && typeof node.config.count === "number";
 
+/** A step runs unless it was explicitly switched off; absent `enabled` means on. */
+export const isNodeEnabled = (node: Pick<FlowNodeBase, "enabled">): boolean => node.enabled !== false;
+
 const isNodeBase = (node: Record<string, unknown>): boolean =>
   typeof node.id === "string"
   && typeof node.key === "string"
   && isRecord(node.position)
   && Number.isFinite(node.position.x)
-  && Number.isFinite(node.position.y);
+  && Number.isFinite(node.position.y)
+  && (node.enabled === undefined || typeof node.enabled === "boolean");
 
 const isFlowNode = (node: unknown): node is FlowNode => {
   if (!isRecord(node) || !isNodeBase(node)) return false;
@@ -156,10 +164,12 @@ const isFlowNode = (node: unknown): node is FlowNode => {
       && node.config.ms >= 0;
   }
   if (node.type === "loop") {
+    // same bounds validateFlow enforces, so a hand-edited file can't smuggle in a 1e9 loop
     return isRecord(node.config)
       && typeof node.config.count === "number"
       && Number.isInteger(node.config.count)
-      && node.config.count >= 1;
+      && node.config.count >= 1
+      && node.config.count <= MAX_LOOP_COUNT;
   }
   return isTransformNode(node);
 };

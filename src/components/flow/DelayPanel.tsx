@@ -1,21 +1,20 @@
-import { MAX_LOOP_COUNT } from "../../lib/flow/types";
 import { isStepKey } from "../../lib/flow/validate";
 import { useApp } from "../../store";
 import { Icon } from "../../ui/Icon";
 import { CommitNumberInput } from "./nodeBits";
-import { confirmDeleteNode, setLoopCount } from "./nodeActions";
+import { confirmDeleteNode, setDelayMs } from "./nodeActions";
 
-// Lives in the right dock as the Step detail tab for loop blocks — no modal: the pass count
-// edits inline right here, next to the in/out anchor legend.
-export function LoopPanel({ tabId }: { tabId: string }) {
+// Lives in the right dock as the Step detail tab for delay blocks — the wait duration edits
+// inline here (no modal), mirroring the loop panel.
+export function DelayPanel({ tabId }: { tabId: string }) {
   const ft = useApp((state) => state.flowTabs[tabId]);
   const updateFlowTab = useApp((state) => state.updateFlowTab);
   const opened = ft?.flow.nodes.find((item) => item.id === ft.panelNodeId);
-  const node = opened?.type === "loop" ? opened : undefined;
+  const node = opened?.type === "delay" ? opened : undefined;
   if (!ft || !node) {
     return (
       <div className="inspector-empty flow-panel-hint">
-        Click a loop block on the canvas to see its passes and wiring.
+        Click a delay block on the canvas to set how long the flow pauses.
       </div>
     );
   }
@@ -36,10 +35,9 @@ export function LoopPanel({ tabId }: { tabId: string }) {
     : ft.flow.nodes.some((item) => item.id !== node.id && item.key === node.key)
       ? "This key is already used by another step"
       : null;
-  const step = ft.run?.steps[node.id];
 
   return (
-    <section className="flow-node-panel flow-loop-panel" aria-label="Selected loop step">
+    <section className="flow-node-panel flow-delay-panel" aria-label="Selected delay step">
       <div className="flow-node-panel-head">
         <label>
           <span>Key</span>
@@ -71,40 +69,24 @@ export function LoopPanel({ tabId }: { tabId: string }) {
         </button>
       </div>
       {keyError && <div className="flow-key-error">{keyError}</div>}
-      {step?.error && <div className="flow-step-error">{step.error}</div>}
 
       <div className="flow-loop-body">
         <div className="flow-step-field">
-          <span>Body passes</span>
+          <span>Wait for</span>
           <CommitNumberInput
-            value={node.config.count}
-            min={1}
-            max={MAX_LOOP_COUNT}
+            value={node.config.ms}
+            min={0}
             disabled={ft.running}
-            ariaLabel="Loop body passes"
-            invalidTitle="Invalid loop count"
-            invalidMessage={`Enter a whole number from 1 to ${MAX_LOOP_COUNT}.`}
-            onCommit={(count) => setLoopCount(tabId, node.id, count)}
+            ariaLabel="Delay duration in milliseconds"
+            invalidTitle="Invalid delay"
+            invalidMessage="Enter a number of milliseconds, 0 or more."
+            onCommit={(ms) => setDelayMs(tabId, node.id, ms)}
           />
-          {step?.remaining != null && (
-            <span className="flow-node-loop-count" title="Passes left">{step.remaining} left</span>
-          )}
+          <span className="flow-step-unit">ms</span>
         </div>
-
-        <div className="flow-loop-hint">
-          <div className="inspector-section-label"><Icon name="repeat" size={12} /> Wiring the circle</div>
-          <div className="flow-loop-hint-row">
-            <span className="flow-dot flow-dot-in" aria-hidden="true" />
-            <span><strong>Top dots are in</strong> — wire the body&apos;s last block into either side of this loop.</span>
-          </div>
-          <div className="flow-loop-hint-row">
-            <span className="flow-dot flow-dot-out" aria-hidden="true" />
-            <span><strong>Bottom dots are out</strong> — drag one back into the first body block to close the circle; any other output keeps flowing after the loop.</span>
-          </div>
-          <p className="flow-loop-hint-note">
-            Everything between the loop-back target and this block runs ×{node.config.count} per flow run; downstream {"{{steps.…}}"} refs resolve to the last pass.
-          </p>
-        </div>
+        <p className="flow-loop-hint-note">
+          The flow pauses on this block, then continues to the next step. A delay of 0 ms simply yields.
+        </p>
       </div>
     </section>
   );

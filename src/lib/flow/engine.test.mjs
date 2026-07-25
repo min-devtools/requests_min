@@ -804,3 +804,91 @@ test("loop pass pages stop at the failed pass and solo runs page every pass", as
   await solo.executor.runFlow("tab-1", "loop");
   assert.equal(solo.flowTab.run.steps.loop.loopPasses.length, 3);
 });
+
+// A step hanging off a loop BODY step (not off the loop itself) used to race the loop's own
+// re-runs: depending only on which wire was drawn first it was either skipped outright while the
+// run still reported success, or it read the very first pass. It must wait for the whole loop.
+test("a step fed by a loop body step waits for the loop and sees the last pass", async () => {
+  const body = httpNode("body", "poll");
+  const loop = loopNode("loop", "again", 3);
+  const after = httpNode("after", "done", "https://example.test/final-{{steps.poll.response.body.n}}");
+  const edgeOrders = [
+    [edge("body", "loop"), edge("loop", "body"), edge("body", "after")],
+    [edge("body", "after"), edge("body", "loop"), edge("loop", "body")],
+  ];
+  for (const edges of edgeOrders) {
+    const h = await makeHarness({ flow: makeFlow([body, loop, after], edges) });
+    h.setHttp(async (_env, _request, index) => httpResponse(200, JSON.stringify({ n: index })));
+    await h.executor.runFlow("tab-1");
+
+    assert.equal(h.flowTab.run.steps.after.status, "success");
+    assert.equal(h.flowTab.run.status, "success");
+    assert.equal(h.httpCalls.length, 4); // body x3 passes, then after once
+    assert.equal(h.httpCalls[3].request.http.url, "https://example.test/final-2");
+  }
+});
+
+test("a skip with nothing to blame fails the run instead of reporting success", async () => {
+  const first = httpNode("first", "one");
+  const second = httpNode("second", "two");
+  const h = await makeHarness({
+    flow: makeFlow([first, second], [edge("first", "second")]),
+  });
+  h.setHttp(async (_env, _request, index) => index === 0 ? httpResponse(500) : httpResponse(200));
+  await h.executor.runFlow("tab-1");
+
+  assert.equal(h.flowTab.run.steps.second.status, "skipped");
+  assert.equal(h.flowTab.run.status, "failed");
+});
+
+const disable = (node) => ({ ...node, enabled: false });
+
+test("a switched-off step is skipped as a pass-through and never blocks what it feeds", async () => {
+  const first = httpNode("first", "one");
+  const middle = httpNode("middle", "two");
+  const last = httpNode("last", "three");
+  const h = await makeHarness({
+    flow: makeFlow(
+      [first, disable(middle), last],
+      [edge("first", "middle"), edge("middle", "last")],
+    ),
+  });
+  await h.executor.runFlow("tab-1");
+
+  assert.equal(h.flowTab.run.steps.middle.status, "skipped");
+  assert.equal(h.flowTab.run.steps.middle.disabled, true);
+  assert.equal(h.flowTab.run.steps.last.status, "success");
+  assert.equal(h.flowTab.run.status, "success"); // a deliberate skip is not a failure
+  assert.equal(h.httpCalls.length, 2); // first + last, middle never dialled
+});
+
+test("a switched-off loop leaves its body to the scheduler's single pass", async () => {
+  const body = httpNode("body", "poll");
+  const h = await makeHarness({
+    flow: makeFlow(
+      [body, disable(loopNode("loop", "again", 4))],
+      [edge("body", "loop"), edge("loop", "body")],
+    ),
+  });
+  await h.executor.runFlow("tab-1");
+
+  assert.equal(h.httpCalls.length, 1);
+  assert.equal(h.flowTab.run.steps.loop.disabled, true);
+  assert.equal(h.flowTab.run.status, "success");
+});
+
+test("a switched-off body step is passed over on every loop pass", async () => {
+  const body = httpNode("body", "poll");
+  const skipped = httpNode("skipped", "nope");
+  const h = await makeHarness({
+    flow: makeFlow(
+      [body, disable(skipped), loopNode("loop", "again", 3)],
+      [edge("body", "skipped"), edge("skipped", "loop"), edge("loop", "body")],
+    ),
+  });
+  await h.executor.runFlow("tab-1");
+
+  assert.equal(h.httpCalls.length, 3); // body once per pass; the off step never runs
+  assert.equal(h.flowTab.run.steps.skipped.disabled, true);
+  assert.equal(h.flowTab.run.status, "success");
+});

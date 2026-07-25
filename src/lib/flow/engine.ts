@@ -2,6 +2,7 @@ import type { GrpcPart, GrpcResponse, HttpResponse, Request } from "../api";
 import { buildStepCtx, substituteRequest } from "./stepRefs.ts";
 import { runTransformCode } from "./transform.ts";
 import type { Flow, FlowRun, StepResult } from "./types.ts";
+import { isNodeEnabled } from "./types.ts";
 import { dagEdges, loopBodyNodes, topoOrder, validateFlow } from "./validate.ts";
 
 type Response = HttpResponse | GrpcResponse;
@@ -130,6 +131,24 @@ export function createFlowExecutor(dependencies: FlowExecutorDependencies): Flow
       if (node.type === "loop") loopBodies.set(node.id, loopBodyNodes(flow, node.id));
     }
 
+    // A loop re-runs its body itself, so anything hanging off a body step must wait for the LOOP
+    // to finish, not just for that body step's first pass — otherwise the scheduler unlocks it
+    // mid-re-run and it either reads a half-written step or gets skipped outright. Re-parenting
+    // those edges onto the loop is cycle-free: a body step's child that could reach the loop
+    // would itself be in the body by definition.
+    const schedulerEdges = [...graphEdges];
+    const rewired = new Set<string>();
+    for (const [loopId, body] of loopBodies) {
+      const inBody = new Set(body);
+      for (const edge of graphEdges) {
+        if (!inBody.has(edge.source) || inBody.has(edge.target) || edge.target === loopId) continue;
+        const key = `${loopId}->${edge.target}`;
+        if (rewired.has(key)) continue;
+        rewired.add(key);
+        schedulerEdges.push({ id: `loop-exit:${key}`, source: loopId, target: edge.target });
+      }
+    }
+
     if (onlyNodeId && !flow.nodes.some((node) => node.id === onlyNodeId)) {
       dependencies.showToast(
         "Flow step not found",
@@ -171,6 +190,13 @@ export function createFlowExecutor(dependencies: FlowExecutorDependencies): Flow
     // start) is the scheduler's job below — this just runs whatever node it's handed.
     const runNode = async (nodeId: string, via?: string): Promise<void> => {
       const node = nodes.get(nodeId)!;
+      // switched-off steps are pass-throughs: they never execute, and (unlike a real skip)
+      // they don't block descendants or fail the run — see blockedBy and the status roll-up
+      if (!isNodeEnabled(node)) {
+        run.steps[nodeId] = { status: "skipped", disabled: true };
+        push(true);
+        return;
+      }
       run.steps[nodeId] = { status: "running" };
       // stamp the handoff: the wire from the feeding block flashes briefly in the canvas
       run.pulses![nodeId] = { at: now(), via: via ?? null };
@@ -293,7 +319,7 @@ export function createFlowExecutor(dependencies: FlowExecutorDependencies): Flow
     // parent is onError:"continue") or the run was cancelled — that scopes failures to descendants.
     const parentsOf = new Map<string, string[]>(flow.nodes.map((node) => [node.id, []]));
     const childrenOf = new Map<string, string[]>(flow.nodes.map((node) => [node.id, []]));
-    for (const graphEdge of graphEdges) {
+    for (const graphEdge of schedulerEdges) {
       parentsOf.get(graphEdge.target)?.push(graphEdge.source);
       childrenOf.get(graphEdge.source)?.push(graphEdge.target);
     }
@@ -301,11 +327,13 @@ export function createFlowExecutor(dependencies: FlowExecutorDependencies): Flow
       flow.nodes.map((node) => [node.id, parentsOf.get(node.id)!.length]),
     );
     const blockedBy = (nodeId: string): boolean => parentsOf.get(nodeId)!.some((parentId) => {
-      const status = run.steps[parentId]?.status;
-      if (status === "success") return false;
+      const step = run.steps[parentId];
+      if (step?.status === "success") return false;
+      // a switched-off parent is a deliberate pass-through, not a failure — it never blocks
+      if (step?.disabled) return false;
       const parent = nodes.get(parentId);
       // a failed parent set to "continue" doesn't block — downstream {{refs}} just resolve empty
-      if (status === "failed" && parent?.type === "request" && parent.config.onError === "continue") return false;
+      if (step?.status === "failed" && parent?.type === "request" && parent.config.onError === "continue") return false;
       return true;
     });
 
@@ -348,7 +376,11 @@ export function createFlowExecutor(dependencies: FlowExecutorDependencies): Flow
       } else if (onlyNodeId) {
         run.status = run.steps[onlyNodeId].status === "success" ? "success" : "failed";
       } else {
-        run.status = Object.values(run.steps).some((step) => step.status === "failed")
+        // an unexplained skip (no failure to blame, not switched off) means the scheduler dropped
+        // a step — report that as a failed run instead of a green "finished" that hides it
+        run.status = Object.values(run.steps).some(
+          (step) => step.status === "failed" || (step.status === "skipped" && !step.disabled),
+        )
           ? "failed"
           : "success";
       }

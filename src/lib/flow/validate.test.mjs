@@ -246,6 +246,18 @@ test("isFlow accepts well-formed flows and rejects malformed shapes", async () =
     false, // transform without code
   );
   assert.equal(isFlow({ ...good, edges: [{ id: "e" }] }), false);
+
+  // the structural guard enforces the same loop bounds validateFlow does, so a hand-edited
+  // flows/*.json can't smuggle in a runaway iteration count
+  const loop = (count) => node("l", { type: "loop", config: { count } });
+  assert.equal(isFlow({ ...good, nodes: [loop(100)] }), true);
+  assert.equal(isFlow({ ...good, nodes: [loop(101)] }), false);
+  assert.equal(isFlow({ ...good, nodes: [loop(1_000_000_000)] }), false);
+  assert.equal(isFlow({ ...good, nodes: [loop(0)] }), false);
+
+  // `enabled` is optional but must be a boolean when present
+  assert.equal(isFlow({ ...good, nodes: [{ ...node("a"), enabled: false }] }), true);
+  assert.equal(isFlow({ ...good, nodes: [{ ...node("a"), enabled: "yes" }] }), false);
 });
 
 const loopNode = (id, count = 2) => node(id, { type: "loop", config: { count } });

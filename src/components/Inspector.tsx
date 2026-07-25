@@ -8,6 +8,7 @@ import { saveActiveRequest } from "../lib/runRequest";
 import { buildCurl, buildGrpcurl } from "./views/RequestView";
 import { requestVariableNames, resolveRequestTarget } from "../lib/requestVariables";
 import { JsonTreePanel } from "../ui/JsonTreePanel";
+import { DelayPanel } from "./flow/DelayPanel";
 import { LoopPanel } from "./flow/LoopPanel";
 import { NodePanel } from "./flow/NodePanel";
 import { TransformPanel } from "./flow/TransformPanel";
@@ -192,7 +193,9 @@ export function Inspector() {
                   ? <TransformPanel tabId={activeTabId} />
                   : panelNode?.type === "loop"
                     ? <LoopPanel tabId={activeTabId} />
-                    : <NodePanel tabId={activeTabId} />}
+                    : panelNode?.type === "delay"
+                      ? <DelayPanel tabId={activeTabId} />
+                      : <NodePanel tabId={activeTabId} />}
               </div>
             ) : (
               <section className="inspector-flow-result">

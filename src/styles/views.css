@@ -887,11 +887,24 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
 
 .flow-panel-hint { padding: 14px; }
 
-/* loop step detail: pass count + the in/out anchor legend */
+/* loop & delay step details: label + inline number field (values edit in the dock, no modal) */
 .flow-loop-body { padding: 12px; display: grid; gap: 14px; align-content: start; }
-.flow-loop-passes { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 0.8462rem; }
-.flow-loop-passes strong { color: var(--orange, var(--accent-primary)); font: 700 1rem/1 var(--font-mono); }
-.flow-loop-passes .tool-btn { margin-left: auto; }
+.flow-step-field { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 0.8462rem; }
+.flow-step-number {
+  width: 74px;
+  height: 28px;
+  padding: 0 8px;
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  outline: none;
+  background: var(--surface-window);
+  font: 650 0.8462rem/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.flow-step-number:focus { border-color: var(--accent-primary); }
+.flow-step-number:disabled { opacity: 0.5; }
+.flow-step-unit { color: var(--text-muted); font: 650 0.7692rem/1 var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase; }
 .flow-loop-hint { display: grid; gap: 8px; }
 .flow-loop-hint-row { display: flex; gap: 8px; align-items: flex-start; color: var(--text-secondary); font-size: 0.8462rem; line-height: 1.45; }
 .flow-loop-hint-note { margin: 0; color: var(--text-muted); font-size: 0.7692rem; line-height: 1.5; }
@@ -1098,16 +1111,21 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   border-color: var(--status-danger);
 }
 
+/* Every block shares one chassis — size, surface, status system — and layers its own
+   silhouette + accent via --block-accent, so the step type reads at a glance. */
 .flow-node {
+  --block-accent: var(--accent-primary);
+  position: relative;
   min-width: 200px;
   max-width: 270px;
   padding: 10px 12px;
   color: var(--text-primary);
   border: 1px solid var(--border-default);
-  border-radius: 9px;
+  border-radius: 10px;
   background: var(--surface-panel);
   box-shadow: 0 8px 24px color-mix(in oklab, var(--surface-app), transparent 62%);
   font-size: 0.9231rem;
+  transition: border-color var(--motion-fast) var(--ease-ui);
 }
 
 .react-flow__node.selected .flow-node {
@@ -1116,6 +1134,19 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
 }
 
 .flow-node-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
+
+/* the block's "app icon": one tinted tile per type, hue driven by --block-accent */
+.flow-node-emblem {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--block-accent);
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--block-accent), transparent 84%);
+}
 .flow-node-key {
   min-width: 0;
   overflow: hidden;
@@ -1123,17 +1154,57 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.flow-node-kind { color: var(--status-warning); font: 700 0.7692rem/1 var(--font-mono); text-transform: uppercase; }
-.flow-node-run {
-  width: 24px;
-  height: 24px;
-  margin-left: auto;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.flow-node-kind {
+  flex: none;
+  color: var(--block-accent);
+  font: 700 0.7692rem/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 .flow-node-actions { margin-left: auto; display: inline-flex; gap: 4px; }
+
+/* per-block on/off switch, pinned to the top-right of the head row. Off keeps the block on the
+   canvas and wired up — the run just walks straight past it to whatever it feeds. */
+.flow-node-toggle {
+  width: 26px;
+  height: 15px;
+  padding: 0;
+  flex: none;
+  margin-left: 6px;
+  position: relative;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--text-muted), transparent 82%);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-ui), border-color var(--motion-fast) var(--ease-ui);
+}
+.flow-node-toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform var(--motion-fast) var(--ease-ui), background var(--motion-fast) var(--ease-ui);
+}
+.flow-node-toggle[aria-checked="true"] {
+  border-color: var(--block-accent);
+  background: color-mix(in oklab, var(--block-accent), transparent 70%);
+}
+.flow-node-toggle[aria-checked="true"]::after {
+  transform: translateX(11px);
+  background: var(--block-accent);
+}
+
+/* a switched-off block reads as inert: drained of colour, dashed edge, no running animations */
+.flow-node.is-off {
+  opacity: 0.5;
+  border-style: dashed;
+}
+.flow-node.is-off .flow-node-emblem,
+.flow-node.is-off .flow-loop-dial { filter: grayscale(0.9); }
 .flow-node-btn {
   width: 22px;
   height: 22px;
@@ -1152,36 +1223,139 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* status readout: a state-colored dot beside the word, tinted by the status-* classes */
 .flow-node-status {
-  margin-top: 7px;
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--text-muted);
   font: 650 0.6923rem/1 var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.flow-status-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.55;
+}
+.flow-node-foot { margin-top: 8px; display: flex; align-items: center; }
+.flow-node-foot .flow-node-status { margin-top: 0; }
+
 .flow-node .react-flow__handle {
-  width: 8px;
-  height: 8px;
-  border: 1px solid var(--surface-panel);
-  background: var(--accent-primary);
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--surface-panel);
+  background: var(--block-accent);
 }
 .flow-node.status-running {
-  border-color: var(--accent-primary);
+  border-color: var(--block-accent);
   animation: flow-pulse 1.2s ease-in-out infinite;
 }
+.flow-node.status-running .flow-status-dot { background: var(--block-accent); opacity: 1; animation: flow-status-blink 0.9s ease-in-out infinite; }
 .flow-node.status-success { border-color: var(--status-success); }
 .flow-node.status-success .flow-node-status { color: var(--status-success); }
+.flow-node.status-success .flow-status-dot { background: var(--status-success); opacity: 1; }
 .flow-node.status-failed { border-color: var(--status-danger); }
 .flow-node.status-failed .flow-node-status { color: var(--status-danger); }
+.flow-node.status-failed .flow-status-dot { background: var(--status-danger); opacity: 1; }
 .flow-node.status-skipped { opacity: 0.55; }
-.flow-node.is-stale { opacity: 0.6; border-style: dashed; }
+/* stale = a faded photocopy of itself (dashed borders belong to delay blocks now) */
+.flow-node.is-stale { opacity: 0.6; }
+.flow-node.is-stale .flow-node-emblem { filter: grayscale(0.8); }
 .flow-report-row.is-stale { opacity: 0.6; }
+@keyframes flow-status-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
-/* transform node: purple accent (JS), monospace code hint */
-.flow-node-transform .flow-node-kind { color: var(--purple, var(--accent-primary)); }
-.flow-node-transform .flow-node-head > svg { color: var(--purple, var(--accent-primary)); }
-.flow-node-loop .flow-node-kind { color: var(--orange, var(--accent-primary)); }
-.flow-node-loop .flow-node-head > svg { color: var(--orange, var(--accent-primary)); }
+/* ——— block identities: one instantly-readable silhouette per step type ——— */
+
+/* HTTP request = a dispatch slip: a colored rail + chip in the method's own hue
+   (same mapping as the tab method tags: GET blue, POST green, PUT/PATCH orange, DELETE red) */
+.flow-node-request {
+  --block-accent: var(--method-color, var(--accent-primary));
+  padding-left: 15px;
+}
+.flow-node-request::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  bottom: -1px;
+  width: 4px;
+  border-radius: 10px 0 0 10px;
+  background: var(--block-accent);
+}
+.flow-node-request[data-method="GET"] { --method-color: var(--blue-2); }
+.flow-node-request[data-method="POST"] { --method-color: var(--green); }
+.flow-node-request[data-method="PUT"],
+.flow-node-request[data-method="PATCH"] { --method-color: var(--orange); }
+.flow-node-request[data-method="DELETE"] { --method-color: var(--red); }
+/* the method tag becomes a chip: text hue from the app's .method-tag.*, wash via currentColor */
+.flow-node .method-tag {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: color-mix(in oklab, currentColor, transparent 86%);
+  font-weight: 700;
+}
+
+/* gRPC = a connector plug: cyan identity, cable emblem, an equalizer that dances
+   while a call is streaming */
+.flow-node-grpc { --block-accent: var(--accent-secondary); }
+.flow-stream {
+  height: 11px;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+.flow-stream i {
+  width: 3px;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--accent-secondary);
+  transform-origin: bottom;
+}
+.flow-stream i:nth-child(2) { height: 7px; }
+.flow-node.status-running .flow-stream i { animation: flow-eq 0.9s ease-in-out infinite; }
+.flow-node.status-running .flow-stream i:nth-child(2) { animation-delay: 0.15s; }
+.flow-node.status-running .flow-stream i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes flow-eq {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(1.5); }
+}
+
+/* loop = a turbine dial: the ring fills as body passes burn down, the repeat
+   glyph spins while the engine iterates */
+.flow-node-loop { --block-accent: var(--orange); }
+.flow-loop-dial {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--block-accent);
+}
+.flow-loop-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.flow-loop-ring-track {
+  fill: none;
+  stroke: color-mix(in oklab, var(--block-accent), transparent 80%);
+  stroke-width: 3;
+}
+.flow-loop-ring-bar {
+  fill: none;
+  stroke: var(--block-accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--motion-standard) var(--ease-ui);
+}
+.flow-loop-icon { position: relative; }
+.flow-node.status-running .flow-loop-icon { animation: flow-spin 1.4s linear infinite; }
+@keyframes flow-spin { to { transform: rotate(360deg); } }
 
 /* loop anchors are color-coded: blue = in (wire enters), orange = out (loop-back/continue) */
 .flow-node-loop .react-flow__handle.handle-in { background: var(--accent-primary); }
@@ -1196,9 +1370,90 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--orange, var(--accent-primary));
-  color: #fff;
+  background: var(--block-accent);
+  color: var(--text-on-accent);
   font: 700 0.6923rem/1 var(--font-mono);
+}
+
+/* compact blocks carry no step key on the face, but they read left-to-right like every other
+   block: emblem, kind, badge — then the action cluster and the on/off switch at the top right */
+.flow-node-loop .flow-node-head,
+.flow-node-delay .flow-node-head { justify-content: flex-start; }
+.flow-node-loop .flow-node-actions,
+.flow-node-delay .flow-node-actions { position: static; margin-left: auto; }
+.flow-node-loop .flow-node-sub { text-align: left; }
+.flow-node-delay .flow-delay-face { margin-right: 0; margin-left: 0; }
+.flow-node-loop .flow-node-status,
+.flow-node-delay .flow-node-status { display: inline-flex; justify-content: flex-start; }
+
+/* delay = a snoozing timer: dashed "not solid yet" border, digital readout,
+   hourglass that flips over and over while the wait is in progress */
+.flow-node-delay {
+  --block-accent: var(--conn-slate);
+  border-style: dashed;
+  border-width: 1.5px;
+}
+.flow-delay-face {
+  width: fit-content;
+  margin-top: 7px;
+  padding: 5px 9px;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  border: 1px solid color-mix(in oklab, var(--block-accent), transparent 65%);
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--block-accent), transparent 92%);
+  font-family: var(--font-mono);
+}
+.flow-delay-ms {
+  color: var(--text-primary);
+  font-size: 1.0769rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.flow-delay-unit {
+  color: var(--block-accent);
+  font-size: 0.6923rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.flow-node.status-running .flow-hourglass { animation: flow-hourglass-flip 1.8s var(--ease-ui) infinite; }
+@keyframes flow-hourglass-flip {
+  0%, 40% { transform: rotate(0deg); }
+  60%, 90% { transform: rotate(180deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* transform = a tiny editor window: traffic-light dots, purple ƒ, and a code well
+   showing the script's first meaningful line */
+.flow-node-transform { --block-accent: var(--purple); }
+.flow-win-dots { display: inline-flex; gap: 3px; flex: none; }
+.flow-win-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--block-accent), transparent 55%);
+}
+.flow-node-code {
+  margin-top: 7px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--block-accent), transparent 72%);
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--surface-app), transparent 45%);
+}
+.flow-node-fn { flex: none; color: var(--block-accent); font: 700 0.9231rem/1 var(--font-mono); }
+.flow-node-code-line {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font: 0.8462rem/1.35 var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* while a wire is being dragged, every anchor that can accept it pulses scale + color */
@@ -1222,14 +1477,6 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
     transform: translate(-50%, -50%) scale(1.15);
     box-shadow: 0 0 0 5px color-mix(in oklab, var(--accent-primary), transparent 84%);
   }
-}
-.flow-node-code {
-  margin-top: 7px;
-  overflow: hidden;
-  color: var(--text-muted);
-  font: 0.8462rem/1.35 var(--font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* transform dock editor: input preview, JS body, return preview stacked and scrollable */
@@ -1375,6 +1622,12 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
 .flow-report-row.status-failed { border-left-color: var(--status-danger); background: color-mix(in oklab, var(--status-danger), transparent 94%); }
 .flow-report-row.status-running { border-left-color: var(--accent-primary); }
 .flow-report-row.status-skipped { border-left-color: var(--border-strong); }
+/* row glyphs reuse the blocks' identity colors, so the table and the canvas agree */
+.flow-report-type-http { color: var(--accent-primary); }
+.flow-report-type-grpc { color: var(--accent-secondary); }
+.flow-report-type-loop { color: var(--orange); }
+.flow-report-type-delay { color: var(--conn-slate); }
+.flow-report-type-transform { color: var(--purple); }
 
 .flow-report-row:first-child { border-top: 0; }
 .flow-report-row:hover { background: var(--surface-hover); }
