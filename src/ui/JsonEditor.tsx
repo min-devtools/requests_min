@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { initVimMode } from "monaco-vim";
 import { Icon } from "./Icon";
 import { MONACO_THEME } from "../lib/monaco";
+import { diagnoseJsonWithTemplates, formatJsonWithTemplates, minifyJsonWithTemplates, validateJsonWithTemplates } from "../lib/jsonTemplate";
 import { runActiveRequest } from "../lib/runRequest";
 import { useApp } from "../store";
 
@@ -13,7 +14,7 @@ export function JsonEditor({ value, onChange, language = "json", variableNames =
   const editorFont = useApp((state) => state.editorFont);
   const showToast = useApp((state) => state.showToast);
   const vimMode = useApp((state) => state.vimMode);
-  const toggleVimMode = useApp((state) => state.toggleVimMode);
+  const [wordWrap, setWordWrap] = useState(true);
   const [validation, setValidation] = useState<"valid" | "invalid" | null>(null);
   const variableNamesRef = useRef(variableNames);
   variableNamesRef.current = variableNames;
@@ -28,25 +29,32 @@ export function JsonEditor({ value, onChange, language = "json", variableNames =
     const vim = initVimMode(editorRef.current, statusRef.current);
     return () => vim.dispose();
   }, [mounted, vimMode]);
-  const transform = (pretty: boolean) => {
+  const format = () => {
     try {
-      onChange(JSON.stringify(JSON.parse(value), null, pretty ? 2 : undefined));
+      onChange(formatJsonWithTemplates(value));
       setValidation("valid");
     } catch (error) {
       setValidation("invalid");
       showToast("Invalid JSON", String(error), "err");
     }
   };
-  const format = () => transform(true);
-  const minify = () => transform(false);
-  const validate = () => {
+  const minify = () => {
     try {
-      JSON.parse(value);
+      onChange(minifyJsonWithTemplates(value));
       setValidation("valid");
-      showToast("JSON valid", "Ready to send.");
     } catch (error) {
       setValidation("invalid");
       showToast("Invalid JSON", String(error), "err");
+    }
+  };
+  const validate = () => {
+    const result = validateJsonWithTemplates(value);
+    if (result.valid) {
+      setValidation("valid");
+      showToast("JSON valid", "Ready to send.");
+    } else {
+      setValidation("invalid");
+      showToast("Invalid JSON", result.error ?? "Syntax error", "err");
     }
   };
   const onMount: OnMount = (editor, monaco) => {
@@ -86,7 +94,29 @@ export function JsonEditor({ value, onChange, language = "json", variableNames =
         editor.trigger("env-vars", "editor.action.triggerSuggest", {});
       }
     });
-    editor.onDidDispose(() => { changes.dispose(); provider.dispose(); });
+    // Template-aware diagnostics: the JSON worker can't cope with unquoted {{var}} (it reads
+    // as nested objects and cascades false errors), so monaco validation is off and we paint
+    // squiggles ourselves — only genuine syntax errors (missing ':'/',' unterminated nodes…)
+    // get marked; {{...}} tokens never do.
+    const updateJsonDiagnostics = () => {
+      const model = editor.getModel();
+      if (!model || language !== "json") return;
+      monaco.editor.setModelMarkers(model, "json-template", diagnoseJsonWithTemplates(model.getValue()).map((d) => ({
+        severity: monaco.MarkerSeverity.Error,
+        message: d.message,
+        startLineNumber: d.startLine,
+        startColumn: d.startColumn,
+        endLineNumber: d.endLine,
+        endColumn: d.endColumn,
+      })));
+    };
+    updateJsonDiagnostics();
+    let diagnosticsTimer: ReturnType<typeof setTimeout> | undefined;
+    const diagnosticsListener = editor.onDidChangeModelContent(() => {
+      clearTimeout(diagnosticsTimer);
+      diagnosticsTimer = setTimeout(updateJsonDiagnostics, 300);
+    });
+    editor.onDidDispose(() => { changes.dispose(); provider.dispose(); diagnosticsListener.dispose(); clearTimeout(diagnosticsTimer); });
   };
 
   return (
@@ -95,9 +125,9 @@ export function JsonEditor({ value, onChange, language = "json", variableNames =
         <div className="json-editor-tools">
           <span className={validation === "invalid" ? "invalid" : validation === "valid" ? "valid" : ""}>JSON {validation ?? ""}</span>
           <span />
-          <button type="button" className={vimMode ? "active" : ""} onClick={toggleVimMode} title="Vim mode" aria-label="Vim mode" aria-pressed={vimMode}>vim</button>
           {onFillSample && <button type="button" onClick={onFillSample} title="Fill sample from method" aria-label="Fill sample"><Icon name="zap" size={14} /></button>}
           <button type="button" onClick={format} title="Format" aria-label="Format"><Icon name="wand" size={14} /></button>
+          <button type="button" className={wordWrap ? "active" : ""} onClick={() => setWordWrap((v) => !v)} title={wordWrap ? "Disable Word Wrap" : "Enable Word Wrap"} aria-label="Toggle Word Wrap" aria-pressed={wordWrap}><Icon name="wrap" size={14} /></button>
           <button type="button" onClick={minify} title="Minify" aria-label="Minify"><Icon name="minify" size={14} /></button>
           <button type="button" onClick={validate} title="Validate" aria-label="Validate"><Icon name="check" size={14} /></button>
         </div>
@@ -123,7 +153,7 @@ export function JsonEditor({ value, onChange, language = "json", variableNames =
           renderLineHighlight: "line",
           overviewRulerLanes: 0,
           hideCursorInOverviewRuler: true,
-          wordWrap: "on",
+          wordWrap: wordWrap ? "on" : "off",
           padding: { top: 10, bottom: 10 },
           scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
         }}

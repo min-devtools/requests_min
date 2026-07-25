@@ -34,3 +34,10 @@ test("history rows have breathing room for request name and URL", async () => {
   assert.match(view, /className="history-table"/);
   assert.match(css, /\.history-table td\s*\{[^}]*height:\s*52px;[^}]*padding:\s*8px 12px/s);
 });
+
+test("json editor shell and body editor allow shrinking below Monaco inner width for auto text wrap resize", async () => {
+  const css = await readFile(new URL("requestsmin.css", import.meta.url), "utf8");
+  assert.match(css, /\.body-editor\s*\{[^}]*min-width:\s*0/s);
+  assert.match(css, /\.json-editor-shell\s*\{[^}]*min-width:\s*0[^}]*overflow:\s*hidden/s);
+});
+

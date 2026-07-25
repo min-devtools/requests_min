@@ -55,11 +55,12 @@ export function retintMonaco(theme: "dark" | "light") {
   monaco.editor.setTheme(MONACO_THEME);
 }
 
-// {{var}}/{{steps.*}} tokens make request bodies technically-invalid JSON, so the
-// language service's squiggles are all noise here — JsonEditor's explicit Validate
-// button covers real syntax checks.
+// JSON worker validation stays off: an unquoted {{var}} reads as nested "{" opens to the
+// language service, collapsing the parse tree and cascading false errors onto lines far
+// beyond the token. JsonEditor instead runs diagnoseJsonWithTemplates (template-aware) and
+// paints red squiggles itself — no false positives on {{...}}, real syntax errors still mark.
 (monaco.languages as unknown as {
   json?: { jsonDefaults: { setDiagnosticsOptions: (options: object) => void } };
-}).json?.jsonDefaults.setDiagnosticsOptions({ validate: false });
+}).json?.jsonDefaults.setDiagnosticsOptions({ validate: false, allowComments: true });
 
 loader.config({ monaco });

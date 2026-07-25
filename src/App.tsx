@@ -70,6 +70,21 @@ export default function App() {
     retintMonaco(themeBase(theme));
   }, [theme, compact, uiFontSize, uiFont, editorFont, leftCollapsed, rightCollapsed, tabs, activeTabId]);
 
+  useEffect(() => {
+    const preventFileDrop = (e: DragEvent) => {
+      // Prevent browser from navigating when dropping files anywhere on the app
+      if (e.dataTransfer?.types.includes("Files")) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("dragover", preventFileDrop);
+    window.addEventListener("drop", preventFileDrop);
+    return () => {
+      window.removeEventListener("dragover", preventFileDrop);
+      window.removeEventListener("drop", preventFileDrop);
+    };
+  }, []);
+
   useEffect(() => { void startAutoSync(); }, []);
 
   useEffect(() => {
@@ -77,7 +92,7 @@ export default function App() {
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
       if (mod && key === "k") { e.preventDefault(); setCommandOpen(true); }
-      if (mod && key === "n") { e.preventDefault(); newRequestTab(); }
+      if (e.metaKey && key === "n") { e.preventDefault(); newRequestTab(); }
       if (mod && e.key === "Enter") {
         e.preventDefault();
         const activeTabKind = useApp.getState().tabs.find((tab) => tab.id === useApp.getState().activeTabId)?.kind;

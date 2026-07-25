@@ -793,6 +793,53 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
 .flow-saved { color: var(--text-muted); }
 .flow-running-badge { color: var(--accent-primary); border-color: color-mix(in oklab, var(--accent-primary), transparent 55%); }
 
+.actions-menu { position: relative; display: inline-flex; }
+.actions-menu > .tool-btn { gap: 6px; }
+.actions-menu-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 220px;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-popover, var(--surface-panel));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+}
+.actions-menu-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+  margin-bottom: 4px;
+}
+.actions-menu-search input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  outline: none;
+}
+.actions-menu-list { display: grid; gap: 1px; max-height: 260px; overflow: auto; }
+.actions-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: default;
+  color: var(--text-primary);
+}
+.actions-menu-item.active { background: var(--pane-3, var(--surface-window)); }
+.actions-menu-item mark { background: transparent; color: var(--accent-primary); }
+.actions-menu-empty { padding: 10px; color: var(--text-muted); font-size: 0.85rem; text-align: center; }
+
 .flow-canvas-wrap {
   min-width: 0;
   min-height: 0;
@@ -839,6 +886,18 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
 }
 
 .flow-panel-hint { padding: 14px; }
+
+/* loop step detail: pass count + the in/out anchor legend */
+.flow-loop-body { padding: 12px; display: grid; gap: 14px; align-content: start; }
+.flow-loop-passes { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 0.8462rem; }
+.flow-loop-passes strong { color: var(--orange, var(--accent-primary)); font: 700 1rem/1 var(--font-mono); }
+.flow-loop-passes .tool-btn { margin-left: auto; }
+.flow-loop-hint { display: grid; gap: 8px; }
+.flow-loop-hint-row { display: flex; gap: 8px; align-items: flex-start; color: var(--text-secondary); font-size: 0.8462rem; line-height: 1.45; }
+.flow-loop-hint-note { margin: 0; color: var(--text-muted); font-size: 0.7692rem; line-height: 1.5; }
+.flow-dot { flex: none; width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; }
+.flow-dot-in { background: var(--accent-primary); }
+.flow-dot-out { background: var(--orange, var(--accent-primary)); }
 
 .flow-node-panel-head {
   min-height: 44px;
@@ -926,15 +985,29 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   flex-wrap: wrap;
 }
 
-.flow-node-editor .request-screen.embedded .protocol-rail .path-input { min-width: 100px; }
-.flow-node-editor .request-screen.embedded .request-head { flex-wrap: wrap; }
-.flow-node-editor .request-screen.embedded .request-head .query-path-input { min-width: 180px; }
-/* container so the tab row can trade buttons for a dropdown when the dock gets narrow */
-.flow-node-editor .request-screen.embedded .editor-pane { container: reqedit / inline-size; }
-.flow-node-editor .request-screen.embedded .editor-tabs { flex-wrap: nowrap; }
-.flow-node-editor .request-screen.embedded .editor-tabs > button { height: 34px; min-width: 0; white-space: nowrap; }
-.flow-node-editor .request-screen.embedded .body-type-tabs { padding-block: 4px; }
-/* the dropdown fallbacks only exist embedded; hidden until the container query trips */
+.request-screen.embedded .protocol-rail .path-input,
+.request-screen.layout-cols .protocol-rail .path-input { min-width: 100px; }
+
+.request-screen.embedded .request-head,
+.request-screen.layout-cols .request-head { flex-wrap: wrap; }
+
+.request-screen.embedded .request-head .query-path-input,
+.request-screen.layout-cols .request-head .query-path-input { min-width: 140px; }
+
+/* container so the tab row can trade buttons for a dropdown when the editor/dock gets narrow */
+.request-screen.embedded .editor-pane,
+.request-screen.layout-cols .editor-pane { container: reqedit / inline-size; }
+
+.request-screen.embedded .editor-tabs,
+.request-screen.layout-cols .editor-tabs { flex-wrap: nowrap; }
+
+.request-screen.embedded .editor-tabs > button,
+.request-screen.layout-cols .editor-tabs > button { height: 34px; min-width: 0; white-space: nowrap; }
+
+.request-screen.embedded .body-type-tabs,
+.request-screen.layout-cols .body-type-tabs { padding-block: 4px; }
+
+/* the dropdown fallbacks only exist embedded or in column mode; hidden until the container query trips */
 .editor-tab-select, .body-type-select {
   display: none;
   height: 28px;
@@ -960,11 +1033,20 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   .editor-tabs > .editor-tab-select { display: inline-flex; }
 }
 /* response head sits in a fixed 42px grid row — compact to icon-only instead of wrapping */
-.flow-node-editor .request-screen.embedded .response-head { gap: 8px; min-width: 0; }
-.flow-node-editor .request-screen.embedded .response-meta { gap: 3px; min-width: 0; }
-.flow-node-editor .request-screen.embedded .response-meta button { min-width: 30px; padding: 0 7px; gap: 0; font-size: 0; }
-.flow-node-editor .request-screen.embedded .metric-size { display: none; }
-.flow-node-editor .request-screen.embedded .json-response-tools { flex-wrap: wrap; row-gap: 4px; }
+.request-screen.embedded .response-head,
+.request-screen.layout-cols .response-head { gap: 8px; min-width: 0; }
+
+.request-screen.embedded .response-meta,
+.request-screen.layout-cols .response-meta { gap: 3px; min-width: 0; }
+
+.request-screen.embedded .response-meta button,
+.request-screen.layout-cols .response-meta button { min-width: 30px; padding: 0 7px; gap: 0; font-size: 0; }
+
+.request-screen.embedded .metric-size,
+.request-screen.layout-cols .metric-size { display: none; }
+
+.request-screen.embedded .json-response-tools,
+.request-screen.layout-cols .json-response-tools { flex-wrap: wrap; row-gap: 4px; }
 
 .flow-canvas-wrap > .react-flow { width: 100%; height: 100%; }
 .flow-canvas-wrap .react-flow__pane { cursor: default; }
@@ -1098,6 +1180,49 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
 /* transform node: purple accent (JS), monospace code hint */
 .flow-node-transform .flow-node-kind { color: var(--purple, var(--accent-primary)); }
 .flow-node-transform .flow-node-head > svg { color: var(--purple, var(--accent-primary)); }
+.flow-node-loop .flow-node-kind { color: var(--orange, var(--accent-primary)); }
+.flow-node-loop .flow-node-head > svg { color: var(--orange, var(--accent-primary)); }
+
+/* loop anchors are color-coded: blue = in (wire enters), orange = out (loop-back/continue) */
+.flow-node-loop .react-flow__handle.handle-in { background: var(--accent-primary); }
+.flow-node-loop .react-flow__handle.handle-out { background: var(--orange, var(--accent-primary)); }
+
+/* live countdown pill on a looping block: remaining body passes, ticking down */
+.flow-node-loop-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--orange, var(--accent-primary));
+  color: #fff;
+  font: 700 0.6923rem/1 var(--font-mono);
+}
+
+/* while a wire is being dragged, every anchor that can accept it pulses scale + color */
+.is-linking-from-source .react-flow__handle.handle-in,
+.is-linking-from-target .react-flow__handle.handle-out {
+  pointer-events: auto;
+  animation: flow-handle-pulse 0.85s ease-in-out infinite;
+}
+/* the hovered, actually-valid anchor locks in green */
+.react-flow__handle.valid {
+  background: var(--status-success);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--status-success), transparent 70%);
+}
+@keyframes flow-handle-pulse {
+  /* scale + ring only, no background: loop in/out colors stay readable while pulsing */
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent-primary), transparent 55%);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.15);
+    box-shadow: 0 0 0 5px color-mix(in oklab, var(--accent-primary), transparent 84%);
+  }
+}
 .flow-node-code {
   margin-top: 7px;
   overflow: hidden;
@@ -1120,6 +1245,8 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   overflow: auto;
 }
 .flow-transform-io { display: flex; flex-direction: column; gap: 6px; }
+.flow-transform-io > summary { cursor: pointer; user-select: none; }
+.flow-transform-io > summary:hover { color: var(--text-primary); }
 .flow-transform-io .inspector-section-label,
 .flow-transform-code .inspector-section-label { gap: 5px; }
 .flow-transform-io .json-dock {
@@ -1159,7 +1286,7 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   gap: 10px;
   padding: 6px 10px;
   color: var(--text-secondary);
-  cursor: pointer;
+  cursor: default;
   user-select: none;
 }
 
@@ -1240,7 +1367,7 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   border-radius: 0;
   color: var(--text-secondary);
   background: transparent;
-  cursor: pointer;
+  cursor: default;
   font: inherit;
 }
 
@@ -1291,6 +1418,37 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* loop pass pager in the run report summary: ‹ [n] / N passes › with a jump-to-page input */
+.flow-report-pager { display: inline-flex; align-items: center; gap: 4px; }
+.flow-report-pager button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.flow-report-pager button:disabled { opacity: 0.4; cursor: default; }
+.flow-report-pager button:not(:disabled):hover { color: var(--accent-primary); border-color: var(--accent-primary); }
+.flow-report-pager input {
+  width: 34px;
+  height: 20px;
+  padding: 0 2px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font: 650 0.6923rem/1 var(--font-mono);
+  text-align: center;
+}
+.flow-report-pager input:focus { border-color: var(--accent-primary); outline: none; }
+.flow-report-pager-total { color: var(--text-muted); }
 
 .flow-report-code {
   padding: 1px 7px;

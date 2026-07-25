@@ -26,10 +26,23 @@ const splitUrl = (url: string) => {
   const q = url.indexOf("?");
   return q === -1 ? { base: url, query: "" } : { base: url.slice(0, q), query: url.slice(q + 1) };
 };
+const extractPathParams = (url: string, previous: KV[] = []): KV[] => {
+  const values = new Map(previous.map((param) => [param.key, param]));
+  const names = [...url.matchAll(/\/:([A-Za-z0-9_-]+)/g)].map((match) => match[1]);
+  return [...new Set(names)].map((key) => values.get(key) ?? { key, value: "", enabled: true });
+};
+const renderPathParams = (url: string, params: KV[] = []): string =>
+  params.filter((param) => param.enabled !== false && param.key)
+    .reduce((target, param) => target.replaceAll(`:${param.key}`, param.value), url);
+const safeDecode = (s: string): string => {
+  try { return decodeURIComponent(s.replace(/\+/g, " ")); } catch { return s; }
+};
 const queryToParams = (query: string): KV[] =>
   query === "" ? [] : query.split("&").map((seg) => {
     const eq = seg.indexOf("=");
-    return eq === -1 ? { key: seg, value: "", enabled: true } : { key: seg.slice(0, eq), value: seg.slice(eq + 1), enabled: true };
+    return eq === -1
+      ? { key: safeDecode(seg), value: "", enabled: true }
+      : { key: safeDecode(seg.slice(0, eq)), value: safeDecode(seg.slice(eq + 1)), enabled: true };
   });
 const paramsToQuery = (params: KV[]): string =>
   params.filter((p) => p.enabled !== false && (p.key || p.value)).map((p) => `${p.key}=${p.value}`).join("&");
@@ -45,7 +58,7 @@ export function buildCurl(request: Request): string {
   if (!request.http) return "";
   const h = request.http;
   const auth = h.auth;
-  let url = fullUrl(h.url, h.params);
+  let url = fullUrl(renderPathParams(h.url, h.pathParams), h.params);
   if (auth.type === "apiKey" && auth.addTo === "query" && auth.key) {
     url += `${url.includes("?") ? "&" : "?"}${auth.key}=${auth.value ?? ""}`;
   }
@@ -107,19 +120,43 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
       .catch(() => setVariableNames([]));
   }, [env, envVersion]);
 
-  // Open a gRPC request → load its source's catalog straight from the backend cache (0 network
-  // unless the .proto files changed since last describe). Re-runs when the bound source or env changes.
+  // Open a gRPC request → load its source's catalog straight from the backend cache or describe endpoint
   useEffect(() => {
-    const sid = rt?.request.grpc?.sourceId;
-    if (!sid) return;
+    const g = rt?.request.grpc;
+    if (!g) return;
     let live = true;
+
+    const matchedSource = g.sourceId ? null : protoSources.find((source) => {
+      if (g.protoFiles.length > 0 && source.kind === "files") {
+        return source.files.length === g.protoFiles.length && source.files.every((f) => g.protoFiles.includes(f));
+      }
+      if (source.endpoint && g.endpoint) {
+        const cleanSrc = source.endpoint.replace(/^grpcs?:\/\//i, "").replace(/^https?:\/\//i, "").trim().toLowerCase();
+        const cleanReq = g.endpoint.replace(/^grpcs?:\/\//i, "").replace(/^https?:\/\//i, "").trim().toLowerCase();
+        return Boolean(cleanSrc) && cleanSrc === cleanReq;
+      }
+      return false;
+    });
+
+    const sid = g.sourceId || matchedSource?.id;
+    if (!sid && !g.endpoint.trim() && g.protoFiles.length === 0) return;
+
     setDescribing(true);
-    api.grpcDescribe(env, sid, false, null, [], false)
-      .then((c) => { if (live) { setCatalog(c); setDescError(null); } })
-      .catch((e) => { if (live) { setDescError(String(e)); showToast("Describe failed", String(e), "err"); } })
+    const useSource = !!sid;
+    api.grpcDescribe(env, sid ?? null, false, useSource ? null : g.endpoint, useSource ? [] : g.protoFiles, g.insecure)
+      .then((c) => {
+        if (live) {
+          setCatalog(c);
+          setDescError(null);
+          if (matchedSource && !g.sourceId) {
+            updateGrpc({ sourceId: matchedSource.id });
+          }
+        }
+      })
+      .catch((e) => { if (live) { setDescError(String(e)); } })
       .finally(() => { if (live) setDescribing(false); });
     return () => { live = false; };
-  }, [tabId, rt?.request.grpc?.sourceId, env, envVersion]);
+  }, [tabId, rt?.request.grpc?.sourceId, rt?.request.grpc?.endpoint, rt?.request.grpc?.service, env, envVersion, protoSources]);
 
   // close the proto "New source" menu on any outside click (same pattern as RequestContextMenu)
   useEffect(() => {
@@ -164,6 +201,16 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
     api.cookiesFor(reqUrl).then(setReqCookies).catch(() => setReqCookies([]));
   }, [editorTab, reqUrl, lastResponse]);
 
+  // imported/loaded requests can have url path params (":id") with an empty pathParams
+  // list (never touched in the Params tab) — normalize once so Send substitutes real
+  // values instead of the literal ":id" segment, without waiting for a URL edit.
+  useEffect(() => {
+    if (!rt?.request.http) return;
+    const derived = extractPathParams(rt.request.http.url, rt.request.http.pathParams);
+    if (JSON.stringify(derived) === JSON.stringify(rt.request.http.pathParams ?? [])) return;
+    updateRequestTab(tabId, { request: { ...rt.request, http: { ...rt.request.http, pathParams: derived } } });
+  }, [tabId, reqUrl]);
+
   // pretty-printing a multi-MB body is too expensive to redo on every keystroke re-render
   const prettyBody = useMemo(() => {
     if (!lastResponse) return "";
@@ -172,6 +219,7 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
 
   if (!rt) return null;
   const request = rt.request;
+  const httpPathParams = extractPathParams(request.http?.url ?? "", request.http?.pathParams);
   const update = (patch: Partial<Request>) => updateRequestTab(tabId, { request: { ...request, ...patch } });
   // merge into the FRESHEST grpc — importProtoFiles + describe patch grpc in the same tick,
   // so building from the stale `request.grpc` snapshot would clobber the just-imported protoFiles.
@@ -196,7 +244,30 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
     const parsed = parseGrpcurl(text.replace(/\\(\s|$)/g, "$1"));
     if (!parsed?.grpc) return false;
     setEditorTab("body");
-    update({ protocol: "grpc", grpc: parsed.grpc });
+    if (parsed.grpc.protoFiles.length === 0) {
+      update({ protocol: "grpc", grpc: parsed.grpc });
+      showToast("Imported", "grpcurl parsed into request.");
+      return true;
+    }
+    const matchingSource = protoSources.find((source) => source.kind === "files"
+      && source.files.length === parsed.grpc!.protoFiles.length
+      && source.files.every((file) => parsed.grpc!.protoFiles.includes(file)));
+    const source = matchingSource ?? {
+      id: crypto.randomUUID(),
+      name: parsed.grpc.protoFiles[0].split("/").pop() ?? "proto",
+      kind: "files" as const,
+      files: parsed.grpc.protoFiles,
+      importPaths: [],
+      endpoint: "",
+      insecure: false,
+    };
+    setCatalog(null);
+    setDescError(null);
+    update({ protocol: "grpc", grpc: { ...parsed.grpc, sourceId: source.id, protoFiles: [] } });
+    void (async () => {
+      if (!matchingSource) await saveSource(source);
+      await describeSource(source.id, true);
+    })();
     showToast("Imported", "grpcurl parsed into request.");
     return true;
   };
@@ -381,7 +452,7 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
           />
           {request.protocol !== "ws" && (
             <button type="button" className="tool-btn icon-only" title={requestHorizontal ? "Stack response below (rows)" : "Response beside editor (columns)"} aria-label="Toggle response layout" onClick={toggleRequestLayout}>
-              <Icon name={requestHorizontal ? "rows" : "panel-right"} />
+              <Icon name={requestHorizontal ? "panel-bottom" : "panel-right"} />
             </button>
           )}
         </div>
@@ -407,7 +478,7 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
                       if (parsed.http) {
                         // importCurl leaves the query on the url; split it into the Params tab like manual entry does
                         const { base, query } = splitUrl(parsed.http.url);
-                        update({ http: { ...parsed.http, url: base, params: [...parsed.http.params, ...queryToParams(query)] } });
+                        update({ http: { ...parsed.http, url: base, pathParams: extractPathParams(base, parsed.http.pathParams), params: [...parsed.http.params, ...queryToParams(query)] } });
                       }
                       showToast("Imported", "cURL parsed into request.");
                     })
@@ -419,11 +490,13 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
                 setUrlDraft(text);
                 const { base, query } = splitUrl(text);
                 const disabledParams = request.http!.params.filter((p) => p.enabled === false);
-                update({ http: { ...request.http!, url: base, params: [...queryToParams(query), ...disabledParams] } });
+                update({ http: { ...request.http!, url: base, pathParams: extractPathParams(base, request.http!.pathParams), params: [...queryToParams(query), ...disabledParams] } });
               }}
               onBlur={() => setUrlDraft(null)}
               placeholder="{{baseUrl}}/v1/resource" variableNames={variableNames} />
-            <ToolButton iconOnly={embedded} className="request-copy" title="Copy cURL" onClick={() => navigator.clipboard?.writeText(buildCurl(request)).then(() => showToast("Copied", "cURL command copied."))}><Icon name="copy" />{!embedded && " Copy cURL"}</ToolButton>
+            <ToolButton iconOnly={embedded || horizontal} className="request-copy" title="Copy cURL" onClick={() => navigator.clipboard?.writeText(buildCurl(request)).then(() => showToast("Copied", "cURL command copied."))}>
+              <Icon name="copy" />{!(embedded || horizontal) && " Copy cURL"}
+            </ToolButton>
             {/* pinned to the bottom edge of the head row; overlay, never a grid child (see .request-screen rows) */}
             <LoadingBar active={rt.running} />
           </div>
@@ -431,7 +504,7 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
             <div className="editor-tabs">
               <button type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Body</button>
               <button type="button" className={editorTab === "headers" ? "active" : ""} onClick={() => setEditorTab("headers")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="activity" size={13} /> Headers <span className="tab-count">{request.http.headers.length}</span></button>
-              <button type="button" className={editorTab === "params" ? "active" : ""} onClick={() => setEditorTab("params")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Params <span className="tab-count">{request.http.params.length}</span></button>
+              <button type="button" className={editorTab === "params" ? "active" : ""} onClick={() => setEditorTab("params")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Params <span className="tab-count">{httpPathParams.length + request.http.params.length}</span></button>
               <button type="button" className={editorTab === "auth" ? "active" : ""} onClick={() => setEditorTab("auth")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Auth</button>
               <button type="button" className={editorTab === "cookies" ? "active" : ""} onClick={() => setEditorTab("cookies")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="list" size={13} /> Cookies <span className="tab-count">{reqCookies.length}</span></button>
               {editorTab === "body" && (
@@ -442,17 +515,17 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
                   ))}
                 </div>
               )}
-              {/* narrow-dock fallback: buttons collapse into these selects via @container (embedded only) */}
-              {embedded && (
+              {/* narrow-dock / column-mode fallback: buttons collapse into these selects via @container */}
+              {(embedded || horizontal) && (
                 <select className="editor-tab-select" value={editorTab} onChange={(e) => setEditorTab(e.target.value as typeof editorTab)}>
                   <option value="body">Body</option>
                   <option value="headers">Headers ({request.http.headers.length})</option>
-                  <option value="params">Params ({request.http.params.length})</option>
+                  <option value="params">Params ({httpPathParams.length + request.http.params.length})</option>
                   <option value="auth">Auth</option>
                   <option value="cookies">Cookies ({reqCookies.length})</option>
                 </select>
               )}
-              {embedded && editorTab === "body" && (
+              {(embedded || horizontal) && editorTab === "body" && (
                 <select className="body-type-select" value={request.http.body.type}
                   onChange={(e) => update({ http: { ...request.http!, body: { ...request.http!.body, type: e.target.value as typeof request.http.body.type } } })}>
                   {["none", "json", "text", "form"].map((t) => <option key={t} value={t}>{t}</option>)}
@@ -474,7 +547,19 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
               </div>
             )}
             {editorTab === "headers" && <KvEditor items={request.http.headers} onChange={(headers) => update({ http: { ...request.http!, headers } })} />}
-            {editorTab === "params" && <KvEditor items={request.http.params} onChange={(params) => update({ http: { ...request.http!, params } })} />}
+            {editorTab === "params" && (
+              <KvEditor
+                items={[...httpPathParams, ...request.http.params]}
+                lockedCount={httpPathParams.length}
+                onChange={(rows) => update({
+                  http: {
+                    ...request.http!,
+                    pathParams: rows.slice(0, httpPathParams.length),
+                    params: rows.slice(httpPathParams.length),
+                  },
+                })}
+              />
+            )}
             {editorTab === "auth" && (
               <div className="auth-editor">
                 <div className="form-row">
@@ -557,7 +642,7 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
               <button type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Message</button>
               <button type="button" className={editorTab === "metadata" ? "active" : ""} onClick={() => setEditorTab("metadata")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Metadata <span className="tab-count">{grpc.metadata.length}</span></button>
               <button type="button" className={editorTab === "proto" ? "active" : ""} onClick={() => setEditorTab("proto")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Proto {currentSource && <span className={`proto-dot${descError ? " err" : catalog ? " ok" : ""}`} />}</button>
-              {embedded && (
+              {(embedded || horizontal) && (
                 <select className="editor-tab-select" value={editorTab === "metadata" || editorTab === "proto" ? editorTab : "body"} onChange={(e) => setEditorTab(e.target.value as typeof editorTab)}>
                   <option value="body">Message</option>
                   <option value="metadata">Metadata ({grpc.metadata.length})</option>

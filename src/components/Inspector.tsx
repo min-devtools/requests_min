@@ -8,6 +8,7 @@ import { saveActiveRequest } from "../lib/runRequest";
 import { buildCurl, buildGrpcurl } from "./views/RequestView";
 import { requestVariableNames, resolveRequestTarget } from "../lib/requestVariables";
 import { JsonTreePanel } from "../ui/JsonTreePanel";
+import { LoopPanel } from "./flow/LoopPanel";
 import { NodePanel } from "./flow/NodePanel";
 import { TransformPanel } from "./flow/TransformPanel";
 
@@ -189,14 +190,16 @@ export function Inspector() {
                 {envSection}
                 {panelNode?.type === "transform"
                   ? <TransformPanel tabId={activeTabId} />
-                  : <NodePanel tabId={activeTabId} />}
+                  : panelNode?.type === "loop"
+                    ? <LoopPanel tabId={activeTabId} />
+                    : <NodePanel tabId={activeTabId} />}
               </div>
             ) : (
               <section className="inspector-flow-result">
                 {!flowStep ? (
                   <div className="inspector-empty">Select a step to see its result.</div>
-                ) : flowStep.type === "delay" ? (
-                  <div className="inspector-empty">Delay steps produce no result.</div>
+                ) : flowStep.type === "delay" || flowStep.type === "loop" ? (
+                  <div className="inspector-empty">{flowStep.type === "loop" ? "Loop" : "Delay"} steps produce no result.</div>
                 ) : !flowResult ? (
                   <div className="inspector-empty">Run the flow to capture this step's result.</div>
                 ) : (() => {

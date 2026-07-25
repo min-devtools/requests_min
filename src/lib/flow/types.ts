@@ -1,6 +1,9 @@
 import type { GrpcResponse, HttpResponse, Request } from "../api";
 
-export type FlowNodeType = "request" | "delay" | "transform";
+export type FlowNodeType = "request" | "delay" | "transform" | "loop";
+
+/** Safety cap so a misconfigured loop can't hammer an API forever. */
+export const MAX_LOOP_COUNT = 100;
 
 export interface RequestNodeConfig {
   request: Request;
@@ -15,6 +18,11 @@ export interface DelayNodeConfig {
 export interface TransformNodeConfig {
   /** JS body run with (value, steps) in scope; must `return` the step output. */
   code: string;
+}
+
+export interface LoopNodeConfig {
+  /** Total times the loop body runs per flow pass (1..MAX_LOOP_COUNT). */
+  count: number;
 }
 
 export interface FlowNodeBase {
@@ -38,13 +46,20 @@ export interface TransformFlowNode extends FlowNodeBase {
   config: TransformNodeConfig;
 }
 
-export type FlowNode = RequestFlowNode | DelayFlowNode | TransformFlowNode;
+export interface LoopFlowNode extends FlowNodeBase {
+  type: "loop";
+  config: LoopNodeConfig;
+}
+
+export type FlowNode = RequestFlowNode | DelayFlowNode | TransformFlowNode | LoopFlowNode;
 
 export interface FlowEdge {
   id: string;
   source: string;
   target: string;
   sourceHandle?: string;
+  /** Loop blocks expose an extra in/out handle pair; both ends persist so wires survive reloads. */
+  targetHandle?: string;
 }
 
 export interface Flow {
@@ -65,6 +80,10 @@ export interface StepResult {
   /** Return value of a transform step; exposed downstream as {{steps.<key>}} and the next step's `value`. */
   output?: unknown;
   error?: string;
+  /** Loop steps only: body passes still to run (drives the on-block countdown). */
+  remaining?: number;
+  /** Loop steps only: per-pass snapshots of the body steps' results, for paged run reports. */
+  loopPasses?: Record<string, StepResult>[];
   /** Carried over from a previous run for display; never usable as a {{steps.*}} source. */
   stale?: boolean;
 }
@@ -74,6 +93,8 @@ export interface FlowRun {
   totalMs?: number;
   status: "running" | "success" | "failed" | "cancelled";
   steps: Record<string, StepResult>;
+  /** Per-step activation stamp: when it last started, and which block fed it (drives wire pulses). */
+  pulses?: Record<string, { at: number; via: string | null }>;
 }
 
 export const emptyFlow = (id: string, name: string): Flow => ({
@@ -112,6 +133,12 @@ export const isTransformNode = (node: unknown): node is TransformFlowNode =>
   && isRecord(node.config)
   && typeof node.config.code === "string";
 
+export const isLoopNode = (node: unknown): node is LoopFlowNode =>
+  isRecord(node)
+  && node.type === "loop"
+  && isRecord(node.config)
+  && typeof node.config.count === "number";
+
 const isNodeBase = (node: Record<string, unknown>): boolean =>
   typeof node.id === "string"
   && typeof node.key === "string"
@@ -128,6 +155,12 @@ const isFlowNode = (node: unknown): node is FlowNode => {
       && Number.isFinite(node.config.ms)
       && node.config.ms >= 0;
   }
+  if (node.type === "loop") {
+    return isRecord(node.config)
+      && typeof node.config.count === "number"
+      && Number.isInteger(node.config.count)
+      && node.config.count >= 1;
+  }
   return isTransformNode(node);
 };
 
@@ -136,7 +169,8 @@ const isFlowEdge = (edge: unknown): edge is FlowEdge =>
   && typeof edge.id === "string"
   && typeof edge.source === "string"
   && typeof edge.target === "string"
-  && (edge.sourceHandle === undefined || typeof edge.sourceHandle === "string");
+  && (edge.sourceHandle === undefined || typeof edge.sourceHandle === "string")
+  && (edge.targetHandle === undefined || typeof edge.targetHandle === "string");
 
 /**
  * Structural guard for flows coming from outside the app's type system — the backend returns

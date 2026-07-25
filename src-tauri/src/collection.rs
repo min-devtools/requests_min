@@ -12,6 +12,7 @@ pub struct HttpPart {
     pub method: String,
     pub url: String,
     pub headers: Vec<KV>,
+    pub path_params: Vec<KV>,
     pub params: Vec<KV>,
     pub auth: serde_json::Value,      // { "type": "none|bearer|basic|apiKey", ... }
     pub body: serde_json::Value,      // { "type": "json|text|form|none", "content": "..." }

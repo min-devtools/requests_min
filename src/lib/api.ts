@@ -23,6 +23,7 @@ export interface HttpPart {
   method: string;
   url: string;
   headers: KV[];
+  pathParams: KV[];
   params: KV[];
   auth: HttpAuth;
   body: HttpBody;
@@ -68,7 +69,7 @@ export interface FlowMeta { id: string; name: string; nodeCount: number }
 export interface ReqEntry { relPath: string; name: string; protocol: string; method: string }
 
 export const emptyHttp = (): HttpPart => ({
-  method: "GET", url: "", headers: [], params: [],
+  method: "GET", url: "", headers: [], pathParams: [], params: [],
   auth: { type: "none" }, body: { type: "none" }, insecure: false,
 });
 export const emptyGrpc = (): GrpcPart => ({
@@ -129,6 +130,7 @@ export const api = {
   exportPostman: (collectionId: string) => invoke<string>("export_postman", { collectionId }),
   exportCurl: (collectionId: string, relPath: string) => invoke<string>("export_curl", { collectionId, relPath }),
   colSaveDraft: (draft: CollectionDraft) => mutated(invoke<CollectionMeta>("col_save_draft", { draft })),
+  colMergeDraft: (collectionId: string, draft: CollectionDraft) => mutated(invoke<void>("col_merge_draft", { collectionId, draft })),
   aiScan: (dir: string) => invoke<ScanResult>("ai_scan", { dir }),
   aiGenerate: (files: string[], endpoint: string, apiKey: string, model: string) =>
     invoke<DraftEntry[]>("ai_generate", { files, endpoint, apiKey, model }),

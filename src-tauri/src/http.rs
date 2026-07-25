@@ -33,7 +33,15 @@ fn set_header(headers: &mut Vec<(String, String)>, key: &str, value: String) {
 pub fn prepare_http(part: &HttpPart, ctx: &HashMap<String, String>) -> Result<PreparedHttp, String> {
     let method = if part.method.is_empty() { "GET".to_string() } else { part.method.clone() };
 
-    let mut url = reqwest::Url::parse(&interpolate(&part.url, ctx)?).map_err(|e| e.to_string())?;
+    let mut target = interpolate(&part.url, ctx)?;
+    if !target.contains("://") {
+        target = format!("http://{target}");
+    }
+    for path_param in part.path_params.iter().filter(|p| enabled(p)) {
+        let value = interpolate(&path_param.value, ctx)?;
+        target = target.replace(&format!(":{}", path_param.key), &value);
+    }
+    let mut url = reqwest::Url::parse(&target).map_err(|e| e.to_string())?;
     let params: Vec<(String, String)> = part.params.iter().filter(|p| enabled(p))
         .map(|p| Ok((interpolate(&p.key, ctx)?, interpolate(&p.value, ctx)?)))
         .collect::<Result<_, String>>()?;
@@ -180,6 +188,37 @@ mod tests {
         let p = prepare_http(&part, &ctx).unwrap();
         assert_eq!(p.url, "http://h/x?q=1");
         assert!(p.headers.iter().any(|(k, v)| k == "Authorization" && v == "Bearer T"));
+    }
+
+    #[test]
+    fn prepare_replaces_enabled_path_params_before_appending_query() {
+        let mut ctx = std::collections::HashMap::new();
+        ctx.insert("baseUrl".into(), "http://h".into());
+        ctx.insert("projectId".into(), "p 1".into());
+        let part = HttpPart {
+            method: "GET".into(),
+            url: "{{baseUrl}}/projects/:projectId/issues/:issueId".into(),
+            path_params: vec![
+                KV { key: "projectId".into(), value: "{{projectId}}".into(), enabled: Some(true) },
+                KV { key: "issueId".into(), value: "42".into(), enabled: Some(false) },
+            ],
+            params: vec![KV { key: "include".into(), value: "comments".into(), enabled: Some(true) }],
+            ..Default::default()
+        };
+
+        let p = prepare_http(&part, &ctx).unwrap();
+
+        assert_eq!(p.url, "http://h/projects/p%201/issues/:issueId?include=comments");
+    }
+
+    #[test]
+    fn prepare_defaults_missing_url_scheme_to_http() {
+        let ctx = std::collections::HashMap::new();
+        let part = HttpPart { method: "GET".into(), url: "10.104.0.3:3001/health".into(), ..Default::default() };
+
+        let p = prepare_http(&part, &ctx).unwrap();
+
+        assert_eq!(p.url, "http://10.104.0.3:3001/health");
     }
 
     #[test]

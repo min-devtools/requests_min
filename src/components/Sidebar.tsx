@@ -38,12 +38,12 @@ export function Sidebar() {
   const {
     openTab, openRequestTab, collections, reloadCollections,
     activeCollectionId, setActiveCollection, reqListVersion, workspaceNavCollapsed, toggleWorkspaceNav,
-    openDialog, openConfirm, deleteRequest, renameRequest, duplicateRequest, moveRequest, showToast, leftCollapsed,
+    openDialog, openConfirm, deleteCollection, deleteRequest, renameRequest, duplicateRequest, moveRequest, showToast, leftCollapsed,
   } = useApp(useShallow((s) => ({
     openTab: s.openTab, openRequestTab: s.openRequestTab, collections: s.collections, reloadCollections: s.reloadCollections,
     activeCollectionId: s.activeCollectionId, setActiveCollection: s.setActiveCollection, reqListVersion: s.reqListVersion,
     workspaceNavCollapsed: s.workspaceNavCollapsed, toggleWorkspaceNav: s.toggleWorkspaceNav,
-    openDialog: s.openDialog, openConfirm: s.openConfirm, deleteRequest: s.deleteRequest, renameRequest: s.renameRequest,
+    openDialog: s.openDialog, openConfirm: s.openConfirm, deleteCollection: s.deleteCollection, deleteRequest: s.deleteRequest, renameRequest: s.renameRequest,
     duplicateRequest: s.duplicateRequest, moveRequest: s.moveRequest, showToast: s.showToast, leftCollapsed: s.leftCollapsed,
   })));
   const activeKind = useApp((s) => s.tabs.find((t) => t.id === s.activeTabId)?.kind);
@@ -301,6 +301,26 @@ export function Sidebar() {
         <button type="button" className="context-item" onClick={() => { setPickingColor(collectionMenu.id); setCollectionMenu(null); }}>
           <span className="conn-dot" style={{ ...connStyle(collections.find((c) => c.id === collectionMenu.id)?.color), justifySelf: "center" }} />
           <strong>Set color…</strong>
+          <span />
+        </button>
+        <button
+          type="button"
+          className="context-item danger"
+          onClick={async () => {
+            const id = collectionMenu.id;
+            const col = collections.find((c) => c.id === id);
+            setCollectionMenu(null);
+            if (!col || !await openConfirm({ title: "Delete collection", message: `Delete "${col.name}" and all its requests? This cannot be undone.`, danger: true, confirmLabel: "Delete" })) return;
+            try {
+              await deleteCollection(id);
+              showToast("Collection deleted", col.name);
+            } catch (err) {
+              showToast("Delete failed", String(err), "err");
+            }
+          }}
+        >
+          <Icon name="trash" size={13} />
+          <strong>Delete collection</strong>
           <span />
         </button>
       </div>}

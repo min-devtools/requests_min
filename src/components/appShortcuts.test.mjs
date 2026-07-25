@@ -14,3 +14,10 @@ test("Cmd/Ctrl+Enter runs the active flow and otherwise runs the active request"
     /if \(mod && e\.key === "Enter"\) \{\s*e\.preventDefault\(\);\s*const activeTabKind = useApp\.getState\(\)\.tabs\.find\(\(tab\) => tab\.id === useApp\.getState\(\)\.activeTabId\)\?\.kind;\s*if \(activeTabKind === "flow"\) void runActiveFlow\(\);\s*else void runActiveRequest\(\);\s*\}/,
   );
 });
+
+test("New request is Command+N only so Vim Ctrl+N stays available", async () => {
+  const app = await appSource();
+
+  assert.match(app, /if \(e\.metaKey && key === "n"\) \{ e\.preventDefault\(\); newRequestTab\(\); \}/);
+  assert.doesNotMatch(app, /if \(mod && key === "n"\)/);
+});

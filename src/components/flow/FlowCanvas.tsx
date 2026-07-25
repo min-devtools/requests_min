@@ -23,26 +23,33 @@ import "@xyflow/react/dist/style.css";
 import { api } from "../../lib/api";
 import {
   commitNodePositions,
+  copyGraphElements,
   createRequestFlowNode,
   parseRequestDropPayload,
+  pasteGraphElements,
   removeGraphElements,
+  type FlowClipboard,
 } from "../../lib/flow/canvas";
 import type { FlowEdge, FlowNode } from "../../lib/flow/types";
-import { isRequestNode, isTransformNode } from "../../lib/flow/types";
+import { isLoopNode, isRequestNode, isTransformNode } from "../../lib/flow/types";
 import { themeBase } from "../../lib/themes";
 import { useApp } from "../../store";
 import { Icon } from "../../ui/Icon";
 import { DelayNode, type DelayCanvasNode } from "./DelayNode";
+import { LoopNode, type LoopCanvasNode } from "./LoopNode";
 import { RequestNode, type RequestCanvasNode } from "./RequestNode";
 import { TransformNode, type TransformCanvasNode } from "./TransformNode";
 
-// request & transform nodes open the dock editor on click; delay edits in its own modal
-const opensDock = (node: FlowNode): boolean => isRequestNode(node) || isTransformNode(node);
+// request & transform nodes open the dock editor on click, loop opens its info panel there;
+// delay still edits in its own modal
+const opensDock = (node: FlowNode): boolean => isRequestNode(node) || isTransformNode(node) || isLoopNode(node);
 
-type CanvasNode = RequestCanvasNode | DelayCanvasNode | TransformCanvasNode;
+type CanvasNode = RequestCanvasNode | DelayCanvasNode | TransformCanvasNode | LoopCanvasNode;
 type CanvasEdge = Edge<{ tabId: string }, "flow">;
 
 const EDGE_MARKER = { type: MarkerType.ArrowClosed, width: 18, height: 18 } as const;
+/** How long a wire stays lit after execution crossed it (engine-stamped activation pulse). */
+const WIRE_PULSE_MS = 900;
 
 function FlowEdgeView({
   id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, selected, markerEnd, data,
@@ -77,10 +84,16 @@ function FlowEdgeView({
   );
 }
 
-const nodeTypes = { request: RequestNode, delay: DelayNode, transform: TransformNode };
+const nodeTypes = { request: RequestNode, delay: DelayNode, transform: TransformNode, loop: LoopNode };
 const edgeTypes = { flow: FlowEdgeView };
 const nextElementId = (prefix: "n" | "e") =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+// In-module clipboard shared by every mounted flow canvas, so ⌘C in one flow tab can paste
+// into another; pasteCount makes repeated ⌘V cascade instead of stacking on one spot.
+let flowClipboard: FlowClipboard | null = null;
+let pasteCount = 1;
+const PASTE_OFFSET = 40;
 
 const toCanvasNode = (
   tabId: string,
@@ -88,6 +101,7 @@ const toCanvasNode = (
   status: "idle" | "running" | "success" | "failed" | "skipped",
   stale: boolean,
   selected: boolean,
+  remaining: number | null,
   onRunNode?: (nodeId: string) => void,
 ): CanvasNode => {
   if (node.type === "request") {
@@ -95,6 +109,9 @@ const toCanvasNode = (
   }
   if (node.type === "transform") {
     return { id: node.id, type: "transform", position: node.position, selected, data: { node, status, stale, tabId } };
+  }
+  if (node.type === "loop") {
+    return { id: node.id, type: "loop", position: node.position, selected, data: { node, status, stale, tabId, remaining } };
   }
   return { id: node.id, type: "delay", position: node.position, selected, data: { node, status, stale, tabId } };
 };
@@ -104,6 +121,7 @@ const toFlowEdge = (edge: CanvasEdge): FlowEdge => ({
   source: edge.source,
   target: edge.target,
   sourceHandle: edge.sourceHandle ?? undefined,
+  targetHandle: edge.targetHandle ?? undefined,
 });
 
 function Canvas({
@@ -122,22 +140,39 @@ function Canvas({
   const { fitView, getNodes, screenToFlowPosition } = useReactFlow<CanvasNode, CanvasEdge>();
   const updateNodeInternals = useUpdateNodeInternals();
 
+  // wire pulses are time-boxed: force one re-render right when the freshest pulse expires
+  const [pulseNow, setPulseNow] = useState(() => Date.now());
+  useEffect(() => {
+    const pulses = ft.run?.pulses;
+    if (!pulses) return;
+    const freshest = Object.values(pulses).reduce((max, pulse) => Math.max(max, pulse.at), 0);
+    const wait = freshest + WIRE_PULSE_MS - Date.now();
+    if (wait <= 0) return;
+    const timer = setTimeout(() => setPulseNow(Date.now()), wait + 40);
+    return () => clearTimeout(timer);
+  }, [ft.run]);
+
   const storeNodes = useMemo<CanvasNode[]>(() => ft.flow.nodes.map((node) => toCanvasNode(
     tabId,
     node,
     ft.run?.steps[node.id]?.status ?? "idle",
     ft.run?.steps[node.id]?.stale ?? false,
     ft.selectedNodeId === node.id,
+    ft.run?.steps[node.id]?.remaining ?? null,
     onRunNode,
   )), [ft.flow.nodes, ft.run, ft.selectedNodeId, onRunNode, tabId]);
-  const storeEdges = useMemo<CanvasEdge[]>(() => ft.flow.edges.map((edge) => ({
-    ...edge,
-    type: "flow" as const,
-    data: { tabId },
-    markerEnd: EDGE_MARKER,
-    animated: ft.run?.steps[edge.source]?.status === "success"
-      && ft.run?.steps[edge.target]?.status === "running",
-  })), [ft.flow.edges, ft.run, tabId]);
+  const storeEdges = useMemo<CanvasEdge[]>(() => ft.flow.edges.map((edge) => {
+    // a wire flashes only when execution actually crosses it: the engine stamps each step
+    // start with its feeding block, so loop wires pulse once per pass — not a constant glow
+    const pulse = ft.run?.pulses?.[edge.target];
+    return {
+      ...edge,
+      type: "flow" as const,
+      data: { tabId },
+      markerEnd: EDGE_MARKER,
+      animated: pulse?.via === edge.source && pulseNow - pulse.at < WIRE_PULSE_MS,
+    };
+  }), [ft.flow.edges, ft.run, tabId, pulseNow]);
 
   const [nodes, setNodes] = useState<CanvasNode[]>(storeNodes);
   const [edges, setEdges] = useState<CanvasEdge[]>(storeEdges);
@@ -166,6 +201,84 @@ function Canvas({
       if (secondFrame) cancelAnimationFrame(secondFrame);
     };
   }, [active, fitView, getNodes, updateNodeInternals]);
+
+  // Shared copy path for ⌘C and the block context menu: snapshots the given blocks into the
+  // module clipboard (deep clone, so later graph edits can't mutate what's stored).
+  const copyBlocks = useCallback((selectedIds: ReadonlySet<string>): void => {
+    const current = useApp.getState().flowTabs[tabId];
+    if (!current || selectedIds.size === 0) return;
+    const clipboard = copyGraphElements(current.flow.nodes, current.flow.edges, selectedIds);
+    if (!clipboard) return;
+    flowClipboard = clipboard;
+    pasteCount = 1;
+    showToast(
+      clipboard.nodes.length === 1 ? "Step copied" : `${clipboard.nodes.length} steps copied`,
+      clipboard.nodes.length === 1 ? `"${clipboard.nodes[0].key}" — ⌘V to paste.` : "⌘V to paste.",
+    );
+  }, [tabId, showToast]);
+
+  // While a wire is being dragged, compatible handle anchors pulse (see .is-linking-* CSS).
+  const [linking, setLinking] = useState<"source" | "target" | null>(null);
+
+  // Right-clicking a block selects it and opens a small context menu (Copy…) at the cursor.
+  const [nodeMenu, setNodeMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
+  useEffect(() => {
+    if (!nodeMenu) return;
+    const close = () => setNodeMenu(null);
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("blur", close);
+    return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("blur", close); };
+  }, [nodeMenu]);
+
+  // ⌘C / ⌘V for graph blocks. Only while this tab is active, and never when focus is in a
+  // text field/Monaco or a text selection exists — native copy/paste keeps working there.
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+      if (key !== "c" && key !== "v") return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed) return;
+      const current = useApp.getState().flowTabs[tabId];
+      if (!current) return;
+
+      if (key === "c") {
+        const selectedIds = new Set(getNodes().filter((node) => node.selected).map((node) => node.id));
+        if (selectedIds.size === 0) return;
+        event.preventDefault();
+        copyBlocks(selectedIds);
+        return;
+      }
+
+      if (!flowClipboard) return;
+      event.preventDefault();
+      if (current.running) {
+        showToast("Flow is running", "Wait for the run to finish before changing the graph.", "warn");
+        return;
+      }
+      const pasted = pasteGraphElements(
+        flowClipboard,
+        new Set(current.flow.nodes.map((node) => node.key)),
+        nextElementId,
+        { x: PASTE_OFFSET * pasteCount, y: PASTE_OFFSET * pasteCount },
+      );
+      pasteCount += 1;
+      // updateFlowTab snapshots the previous flow, so ⌘Z undoes the paste
+      updateFlowTab(tabId, {
+        flow: {
+          ...current.flow,
+          nodes: [...current.flow.nodes, ...pasted.nodes],
+          edges: [...current.flow.edges, ...pasted.edges],
+        },
+        selectedNodeId: pasted.nodes[0]?.id ?? current.selectedNodeId,
+      });
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [active, tabId, getNodes, updateFlowTab, showToast, copyBlocks]);
 
   const onNodesChange = useCallback((changes: NodeChange<CanvasNode>[]) => {
     const current = useApp.getState().flowTabs[tabId];
@@ -320,6 +433,9 @@ function Canvas({
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       isValidConnection={(connection) => connection.source !== connection.target}
+      onConnectStart={(_, params) => setLinking(params.handleType)}
+      onConnectEnd={() => setLinking(null)}
+      className={linking ? `is-linking is-linking-from-${linking}` : ""}
       fitView
       fitViewOptions={{ padding: 0.2 }}
       onNodesChange={onNodesChange}
@@ -332,6 +448,13 @@ function Canvas({
         event.dataTransfer.dropEffect = "copy";
       }}
       onPaneClick={() => updateFlowTab(tabId, { selectedNodeId: null })}
+      onNodeContextMenu={(event, canvasNode) => {
+        event.preventDefault();
+        const current = useApp.getState().flowTabs[tabId];
+        if (!current) return;
+        if (current.selectedNodeId !== canvasNode.id) updateFlowTab(tabId, { selectedNodeId: canvasNode.id });
+        setNodeMenu({ x: event.clientX, y: event.clientY, nodeId: canvasNode.id });
+      }}
       onNodeDoubleClick={(_, canvasNode) => {
         // single-click already opens the dock; double-click stays as an explicit open for request nodes
         const current = useApp.getState().flowTabs[tabId];
@@ -351,6 +474,13 @@ function Canvas({
     >
       <Background gap={16} />
       <Controls showInteractive={false} />
+      {nodeMenu && (
+        <div className="index-context-menu" style={{ left: nodeMenu.x, top: nodeMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
+          <button type="button" className="context-item" onClick={() => { setNodeMenu(null); copyBlocks(new Set([nodeMenu.nodeId])); }}>
+            <Icon name="copy" /><strong>Copy block</strong><kbd>⌘C</kbd>
+          </button>
+        </div>
+      )}
     </ReactFlow>
   );
 }

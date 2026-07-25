@@ -3,11 +3,12 @@ import type {
   DelayFlowNode,
   FlowEdge,
   FlowNode,
+  LoopFlowNode,
   RequestFlowNode,
   TransformFlowNode,
 } from "./types.ts";
 import { DEFAULT_TRANSFORM_CODE } from "./transform.ts";
-import { stepKeyFor, topoOrder } from "./validate.ts";
+import { dagEdges, loopBackEdgeMap, stepKeyFor, topoOrder } from "./validate.ts";
 
 export interface RequestDropPayload {
   kind: "request";
@@ -95,6 +96,20 @@ export function createTransformFlowNode(
   };
 }
 
+export function createLoopFlowNode(
+  id: string,
+  takenKeys: ReadonlySet<string>,
+  position: { x: number; y: number },
+): LoopFlowNode {
+  return {
+    id,
+    key: stepKeyFor("loop", takenKeys),
+    type: "loop",
+    position: { ...position },
+    config: { count: 3 },
+  };
+}
+
 const LAYOUT_COL = 300;
 const LAYOUT_ROW = 150;
 const LAYOUT_MARGIN = 60;
@@ -104,22 +119,42 @@ export function autoLayoutNodes(
   nodes: readonly FlowNode[],
   edges: readonly FlowEdge[],
 ): FlowNode[] {
-  const order = topoOrder(nodes, edges);
+  // loop back-edges close circles on purpose; layout walks the acyclic remainder, same as
+  // the engine — otherwise any flow with a loop bails here and Arrange silently no-ops
+  const layoutEdges = dagEdges({ nodes, edges });
+  const order = topoOrder(nodes, layoutEdges);
   if (!order) return [...nodes];
 
   const depth = new Map(order.map((id) => [id, 0]));
   for (const id of order) {
-    for (const edge of edges) {
+    for (const edge of layoutEdges) {
       if (edge.source !== id || !depth.has(edge.target)) continue;
       depth.set(edge.target, Math.max(depth.get(edge.target)!, depth.get(id)! + 1));
     }
   }
 
+  // A loop step drops below its column's chain row, so the loop-back wire routes UNDER the
+  // blocks instead of cutting straight through the single-line chain
+  const deferredLoopIds = new Set(
+    [...loopBackEdgeMap({ nodes, edges })]
+      .filter(([, backs]) => backs.length > 0)
+      .map(([id]) => id),
+  );
+
   const rowsPerColumn = new Map<number, number>();
   const positions = new Map<string, { x: number; y: number }>();
   for (const id of order) {
+    if (deferredLoopIds.has(id)) continue;
     const column = depth.get(id)!;
     const row = rowsPerColumn.get(column) ?? 0;
+    rowsPerColumn.set(column, row + 1);
+    positions.set(id, { x: LAYOUT_MARGIN + column * LAYOUT_COL, y: LAYOUT_MARGIN + row * LAYOUT_ROW });
+  }
+  for (const id of order) {
+    if (!deferredLoopIds.has(id)) continue;
+    const column = depth.get(id)!;
+    // at least one row below the chain, even when the loop is alone in its column
+    const row = Math.max(1, rowsPerColumn.get(column) ?? 0);
     rowsPerColumn.set(column, row + 1);
     positions.set(id, { x: LAYOUT_MARGIN + column * LAYOUT_COL, y: LAYOUT_MARGIN + row * LAYOUT_ROW });
   }
@@ -165,4 +200,61 @@ export function removeGraphElements(
       && nodeIds.has(edge.target)
     )),
   };
+}
+
+export interface FlowClipboard {
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+}
+
+/**
+ * Deep-clones the selected nodes plus the edges whose both ends are selected, so the
+ * clipboard stays valid no matter how the graph changes afterwards. Null when nothing
+ * usable is selected.
+ */
+export function copyGraphElements(
+  nodes: readonly FlowNode[],
+  edges: readonly FlowEdge[],
+  selectedNodeIds: ReadonlySet<string>,
+): FlowClipboard | null {
+  const picked = nodes.filter((node) => selectedNodeIds.has(node.id));
+  if (picked.length === 0) return null;
+  const pickedIds = new Set(picked.map((node) => node.id));
+  return structuredClone({
+    nodes: picked,
+    edges: edges.filter((edge) => pickedIds.has(edge.source) && pickedIds.has(edge.target)),
+  });
+}
+
+/**
+ * Re-ids and re-keys the clipboard contents for insertion: every pasted node gets a fresh
+ * id, a collision-safe step key, and an offset position; edges follow the id remap.
+ */
+export function pasteGraphElements(
+  clipboard: FlowClipboard,
+  takenKeys: ReadonlySet<string>,
+  makeId: (prefix: "n" | "e") => string,
+  offset: { x: number; y: number },
+): FlowClipboard {
+  const keys = new Set(takenKeys);
+  const idMap = new Map<string, string>();
+  const nodes = clipboard.nodes.map((node) => {
+    const id = makeId("n");
+    idMap.set(node.id, id);
+    const key = stepKeyFor(node.key, keys);
+    keys.add(key);
+    return {
+      ...structuredClone(node),
+      id,
+      key,
+      position: { x: node.position.x + offset.x, y: node.position.y + offset.y },
+    };
+  });
+  const edges = clipboard.edges.map((edge) => ({
+    ...edge,
+    id: makeId("e"),
+    source: idMap.get(edge.source)!,
+    target: idMap.get(edge.target)!,
+  }));
+  return { nodes, edges };
 }

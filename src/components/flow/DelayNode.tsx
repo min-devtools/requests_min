@@ -15,11 +15,10 @@ export type DelayCanvasNode = Node<DelayNodeData, "delay">;
 export function DelayNode({ data, isConnectable }: NodeProps<DelayCanvasNode>) {
   return (
     <div className={`flow-node flow-node-delay status-${data.status}${data.stale ? " is-stale" : ""}`}>
-      <Handle type="target" position={Position.Left} isConnectable={isConnectable} />
+      <Handle type="target" position={Position.Left} className="handle-in" isConnectable={isConnectable} />
       <div className="flow-node-head">
         <Icon name="timer" size={13} />
         <span className="flow-node-kind">Delay</span>
-        <span className="flow-node-key">{data.node.key}</span>
         <span className="flow-node-actions">
           <button
             type="button"
@@ -49,7 +48,7 @@ export function DelayNode({ data, isConnectable }: NodeProps<DelayCanvasNode>) {
       </div>
       <div className="flow-node-sub">wait {data.node.config.ms} ms</div>
       <div className="flow-node-status">{data.status}{data.stale ? " · stale" : ""}</div>
-      <Handle type="source" position={Position.Right} isConnectable={isConnectable} />
+      <Handle type="source" position={Position.Right} className="handle-out" isConnectable={isConnectable} />
     </div>
   );
 }

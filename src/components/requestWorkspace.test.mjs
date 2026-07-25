@@ -21,11 +21,38 @@ test("HTTP body types share the main editor tab row and omit the TLS status labe
   assert.doesNotMatch(view, /<div className="body-editor">\s*<div className="body-type-tabs">/);
 });
 
+test("HTTP Params uses one table; URL path variables show a bare, locked key (Postman-style)", async () => {
+  const view = await readFile(new URL("components/views/RequestView.tsx", root), "utf8");
+  const editor = await readFile(new URL("ui/KvEditor.tsx", root), "utf8");
+
+  assert.doesNotMatch(view, /Path Params/);
+  assert.doesNotMatch(view, /Query Params/);
+  assert.match(view, /pathParams/);
+  assert.match(view, /extractPathParams/);
+  assert.match(view, /renderPathParams/);
+  // no colon-prefix trick and no URL string-surgery on rename/remove — the key column is
+  // just locked (readOnly) for the leading path-param rows; add/remove that param by editing the URL
+  assert.doesNotMatch(view, /key\.startsWith\(":"\)/);
+  assert.match(view, /lockedCount={httpPathParams\.length}/);
+  assert.match(editor, /readOnly={locked}/);
+  assert.match(editor, /locked \? <span \/> : <button/);
+});
+
+test("path params normalize from the URL even when a loaded request's pathParams is empty (imported requests)", async () => {
+  const view = await readFile(new URL("components/views/RequestView.tsx", root), "utf8");
+
+  // regression: `request.http?.pathParams ?? extractPathParams(...)` never falls back for
+  // an imported request's `[]`, so its ":id" segment never gets a Params row or a value at send time
+  assert.doesNotMatch(view, /request\.http\?\.pathParams \?\? extractPathParams/);
+  assert.match(view, /const httpPathParams = extractPathParams\(request\.http\?\.url \?\? "", request\.http\?\.pathParams\)/);
+  assert.match(view, /normalize once so Send substitutes real/);
+});
+
 test("shared JSON editors expose format, minify, and validate actions", async () => {
   const editor = await readFile(new URL("ui/JsonEditor.tsx", root), "utf8");
 
-  assert.match(editor, /const format = \(\) => transform\(true\)/);
-  assert.match(editor, /const minify = \(\) => transform\(false\)/);
+  assert.match(editor, /formatJsonWithTemplates/);
+  assert.match(editor, /minifyJsonWithTemplates/);
   assert.match(editor, /const validate = \(\) =>/);
   // toolbar buttons are icon-only now — the action name lives in title/aria-label
   assert.match(editor, /title="Format" aria-label="Format"/);
@@ -67,8 +94,10 @@ test("saved requests expose open and delete actions from their context menus", a
   assert.match(sidebar, /onContextMenu=\{\(event\) => openRequestMenu\(event, c\.id, r\)\}/);
   assert.match(tabs, /onContextMenu=\{\(event\) => \{ if \(!rt\?\.collectionId \|\| !rt\.relPath\) return;/);
   assert.match(menu, /<strong>Open request<\/strong>/);
-  assert.match(menu, /<strong>Delete request<\/strong>/);
   assert.match(store, /deleteRequest: \(collectionId: string, relPath: string\) => Promise<void>/);
+  assert.match(store, /deleteCollection: \(id: string\) => Promise<void>/);
+  assert.match(store, /await api\.colDelete\(id\)/);
+  assert.match(store, /requestTab\?\.collectionId === id/);
   assert.match(store, /await api\.reqDelete\(collectionId, relPath\)/);
   assert.match(store, /closeTab\(tab\.id\)/);
 });
@@ -325,6 +354,16 @@ test("gRPC imports multiple proto files, describes them immediately, and uses re
   assert.match(capability, /dialog:allow-open/);
 });
 
+test("grpcurl proto files automatically bind a reusable source and surface describe failures", async () => {
+  const view = await readFile(new URL("components/views/RequestView.tsx", root), "utf8");
+
+  assert.match(view, /const matchingSource = protoSources\.find/);
+  assert.match(view, /name: parsed\.grpc\.protoFiles\[0\]\.split/);
+  assert.match(view, /sourceId: source\.id/);
+  assert.match(view, /await describeSource\(source\.id, true\)/);
+  assert.match(view, /setDescError\(String\(err\)\)/);
+});
+
 test("gRPC service and method use searchable comboboxes on the editor tab row", async () => {
   const [view, combobox, styles] = await Promise.all([
     readFile(new URL("components/views/RequestView.tsx", root), "utf8"),
@@ -356,3 +395,12 @@ test("GitHub setup defaults to requests_min_collections and initializes first sy
   assert.match(github, /\/contents\/\.requestsmin/);
   assert.match(github, /ref_status == 404 \|\| ref_status == 409/, "empty repo (409) must get an initial commit like a missing branch (404)");
 });
+
+test("queryToParams in RequestView URL-decodes query string values like datetime percent-encoding", async () => {
+  const view = await readFile(new URL("components/views/RequestView.tsx", root), "utf8");
+
+  assert.match(view, /const safeDecode = \(s: string\): string =>/);
+  assert.match(view, /decodeURIComponent\(s\.replace\(/);
+  assert.match(view, /safeDecode\(seg\.slice\(eq \+ 1\)\)/);
+});
+
