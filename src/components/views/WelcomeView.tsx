@@ -2,6 +2,7 @@ import { useShallow } from "zustand/react/shallow";
 import { ToolButton } from "../../ui/ToolButton";
 import { Icon, type IconName } from "../../ui/Icon";
 import { useApp } from "../../store";
+import { formatNumber } from "../../lib/format";
 
 export function WelcomeView({ active }: { active: boolean }) {
   const { newRequestTab, openTab, collections } = useApp(useShallow((s) => ({
@@ -22,7 +23,7 @@ export function WelcomeView({ active }: { active: boolean }) {
       <div className="welcome-shell">
         <div className="welcome-hero">
           <div className="welcome-copy">
-            <div className="welcome-kicker">{collections.length ? `${collections.length} collections` : "no collections yet"}</div>
+            <div className="welcome-kicker">{collections.length ? `${formatNumber(collections.length)} collections` : "no collections yet"}</div>
             <h1 className="welcome-title">RequestsMin</h1>
             <p className="welcome-text">
               A native API workspace for REST, gRPC, and WebSocket — with GitHub-backed collections,

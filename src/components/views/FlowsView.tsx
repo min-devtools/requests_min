@@ -6,6 +6,7 @@ import { createFlow, createLatestFlowListReload, deleteFlow, duplicateFlow, expo
 import { useApp } from "../../store";
 import { Icon } from "../../ui/Icon";
 import { ToolButton } from "../../ui/ToolButton";
+import { formatNumber } from "../../lib/format";
 
 export function FlowsView({ active }: { active: boolean }) {
   const [flows, setFlows] = useState<FlowMeta[]>([]);
@@ -102,7 +103,7 @@ export function FlowsView({ active }: { active: boolean }) {
                 {visibleFlows.map((flow) => (
                   <tr key={flow.id}>
                     <th scope="row"><strong>{flow.name}</strong><small className="row-subtitle">{flow.id}</small></th>
-                    <td>{flow.nodeCount}</td>
+                    <td>{formatNumber(flow.nodeCount)}</td>
                     <td><ToolButton onClick={() => void open(flow)}>Open</ToolButton></td>
                     <td>
                       <div className="toolbar">

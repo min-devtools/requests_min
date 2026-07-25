@@ -4,6 +4,7 @@ import { isNodeEnabled } from "../../lib/flow/types";
 import { Icon } from "../../ui/Icon";
 import { NodeActions, NodeToggle, StatusLine } from "./nodeBits";
 import { confirmDeleteNode, setNodeEnabled } from "./nodeActions";
+import { formatNumber } from "../../lib/format";
 
 export interface LoopNodeData extends Record<string, unknown> {
   node: LoopFlowNode;
@@ -46,7 +47,7 @@ export function LoopNode({ data, isConnectable }: NodeProps<LoopCanvasNode>) {
         </span>
         <span className="flow-node-kind">Loop</span>
         {data.remaining != null && (
-          <span className="flow-node-loop-count" title={`${data.remaining} passes left`} aria-label={`${data.remaining} passes left`}>{data.remaining}</span>
+          <span className="flow-node-loop-count" title={`${formatNumber(data.remaining)} passes left`} aria-label={`${formatNumber(data.remaining)} passes left`}>{formatNumber(data.remaining)}</span>
         )}
         {/* lone action: delete — the pass count edits inline in the Step detail tab */}
         <NodeActions items={[
@@ -64,7 +65,7 @@ export function LoopNode({ data, isConnectable }: NodeProps<LoopCanvasNode>) {
           onChange={(next) => setNodeEnabled(data.tabId, data.node.id, next)}
         />
       </div>
-      <div className="flow-node-sub">run body ×{data.node.config.count}</div>
+      <div className="flow-node-sub">run body ×{formatNumber(data.node.config.count)}</div>
       <StatusLine status={data.status} stale={data.stale} />
       <Handle type="target" position={Position.Right} id="in-right" className="handle-in" style={{ top: "32%" }} isConnectable={isConnectable} />
       <Handle type="source" position={Position.Right} className="handle-out" style={{ top: "68%" }} isConnectable={isConnectable} />

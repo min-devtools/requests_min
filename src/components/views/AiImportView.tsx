@@ -5,6 +5,7 @@ import { Icon } from "../../ui/Icon";
 import { ToolButton } from "../../ui/ToolButton";
 import { useApp } from "../../store";
 import { api, type DraftEntry, type ScanHit } from "../../lib/api";
+import { formatNumber } from "../../lib/format";
 
 export function AiImportView({ active, embedded = false }: { active: boolean; embedded?: boolean }) {
   const { collections, activeCollectionId, setActiveCollection, reloadCollections, showToast, openTab, openSelect, openDialog, aiEndpoint, aiModel, aiApiKey } = useApp(useShallow((s) => ({
@@ -73,7 +74,7 @@ export function AiImportView({ active, embedded = false }: { active: boolean; em
     try {
       const entries = await api.aiGenerate(Array.from(selected), aiEndpoint, aiApiKey, aiModel);
       setDraft(entries);
-      showToast("Draft ready", `${entries.length} request(s) generated — review before adding.`);
+      showToast("Draft ready", `${formatNumber(entries.length)} request(s) generated — review before adding.`);
     } catch (err) {
       showToast("Generate failed", String(err), "err");
     } finally {
@@ -107,7 +108,7 @@ export function AiImportView({ active, embedded = false }: { active: boolean; em
     }
     setActiveCollection(collectionId);
     for (const entry of draft) await api.reqWrite(collectionId, entry.relPath, entry.request);
-    showToast("Added", `${draft.length} request(s) written to the collection.`);
+    showToast("Added", `${formatNumber(draft.length)} request(s) written to the collection.`);
     setDraft([]);
   };
 
@@ -169,7 +170,7 @@ export function AiImportView({ active, embedded = false }: { active: boolean; em
           <div className="drop-zone">
             <div style={{ width: "100%" }}>
               <strong>{dir || "Choose a source folder"}</strong>
-              <span>{files.length ? `${files.length} candidate file(s) found` : "Enter an absolute path to scan"}</span>
+              <span>{files.length ? `${formatNumber(files.length)} candidate file(s) found` : "Enter an absolute path to scan"}</span>
               <div style={{ marginTop: 14, display: "flex", gap: 8, justifyContent: "center" }}>
                 <input className="path-input" style={{ maxWidth: 320 }} placeholder="/abs/path/to/project" value={dir} onChange={(e) => setDir(e.target.value)} />
                 <ToolButton onClick={chooseFolder} disabled={scanning}>Choose folder</ToolButton>
@@ -180,7 +181,7 @@ export function AiImportView({ active, embedded = false }: { active: boolean; em
 
           {files.length > 0 && (
             <section className="panel">
-              <h3>Detected files <span style={{ color: "var(--text-3)", fontWeight: 400 }}>· {selected.size}/{files.length} selected — shift-click for a range, ⌘/ctrl-click to toggle</span></h3>
+              <h3>Detected files <span style={{ color: "var(--text-3)", fontWeight: 400 }}>· {formatNumber(selected.size)}/{formatNumber(files.length)} selected — shift-click for a range, ⌘/ctrl-click to toggle</span></h3>
               <div style={{ display: "grid", gap: 4, maxHeight: 220, overflow: "auto" }}>
                 {files.map((f, i) => (
                   <div key={f.path} className="check-row" style={{ cursor: "pointer", userSelect: "none", background: selected.has(f.path) ? "var(--sel, rgba(120,140,255,0.12))" : undefined }} onClick={(e) => clickRow(e, i)}>

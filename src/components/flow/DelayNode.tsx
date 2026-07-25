@@ -4,6 +4,7 @@ import { isNodeEnabled } from "../../lib/flow/types";
 import { Icon } from "../../ui/Icon";
 import { NodeActions, NodeToggle, StatusLine } from "./nodeBits";
 import { confirmDeleteNode, setNodeEnabled } from "./nodeActions";
+import { formatNumber } from "../../lib/format";
 
 export interface DelayNodeData extends Record<string, unknown> {
   node: DelayFlowNode;
@@ -41,8 +42,8 @@ export function DelayNode({ data, isConnectable }: NodeProps<DelayCanvasNode>) {
         />
       </div>
       {/* digital readout: the wait time as a clock face, not a sentence */}
-      <div className="flow-delay-face" title={`Wait ${data.node.config.ms} milliseconds`}>
-        <span className="flow-delay-ms">{data.node.config.ms}</span>
+      <div className="flow-delay-face" title={`Wait ${formatNumber(data.node.config.ms)} milliseconds`}>
+        <span className="flow-delay-ms">{formatNumber(data.node.config.ms)}</span>
         <span className="flow-delay-unit">ms</span>
       </div>
       <StatusLine status={data.status} stale={data.stale} />

@@ -123,6 +123,12 @@ export function toggleRequestEditorSize(event: React.MouseEvent, horizontal: boo
   const screenH = screen.getBoundingClientRect().height;
   const cur = editorPane.getBoundingClientRect().height;
   const next = cur <= MIN_TOP + 8 ? Math.round(screenH / 2) : MIN_TOP;
+
+  // scoped + temporary: only the double-click toggle gets the bounce, drag-resize
+  // (continuous --request-top writes in startResize) stays instant/unaffected
+  screen.style.transition = "grid-template-rows 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)";
+  window.setTimeout(() => { screen.style.transition = ""; }, 420);
+
   document.body.style.setProperty("--request-top", `${next}px`);
   localStorage.setItem("requestsmin:request-top", String(next));
 }

@@ -4,6 +4,7 @@ import { findMarks, filterJsonFields, jsonChildPath, jsonContainerPaths, jsonFie
 import { useApp } from "../store";
 import { Icon } from "./Icon";
 import { ToolButton } from "./ToolButton";
+import { formatNumber } from "../lib/format";
 
 interface JsonNodeProps {
   value: unknown;
@@ -68,7 +69,7 @@ function JsonNode({ value, path, name, depth, trailing, collapsed, query, caseSe
   const count = entries.length;
   const canCollapse = count > 0;
   const isCollapsed = canCollapse && collapsed.has(path);
-  const summary = `${count} ${isArray ? (count === 1 ? "item" : "items") : (count === 1 ? "field" : "fields")}`;
+  const summary = `${formatNumber(count)} ${isArray ? (count === 1 ? "item" : "items") : (count === 1 ? "field" : "fields")}`;
 
   return (
     <>
@@ -232,7 +233,7 @@ export function JsonTreePanel({ value }: { value: unknown }) {
       >
         Aa
       </button>
-      <span className="match-count">{q ? `${filtered.length}/${allFields.length}` : ""}</span>
+      <span className="match-count">{q ? `${formatNumber(filtered.length)}/${formatNumber(allFields.length)}` : ""}</span>
     </div>
   );
 
@@ -269,7 +270,7 @@ export function JsonTreePanel({ value }: { value: unknown }) {
       {searchBar}
       <div className="json-dock-head">
         <span>
-          {q ? `${filtered.length} match${filtered.length === 1 ? "" : "es"}` : `${allFields.length} field${allFields.length === 1 ? "" : "s"}`}
+          {q ? `${formatNumber(filtered.length)} match${filtered.length === 1 ? "" : "es"}` : `${formatNumber(allFields.length)} field${allFields.length === 1 ? "" : "s"}`}
         </span>
         <div className="dock-actions">
           <ToolButton

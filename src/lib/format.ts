@@ -14,4 +14,20 @@ export function highlightJson(json: string): string {
       return `<span class="syntax-punc">${match}</span>`;
     },
   );
+}export function formatNumber(val: number | string | null | undefined, fallback = "—"): string {
+  if (val == null || val === "") return fallback;
+  const num = typeof val === "number" ? val : Number(val);
+  return isNaN(num) ? String(val) : num.toLocaleString("en-US");
+}
+
+export function formatDuration(ms: number | null | undefined, space = false, fallback = "—"): string {
+  if (ms == null || !Number.isFinite(ms)) return fallback;
+  return `${formatNumber(ms)}${space ? " ms" : "ms"}`;
+}
+
+export function formatBytes(bytes: number | null | undefined, fallback = "0 B"): string {
+  if (bytes == null || !Number.isFinite(bytes) || bytes <= 0) return fallback;
+  if (bytes < 1024) return `${formatNumber(bytes)} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
