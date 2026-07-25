@@ -7,6 +7,7 @@ import { ToolButton } from "../../ui/ToolButton";
 import { Icon } from "../../ui/Icon";
 import { JsonTreePanel } from "../../ui/JsonTreePanel";
 import { AiImportView } from "./AiImportView";
+import { formatNumber } from "../../lib/format";
 
 const safeCopyText = async (content: string): Promise<boolean> => {
   try {
@@ -177,7 +178,7 @@ export function ImportExportView({ active }: { active: boolean }) {
         await reloadCollections();
         setActiveCollection(collectionId);
         setExportCollectionId(collectionId);
-        showToast("Imported", `${draft.requests.length} requests ${importCollectionId ? "added to the selected collection" : `added to ${draft.name}`}.`);
+        showToast("Imported", `${formatNumber(draft.requests.length)} requests ${importCollectionId ? "added to the selected collection" : `added to ${draft.name}`}.`);
       }
       setText("");
       setFileName("");

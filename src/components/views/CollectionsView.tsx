@@ -7,6 +7,7 @@ import { ColorPicker } from "../../ui/ColorPicker";
 import { useApp } from "../../store";
 import { api, type ReqEntry } from "../../lib/api";
 import { connStyle } from "../../lib/connColor";
+import { formatNumber } from "../../lib/format";
 
 export function CollectionsView({ active }: { active: boolean }) {
   const {
@@ -87,10 +88,10 @@ export function CollectionsView({ active }: { active: boolean }) {
   };
   const bulkDelete = async () => {
     if (!collection || selected.size === 0) return;
-    if (!await openConfirm({ title: "Delete requests", message: `Delete ${selected.size} request(s)? This cannot be undone.`, danger: true, confirmLabel: "Delete" })) return;
+    if (!await openConfirm({ title: "Delete requests", message: `Delete ${formatNumber(selected.size)} request(s)? This cannot be undone.`, danger: true, confirmLabel: "Delete" })) return;
     try {
       for (const relPath of selected) await deleteRequest(collection.id, relPath);
-      showToast("Requests deleted", `${selected.size} removed.`);
+      showToast("Requests deleted", `${formatNumber(selected.size)} removed.`);
       setSelected(new Set());
     } catch (error) { showToast("Delete failed", String(error), "err"); }
   };
@@ -104,7 +105,7 @@ export function CollectionsView({ active }: { active: boolean }) {
 
   return <section className={`content collections-view ${active ? "active" : ""}`}>
     <header className="page-head">
-      <div><div className="eyebrow">Collection workspace</div><h1>{collection?.name ?? "No collection selected"}</h1><p>{collection ? `${requests.length} request(s) stored in this collection.` : "Create a collection to start saving requests."}</p></div>
+      <div><div className="eyebrow">Collection workspace</div><h1>{collection?.name ?? "No collection selected"}</h1><p>{collection ? `${formatNumber(requests.length)} request(s) stored in this collection.` : "Create a collection to start saving requests."}</p></div>
       <div className="toolbar">
         <ToolButton onClick={newCollection}><Icon name="plus" /> New collection</ToolButton>
         {collection && <ToolButton variant="primary" onClick={() => newRequestTab("http", collection.id)}><Icon name="plus" /> New request</ToolButton>}
@@ -124,11 +125,11 @@ export function CollectionsView({ active }: { active: boolean }) {
     <div className="collections-body">
       {!collection ? <div className="empty-state"><Icon name="database" size={24} /><strong>No collection selected</strong><span>Create a collection or select one from the sidebar.</span></div> : <section className="table-panel collection-request-list">
         {selected.size > 0 && <div className="bulk-bar" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderBottom: "1px solid var(--line)" }}>
-          <strong>{selected.size} selected</strong>
+          <strong>{formatNumber(selected.size)} selected</strong>
           <span style={{ color: "var(--text-3)", fontSize: "0.8462rem" }}>shift-click for a range · ⌘/ctrl-click to toggle</span>
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <ToolButton onClick={() => { setSelected(new Set()); setAnchor(null); }}>Clear</ToolButton>
-            <ToolButton variant="danger" onClick={bulkDelete}><Icon name="trash" /> Delete {selected.size}</ToolButton>
+            <ToolButton variant="danger" onClick={bulkDelete}><Icon name="trash" /> Delete {formatNumber(selected.size)}</ToolButton>
           </div>
         </div>}
         <div className="collection-request-head"><span>Method</span><span>Request</span><span>Path</span></div>

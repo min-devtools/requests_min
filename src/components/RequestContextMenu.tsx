@@ -1,5 +1,4 @@
-import { useEffect } from "react";
-import { Icon } from "../ui/Icon";
+import { ContextMenu } from "../ui/ContextMenu";
 
 interface Props {
   x: number;
@@ -12,19 +11,17 @@ interface Props {
 }
 
 export function RequestContextMenu({ x, y, onOpen, onClose, onRename, onDuplicate, onDelete }: Props) {
-  useEffect(() => {
-    const close = () => onClose();
-    window.addEventListener("pointerdown", close);
-    window.addEventListener("blur", close);
-    return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("blur", close); };
-  }, [onClose]);
-
   return (
-    <div className="index-context-menu" style={{ left: x, top: y }} onPointerDown={(event) => event.stopPropagation()}>
-      <button type="button" className="context-item" onClick={() => { onClose(); onOpen(); }}><Icon name="request" /><strong>Open request</strong><kbd>↵</kbd></button>
-      <button type="button" className="context-item" onClick={() => { onClose(); onRename(); }}><Icon name="pencil" /><strong>Rename request</strong><kbd>⌘E</kbd></button>
-      <button type="button" className="context-item" onClick={() => { onClose(); onDuplicate(); }}><Icon name="copy" /><strong>Duplicate request</strong><kbd>⌘D</kbd></button>
-      <button type="button" className="context-item danger" onClick={() => { onClose(); onDelete(); }}><Icon name="trash" /><strong>Delete request</strong><kbd>⌘⌫</kbd></button>
-    </div>
+    <ContextMenu
+      x={x}
+      y={y}
+      onClose={onClose}
+      items={[
+        { icon: "request", label: "Open request", strong: true, kbd: "↵", onClick: onOpen },
+        { icon: "pencil", label: "Rename request", strong: true, kbd: "⌘E", onClick: onRename },
+        { icon: "copy", label: "Duplicate request", strong: true, kbd: "⌘D", onClick: onDuplicate },
+        { icon: "trash", label: "Delete request", strong: true, danger: true, kbd: "⌘⌫", onClick: onDelete },
+      ]}
+    />
   );
 }

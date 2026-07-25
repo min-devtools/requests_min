@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { useShallow } from "zustand/react/shallow";
 import { useApp } from "../store";
 import { Icon, type IconName } from "../ui/Icon";
@@ -93,8 +94,6 @@ const filtered = useMemo<Array<Command & { labelIdx: number[]; recent: boolean }
     return out.slice(0, 12);
   }, [commands, input, recents]);
 
-  if (!commandOpen && !themePicker) return null;
-
   const runCommand = (cmd: Command) => {
     setCommandOpen(false);
     pushRecent(cmd.label);
@@ -103,48 +102,89 @@ const filtered = useMemo<Array<Command & { labelIdx: number[]; recent: boolean }
 
   return (
     <>
-    {commandOpen && <div className="command" onMouseDown={(e) => { if (e.target === e.currentTarget) setCommandOpen(false); }}>
-      <div className="palette">
-        <input
-          ref={inputRef}
-          value={input}
-          placeholder="Run command, open collection, switch environment..."
-          onChange={(e) => { setInput(e.target.value); setCursor(0); }}
-          onKeyDown={(e) => {
-            const next = e.key === "Tab" || (vimMode && e.ctrlKey && e.key.toLowerCase() === "n");
-            const previous = vimMode && e.ctrlKey && e.key.toLowerCase() === "p";
-            if (e.key === "ArrowDown" || next) { e.preventDefault(); setCursor((c) => Math.min(Math.max(0, filtered.length - 1), c + 1)); }
-            if (e.key === "ArrowUp" || previous) { e.preventDefault(); setCursor((c) => Math.max(0, c - 1)); }
-            if (e.key === "Enter" && filtered[cursor]) runCommand(filtered[cursor]);
-            if (e.key === "Escape") setCommandOpen(false);
-          }}
-        />
-        <div className="cmd-list">
-          {filtered.map((cmd, i) => (
-            <Fragment key={cmd.label}>
-              {(i === 0 || filtered[i - 1].recent !== cmd.recent) && <div className="cmd-group">{cmd.recent ? "Recents" : "Commands"}</div>}
-              <div className={`cmd ${i === cursor ? "active" : ""}`} onMouseEnter={() => setCursor(i)} onClick={() => runCommand(cmd)}>
-                <Icon name={cmd.icon} size={15} />
-                <span>{renderHL(cmd.label, cmd.labelIdx)}</span>
-                {cmd.kbd ? <span className="kbd">{cmd.kbd}</span> : <span />}
-              </div>
-            </Fragment>
-          ))}
-          {filtered.length === 0 && <div className="empty-note">No matching commands.</div>}
-        </div>
-      </div>
-    </div>}
-    {themePicker && <div className="modal" onMouseDown={(e) => { if (e.target === e.currentTarget) setThemePicker(false); }}>
-      <div className="prompt-dialog" role="dialog" aria-modal="true" aria-label="Theme picker">
-        <strong>Theme picker</strong>
-        <p className="prompt-dialog-msg">Changes apply immediately and are saved for this device.</p>
-        <select className="side-search" style={{ width: "100%" }} value={theme} autoFocus onChange={(event) => setTheme(event.target.value)}>
-          <optgroup label="Dark">{THEMES.filter((item) => item.base === "dark").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>
-          <optgroup label="Light">{THEMES.filter((item) => item.base === "light").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>
-        </select>
-        <div className="prompt-dialog-foot"><ToolButton variant="primary" onClick={() => setThemePicker(false)}>Done</ToolButton></div>
-      </div>
-    </div>}
+    <AnimatePresence>
+      {commandOpen && (
+        <motion.div
+          key="command-palette-backdrop"
+          className="command"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setCommandOpen(false); }}
+        >
+          <motion.div
+            key="command-palette-modal"
+            className="palette"
+            initial={{ opacity: 0, y: -12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 450, damping: 32 }}
+          >
+            <input
+              ref={inputRef}
+              value={input}
+              placeholder="Run command, open collection, switch environment..."
+              onChange={(e) => { setInput(e.target.value); setCursor(0); }}
+              onKeyDown={(e) => {
+                const next = e.key === "Tab" || (vimMode && e.ctrlKey && e.key.toLowerCase() === "n");
+                const previous = vimMode && e.ctrlKey && e.key.toLowerCase() === "p";
+                if (e.key === "ArrowDown" || next) { e.preventDefault(); setCursor((c) => Math.min(Math.max(0, filtered.length - 1), c + 1)); }
+                if (e.key === "ArrowUp" || previous) { e.preventDefault(); setCursor((c) => Math.max(0, c - 1)); }
+                if (e.key === "Enter" && filtered[cursor]) runCommand(filtered[cursor]);
+                if (e.key === "Escape") setCommandOpen(false);
+              }}
+            />
+            <div className="cmd-list">
+              {filtered.map((cmd, i) => (
+                <Fragment key={cmd.label}>
+                  {(i === 0 || filtered[i - 1].recent !== cmd.recent) && <div className="cmd-group">{cmd.recent ? "Recents" : "Commands"}</div>}
+                  <div className={`cmd ${i === cursor ? "active" : ""}`} onMouseEnter={() => setCursor(i)} onClick={() => runCommand(cmd)}>
+                    <Icon name={cmd.icon} size={15} />
+                    <span>{renderHL(cmd.label, cmd.labelIdx)}</span>
+                    {cmd.kbd ? <span className="kbd">{cmd.kbd}</span> : <span />}
+                  </div>
+                </Fragment>
+              ))}
+              {filtered.length === 0 && <div className="empty-note">No matching commands.</div>}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+    <AnimatePresence>
+      {themePicker && (
+        <motion.div
+          key="theme-picker-backdrop"
+          className="modal"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setThemePicker(false); }}
+        >
+          <motion.div
+            key="theme-picker-content"
+            className="prompt-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Theme picker"
+            initial={{ opacity: 0, scale: 0.95, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 8 }}
+            transition={{ type: "spring", stiffness: 420, damping: 30 }}
+          >
+            <strong>Theme picker</strong>
+            <p className="prompt-dialog-msg">Changes apply immediately and are saved for this device.</p>
+            <select className="side-search" style={{ width: "100%" }} value={theme} autoFocus onChange={(event) => setTheme(event.target.value)}>
+              <optgroup label="Dark">{THEMES.filter((item) => item.base === "dark").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>
+              <optgroup label="Light">{THEMES.filter((item) => item.base === "light").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>
+            </select>
+            <div className="prompt-dialog-foot"><ToolButton variant="primary" onClick={() => setThemePicker(false)}>Done</ToolButton></div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
     </>
   );
 }

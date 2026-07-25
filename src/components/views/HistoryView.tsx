@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import { ToolButton } from "../../ui/ToolButton";
 import { Icon } from "../../ui/Icon";
 import { useApp, type HistoryEntry } from "../../store";
+import { formatDuration } from "../../lib/format";
 
 export function HistoryView({ active }: { active: boolean }) {
   const [filter, setFilter] = useState("");
@@ -51,7 +52,7 @@ export function HistoryView({ active }: { active: boolean }) {
                   <td><span className={`method-tag ${entry.request.protocol === "grpc" ? "RPC" : "API"}`}>{entry.request.protocol.toUpperCase()}</span></td>
                   <td><strong>{entry.request.name}</strong><small className="row-subtitle">{entry.request.http?.url ?? entry.request.grpc?.endpoint}</small></td>
                   <td className={entry.error ? "soft-red" : "soft-green"}>{entry.error ? "failed" : entry.status}</td>
-                  <td>{entry.timeMs == null ? "—" : `${entry.timeMs}ms`}</td>
+                  <td>{formatDuration(entry.timeMs)}</td>
                   <td><ToolButton onClick={() => reopen(entry)}>Open</ToolButton></td>
                 </tr>)}
               </tbody></table></div>

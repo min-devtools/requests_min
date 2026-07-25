@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence } from "motion/react";
 import {
   Background,
   BaseEdge,
@@ -35,6 +36,7 @@ import { isLoopNode, isRequestNode, isTransformNode } from "../../lib/flow/types
 import { themeBase } from "../../lib/themes";
 import { useApp } from "../../store";
 import { Icon } from "../../ui/Icon";
+import { ContextMenu } from "../../ui/ContextMenu";
 import { DelayNode, type DelayCanvasNode } from "./DelayNode";
 import { LoopNode, type LoopCanvasNode } from "./LoopNode";
 import { RequestNode, type RequestCanvasNode } from "./RequestNode";
@@ -221,14 +223,8 @@ function Canvas({
   const [linking, setLinking] = useState<"source" | "target" | null>(null);
 
   // Right-clicking a block selects it and opens a small context menu (Copy…) at the cursor.
+  // Dismiss-on-outside-click/Esc is handled by <ContextMenu> itself.
   const [nodeMenu, setNodeMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
-  useEffect(() => {
-    if (!nodeMenu) return;
-    const close = () => setNodeMenu(null);
-    window.addEventListener("pointerdown", close);
-    window.addEventListener("blur", close);
-    return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("blur", close); };
-  }, [nodeMenu]);
 
   // ⌘C / ⌘V for graph blocks. Only while this tab is active, and never when focus is in a
   // text field/Monaco or a text selection exists — native copy/paste keeps working there.
@@ -474,13 +470,18 @@ function Canvas({
     >
       <Background gap={16} />
       <Controls showInteractive={false} />
-      {nodeMenu && (
-        <div className="index-context-menu" style={{ left: nodeMenu.x, top: nodeMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
-          <button type="button" className="context-item" onClick={() => { setNodeMenu(null); copyBlocks(new Set([nodeMenu.nodeId])); }}>
-            <Icon name="copy" /><strong>Copy block</strong><kbd>⌘C</kbd>
-          </button>
-        </div>
-      )}
+      <AnimatePresence>
+        {nodeMenu && (
+          <ContextMenu
+            x={nodeMenu.x}
+            y={nodeMenu.y}
+            onClose={() => setNodeMenu(null)}
+            items={[
+              { icon: "copy", label: "Copy block", strong: true, kbd: "⌘C", onClick: () => copyBlocks(new Set([nodeMenu.nodeId])) },
+            ]}
+          />
+        )}
+      </AnimatePresence>
     </ReactFlow>
   );
 }

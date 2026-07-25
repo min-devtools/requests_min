@@ -8,10 +8,12 @@ import { saveActiveRequest } from "../lib/runRequest";
 import { buildCurl, buildGrpcurl } from "./views/RequestView";
 import { requestVariableNames, resolveRequestTarget } from "../lib/requestVariables";
 import { JsonTreePanel } from "../ui/JsonTreePanel";
+import { MiniTabs } from "../ui/MiniTabs";
 import { DelayPanel } from "./flow/DelayPanel";
 import { LoopPanel } from "./flow/LoopPanel";
 import { NodePanel } from "./flow/NodePanel";
 import { TransformPanel } from "./flow/TransformPanel";
+import { formatNumber, formatDuration } from "../lib/format";
 
 const runStatusClass = (entry: { status: string; error: string | null }) => {
   if (entry.error) return "err";
@@ -115,7 +117,7 @@ export function Inspector() {
         </select>
         <button type="button" className="inspector-icon-action" title="Open environments" aria-label="Open environments" onClick={() => openTab("environments")}><Icon name="settings" size={14} /></button>
       </div>
-      <span className="inspector-env-meta">{activeEnv ? `${Object.keys(vars).length} active variables` : "Requests use literal values"}</span>
+      <span className="inspector-env-meta">{activeEnv ? `${formatNumber(Object.keys(vars).length)} active variables` : "Requests use literal values"}</span>
     </section>
   );
 
@@ -128,7 +130,7 @@ export function Inspector() {
 
         {rt && request ? (
           <div className="inspector-command-body">
-            {unresolved.length > 0 && <div className="inspector-variable-warning">{unresolved.length} unresolved variable{unresolved.length === 1 ? "" : "s"}</div>}
+            {unresolved.length > 0 && <div className="inspector-variable-warning">{formatNumber(unresolved.length)} unresolved variable{unresolved.length === 1 ? "" : "s"}</div>}
 
             <section className="inspector-actions">
               <div className="inspector-secondary-actions">
@@ -164,7 +166,7 @@ export function Inspector() {
               <div className="inspector-section-label">Resolved preview</div>
               <div className="inspector-preview-meta">
                 <span>{request.http?.method ?? request.protocol.toUpperCase()}</span>
-                <small>{unresolved.length ? `${unresolved.length} unresolved` : "Ready"}</small>
+                <small>{unresolved.length ? `${formatNumber(unresolved.length)} unresolved` : "Ready"}</small>
               </div>
               <code className="inspector-preview-target">{resolvedTarget || "No target configured"}</code>
             </section>
@@ -174,7 +176,7 @@ export function Inspector() {
               {recentRuns.length ? recentRuns.map((entry) => (
                 <div className="inspector-run-row" key={entry.id}>
                   <strong className={runStatusClass(entry)}>{entry.status}</strong>
-                  <span>{entry.timeMs === null ? "failed" : `${entry.timeMs}ms`}</span>
+                  <span>{entry.timeMs === null ? "failed" : formatDuration(entry.timeMs)}</span>
                   <time>{relativeTime(entry.timestamp)}</time>
                 </div>
               )) : <div className="inspector-empty">Run this request to build a short timeline.</div>}
@@ -182,10 +184,11 @@ export function Inspector() {
           </div>
         ) : ft ? (
           <div className="inspector-flow">
-            <div className="mini-tabs" role="tablist">
-              <button type="button" role="tab" aria-selected={dockTab === "step"} className={dockTab === "step" ? "active" : ""} onClick={() => updateFlowTab(activeTabId, { dockTab: "step" })}>Step detail</button>
-              <button type="button" role="tab" aria-selected={dockTab === "result"} className={dockTab === "result" ? "active" : ""} onClick={() => updateFlowTab(activeTabId, { dockTab: "result" })}>Step Result</button>
-            </div>
+            <MiniTabs
+              tabs={[{ id: "step", label: "Step detail" }, { id: "result", label: "Step Result" }]}
+              active={dockTab}
+              onChange={(id) => updateFlowTab(activeTabId, { dockTab: id as "step" | "result" })}
+            />
             {dockTab === "step" ? (
               <div className="inspector-flow-step-detail">
                 {envSection}
@@ -213,7 +216,7 @@ export function Inspector() {
                   <>
                     <div className="flow-result-summary">
                       <span className={`flow-result-badge status-${flowResult.status}`}>{flowResult.status}</span>
-                      {flowResult.timeMs != null && <span className="flow-result-time">{flowResult.timeMs} ms</span>}
+                      {flowResult.timeMs != null && <span className="flow-result-time">{formatDuration(flowResult.timeMs, true)}</span>}
                       {flowResult.stale && <span className="flow-result-stale">stale</span>}
                       <button
                         type="button"

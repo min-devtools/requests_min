@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { AnimatePresence, motion } from "motion/react";
 import { Icon } from "../../ui/Icon";
 import { ToolButton } from "../../ui/ToolButton";
+import { ContextMenu } from "../../ui/ContextMenu";
 import { KvEditor } from "../../ui/KvEditor";
 import { JsonEditor } from "../../ui/JsonEditor";
 import { JsonView } from "../../ui/JsonView";
@@ -18,6 +20,7 @@ import {
 } from "../../lib/api";
 import { mergeIntoTemplate } from "../../lib/protoMerge";
 import { isGrpcurl, parseGrpcurl } from "../../lib/grpcurl";
+import { formatNumber, formatDuration, formatBytes } from "../../lib/format";
 
 // URL <-> Params two-way sync (Postman-style). Params are canonical for send (backend
 // appends them to the base url); the URL bar is a derived view. Raw (no encoding) so
@@ -157,15 +160,6 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
       .finally(() => { if (live) setDescribing(false); });
     return () => { live = false; };
   }, [tabId, rt?.request.grpc?.sourceId, rt?.request.grpc?.endpoint, rt?.request.grpc?.service, env, envVersion, protoSources]);
-
-  // close the proto "New source" menu on any outside click (same pattern as RequestContextMenu)
-  useEffect(() => {
-    if (!protoMenu) return;
-    const close = () => setProtoMenu(null);
-    window.addEventListener("pointerdown", close);
-    window.addEventListener("blur", close);
-    return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("blur", close); };
-  }, [protoMenu]);
 
   // ponytail: 1000-entry cap keeps long ws sessions from growing the DOM/state unbounded
   const pushWs = (dir: "out" | "in" | "sys", text: string) =>
@@ -502,11 +496,11 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
           </div>
           <section className="editor-pane">
             <div className="editor-tabs">
-              <button type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Body</button>
-              <button type="button" className={editorTab === "headers" ? "active" : ""} onClick={() => setEditorTab("headers")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="activity" size={13} /> Headers <span className="tab-count">{request.http.headers.length}</span></button>
-              <button type="button" className={editorTab === "params" ? "active" : ""} onClick={() => setEditorTab("params")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Params <span className="tab-count">{httpPathParams.length + request.http.params.length}</span></button>
-              <button type="button" className={editorTab === "auth" ? "active" : ""} onClick={() => setEditorTab("auth")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Auth</button>
-              <button type="button" className={editorTab === "cookies" ? "active" : ""} onClick={() => setEditorTab("cookies")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="list" size={13} /> Cookies <span className="tab-count">{reqCookies.length}</span></button>
+              <motion.button whileTap={{ scale: 0.94 }} type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Body</motion.button>
+              <motion.button whileTap={{ scale: 0.94 }} type="button" className={editorTab === "headers" ? "active" : ""} onClick={() => setEditorTab("headers")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="activity" size={13} /> Headers <span className="tab-count">{formatNumber(request.http.headers.length)}</span></motion.button>
+              <motion.button whileTap={{ scale: 0.94 }} type="button" className={editorTab === "params" ? "active" : ""} onClick={() => setEditorTab("params")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Params <span className="tab-count">{formatNumber(httpPathParams.length + request.http.params.length)}</span></motion.button>
+              <motion.button whileTap={{ scale: 0.94 }} type="button" className={editorTab === "auth" ? "active" : ""} onClick={() => setEditorTab("auth")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Auth</motion.button>
+              <motion.button whileTap={{ scale: 0.94 }} type="button" className={editorTab === "cookies" ? "active" : ""} onClick={() => setEditorTab("cookies")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="list" size={13} /> Cookies <span className="tab-count">{formatNumber(reqCookies.length)}</span></motion.button>
               {editorTab === "body" && (
                 <div className="body-type-tabs">
                   {(["none", "json", "text", "form"] as const).map((t) => (
@@ -519,10 +513,10 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
               {(embedded || horizontal) && (
                 <select className="editor-tab-select" value={editorTab} onChange={(e) => setEditorTab(e.target.value as typeof editorTab)}>
                   <option value="body">Body</option>
-                  <option value="headers">Headers ({request.http.headers.length})</option>
-                  <option value="params">Params ({httpPathParams.length + request.http.params.length})</option>
+                  <option value="headers">Headers ({formatNumber(request.http.headers.length)})</option>
+                  <option value="params">Params ({formatNumber(httpPathParams.length + request.http.params.length)})</option>
                   <option value="auth">Auth</option>
-                  <option value="cookies">Cookies ({reqCookies.length})</option>
+                  <option value="cookies">Cookies ({formatNumber(reqCookies.length)})</option>
                 </select>
               )}
               {(embedded || horizontal) && editorTab === "body" && (
@@ -639,13 +633,13 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
           </div>
           <section className="editor-pane">
             <div className="editor-tabs">
-              <button type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Message</button>
-              <button type="button" className={editorTab === "metadata" ? "active" : ""} onClick={() => setEditorTab("metadata")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Metadata <span className="tab-count">{grpc.metadata.length}</span></button>
-              <button type="button" className={editorTab === "proto" ? "active" : ""} onClick={() => setEditorTab("proto")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Proto {currentSource && <span className={`proto-dot${descError ? " err" : catalog ? " ok" : ""}`} />}</button>
+              <motion.button whileTap={{ scale: 0.94 }} type="button" className={editorTab === "body" ? "active" : ""} onClick={() => setEditorTab("body")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Message</motion.button>
+              <motion.button whileTap={{ scale: 0.94 }} type="button" className={editorTab === "metadata" ? "active" : ""} onClick={() => setEditorTab("metadata")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="key" size={13} /> Metadata <span className="tab-count">{formatNumber(grpc.metadata.length)}</span></motion.button>
+              <motion.button whileTap={{ scale: 0.94 }} type="button" className={editorTab === "proto" ? "active" : ""} onClick={() => setEditorTab("proto")} onDoubleClick={(event) => toggleRequestEditorSize(event, horizontal)}><Icon name="braces" size={13} /> Proto {currentSource && <span className={`proto-dot${descError ? " err" : catalog ? " ok" : ""}`} />}</motion.button>
               {(embedded || horizontal) && (
                 <select className="editor-tab-select" value={editorTab === "metadata" || editorTab === "proto" ? editorTab : "body"} onChange={(e) => setEditorTab(e.target.value as typeof editorTab)}>
                   <option value="body">Message</option>
-                  <option value="metadata">Metadata ({grpc.metadata.length})</option>
+                  <option value="metadata">Metadata ({formatNumber(grpc.metadata.length)})</option>
                   <option value="proto">Proto</option>
                 </select>
               )}
@@ -690,18 +684,25 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
                     </ToolButton>
                   )}
                 </div>
-                {protoMenu && (
-                  <div className="index-context-menu" style={{ left: protoMenu.x, top: protoMenu.y }} onPointerDown={(e) => e.stopPropagation()}>
-                    <button type="button" className="context-item" onClick={() => { setProtoMenu(null); void createFilesSource(true); }}><Icon name="folder" /><strong>Import proto folder</strong></button>
-                    <button type="button" className="context-item" onClick={() => { setProtoMenu(null); void createFilesSource(false); }}><Icon name="braces" /><strong>Import .proto files</strong></button>
-                    <button type="button" className="context-item" onClick={() => { setProtoMenu(null); void createReflectionSource(); }}><Icon name="plug" /><strong>From reflection endpoint</strong></button>
-                  </div>
-                )}
+                <AnimatePresence>
+                  {protoMenu && (
+                    <ContextMenu
+                      x={protoMenu.x}
+                      y={protoMenu.y}
+                      onClose={() => setProtoMenu(null)}
+                      items={[
+                        { icon: "folder", label: "Import proto folder", strong: true, onClick: () => void createFilesSource(true) },
+                        { icon: "braces", label: "Import .proto files", strong: true, onClick: () => void createFilesSource(false) },
+                        { icon: "plug", label: "From reflection endpoint", strong: true, onClick: () => void createReflectionSource() },
+                      ]}
+                    />
+                  )}
+                </AnimatePresence>
 
                 {!currentSource ? (
                   grpc.protoFiles.length ? (
                     <div className="proto-source-detail">
-                      <div className="empty-note">Legacy request: {grpc.protoFiles.length} inline .proto file(s). Convert to a shared proto source for quick switching and caching.</div>
+                      <div className="empty-note">Legacy request: {formatNumber(grpc.protoFiles.length)} inline .proto file(s). Convert to a shared proto source for quick switching and caching.</div>
                       <ul className="proto-files">
                         {grpc.protoFiles.map((f) => (<li key={f}><span className="proto-path" title={f}>{f}</span></li>))}
                       </ul>
@@ -776,7 +777,7 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
                       <span className={`proto-note${descError ? " err" : ""}`}>
                         {describing ? "Describing…"
                           : descError ?? (catalog
-                            ? `${catalog.services.length} service(s)${catalog.warnings?.length ? ` · ${catalog.warnings.length} file(s) skipped` : ""}`
+                            ? `${formatNumber(catalog.services.length)} service(s)${catalog.warnings?.length ? ` · ${formatNumber(catalog.warnings.length)} file(s) skipped` : ""}`
                             : "not described")}
                       </span>
                       <ToolButton variant="danger" onClick={() => void deleteSource(currentSource)}><Icon name="trash" size={13} /> Delete source</ToolButton>
@@ -830,8 +831,8 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
               )}
               {rt.response && "statusCode" in rt.response && <span className="response-status ok">{rt.response.statusCode}</span>}
               <span className="response-meta">
-                {rt.response && <span className="metric-duration">{rt.response.timeMs}ms</span>}
-                {rt.response && "sizeBytes" in rt.response && <span className="metric-size">{fmtBytes(rt.response.sizeBytes)}</span>}
+                {rt.response && <span className="metric-duration">{formatDuration(rt.response.timeMs)}</span>}
+                {rt.response && "sizeBytes" in rt.response && <span className="metric-size">{formatBytes(rt.response.sizeBytes)}</span>}
                 {rt.response && (
                   <button type="button" title="Copy response body" aria-label="Copy response body"
                     onClick={() => {
@@ -839,11 +840,11 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
                       void navigator.clipboard?.writeText(shownTab === "pretty" ? prettyBody : body).then(() => showToast("Copied", "Response body copied."));
                     }}><Icon name="copy" size={13} /> Copy</button>
                 )}
-                <button type="button" title="Pretty" className={shownTab === "pretty" ? "active" : ""} onClick={() => setResponseTab("pretty")}><Icon name="braces" size={13} /> Pretty</button>
-                <button type="button" title="Raw" className={shownTab === "raw" ? "active" : ""} onClick={() => setResponseTab("raw")}><Icon name="code" size={13} /> Raw</button>
-                {isHtml && <button type="button" title="Preview" className={shownTab === "preview" ? "active" : ""} onClick={() => setResponseTab("preview")}><Icon name="sparkles" size={13} /> Preview</button>}
-                <button type="button" title="Headers" className={shownTab === "headers" ? "active" : ""} onClick={() => setResponseTab("headers")}><Icon name="activity" size={13} /> Headers</button>
-                <button type="button" title="Cookies" className={shownTab === "cookies" ? "active" : ""} onClick={() => setResponseTab("cookies")}><Icon name="list" size={13} /> Cookies</button>
+                <motion.button whileTap={{ scale: 0.94 }} type="button" title="Pretty" className={shownTab === "pretty" ? "active" : ""} onClick={() => setResponseTab("pretty")}><Icon name="braces" size={13} /> Pretty</motion.button>
+                <motion.button whileTap={{ scale: 0.94 }} type="button" title="Raw" className={shownTab === "raw" ? "active" : ""} onClick={() => setResponseTab("raw")}><Icon name="code" size={13} /> Raw</motion.button>
+                {isHtml && <motion.button whileTap={{ scale: 0.94 }} type="button" title="Preview" className={shownTab === "preview" ? "active" : ""} onClick={() => setResponseTab("preview")}><Icon name="sparkles" size={13} /> Preview</motion.button>}
+                <motion.button whileTap={{ scale: 0.94 }} type="button" title="Headers" className={shownTab === "headers" ? "active" : ""} onClick={() => setResponseTab("headers")}><Icon name="activity" size={13} /> Headers</motion.button>
+                <motion.button whileTap={{ scale: 0.94 }} type="button" title="Cookies" className={shownTab === "cookies" ? "active" : ""} onClick={() => setResponseTab("cookies")}><Icon name="list" size={13} /> Cookies</motion.button>
               </span>
             </div>
             <div className="response-body">
@@ -881,12 +882,6 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
 
 function tryPretty(text: string): string {
   try { return JSON.stringify(JSON.parse(text), null, 2); } catch { return text; }
-}
-
-function fmtBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // Split each Set-Cookie response header into name / value / remaining attributes.

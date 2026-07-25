@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { motion, AnimatePresence } from "motion/react";
 import { Badge } from "../ui/Badge";
 import { Icon, type IconName } from "../ui/Icon";
 import { RequestContextMenu } from "./RequestContextMenu";
+import { ContextMenu } from "../ui/ContextMenu";
 import { ColorPicker } from "../ui/ColorPicker";
 import { useApp, type TabKind } from "../store";
 import { api, type ReqEntry } from "../lib/api";
 import { connStyle } from "../lib/connColor";
 import { collectionDropTarget } from "../lib/collectionDrop";
+import { formatNumber } from "../lib/format";
+
+const ROW_SPRING = { type: "spring", stiffness: 450, damping: 32 } as const;
 
 type DragItem = { kind: "collection"; id: string } | { kind: "request"; collectionId: string; relPath: string };
 
@@ -204,14 +209,20 @@ export function Sidebar() {
         </div>
 
         <div className="group">
-          <div className="group-title"><span>Collections</span><span>{collections.length || ""}</span></div>
+          <div className="group-title"><span>Collections</span><span>{collections.length ? formatNumber(collections.length) : ""}</span></div>
           {collections.length === 0 && <div className="empty-note">No collections yet. Save a request to create one.</div>}
+          <AnimatePresence initial={false}>
           {collections.map((c) => {
             const requests = (requestsByCollection[c.id] ?? []).filter((r) => !q || c.name.toLowerCase().includes(q) || r.name.toLowerCase().includes(q));
             if (q && requests.length === 0 && !c.name.toLowerCase().includes(q)) return null;
             const collapsed = !q && collapsedCollections.has(c.id);
-            return <div
+            return <motion.div
               key={c.id}
+              layout
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={ROW_SPRING}
               className={`collection-tree ${collapsed ? "collapsed" : ""} ${dragOverCollection === c.id ? "drop-target" : ""}`}
               onDragOver={(event) => { event.preventDefault(); if (dragging?.kind === "collection") { const target = collectionDropTarget(collections.map((collection) => collection.id), dragging.id, c.id); setDropIndicator(target ? `collection:${c.id}:${target.edge}` : null); } else if (dragOverCollection !== c.id) setDragOverCollection(c.id); }}
               onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) { setDragOverCollection(null); setDropIndicator(null); } }}
@@ -226,19 +237,25 @@ export function Sidebar() {
                   title={c.color ? `Color: ${c.color}` : "No color — right-click to set one"}
                 />
                 <span>{c.name}</span>
-                <Badge>{(requestsByCollection[c.id] ?? []).length || ""}</Badge>
+                <Badge>{(requestsByCollection[c.id] ?? []).length ? formatNumber((requestsByCollection[c.id] ?? []).length) : ""}</Badge>
               </div>
               <div className="collection-requests">
                 {requests.length === 0 && <div className="empty-note collection-empty">No requests. Use ⌘N to add one.</div>}
+                <AnimatePresence initial={false}>
                 {requests.map((r) => (
-                  <div
+                  <motion.div
                     role="button"
                     tabIndex={0}
                     key={r.relPath}
+                    layout
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={ROW_SPRING}
                     className={`nav-item request-node ${activeRequest?.collectionId === c.id && activeRequest.relPath === r.relPath ? "active" : ""} ${selected?.collectionId === c.id && selected.request.relPath === r.relPath ? "selected" : ""} ${dropIndicator === `request:${c.id}:${r.relPath}` ? "drop-prefix" : ""}`}
                     title={r.relPath}
                     draggable
-                    onDragStart={(event) => { const item = { kind: "request", collectionId: c.id, relPath: r.relPath } as const; setDragging(item); event.stopPropagation(); event.dataTransfer.effectAllowed = "copyMove"; event.dataTransfer.setData("application/json", JSON.stringify(item)); }}
+                    onDragStart={(event: any) => { const item = { kind: "request", collectionId: c.id, relPath: r.relPath } as const; setDragging(item); event.stopPropagation(); event.dataTransfer.effectAllowed = "copyMove"; event.dataTransfer.setData("application/json", JSON.stringify(item)); }}
                     onDragEnd={() => { setDragging(null); setDropIndicator(null); setDragOverCollection(null); }}
                     onDragOver={(event) => {
                       event.preventDefault();
@@ -280,14 +297,17 @@ export function Sidebar() {
                     <span className={`method-tag ${r.method}`}>{r.method}</span>
                     <span>{r.name}</span>
                     <span />
-                  </div>
+                  </motion.div>
                 ))}
+                </AnimatePresence>
               </div>
-            </div>;
+            </motion.div>;
           })}
+          </AnimatePresence>
           </div>
 
       </div>
+      <AnimatePresence>
       {requestMenu && <RequestContextMenu
         x={requestMenu.x}
         y={requestMenu.y}
@@ -297,38 +317,41 @@ export function Sidebar() {
         onDelete={() => void deleteReq(requestMenu.collectionId, requestMenu.request)}
         onClose={() => setRequestMenu(null)}
       />}
-      {collectionMenu && <div className="index-context-menu" style={{ left: collectionMenu.x, top: collectionMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
-        <button type="button" className="context-item" onClick={() => { setPickingColor(collectionMenu.id); setCollectionMenu(null); }}>
-          <span className="conn-dot" style={{ ...connStyle(collections.find((c) => c.id === collectionMenu.id)?.color), justifySelf: "center" }} />
-          <strong>Set color…</strong>
-          <span />
-        </button>
-        <button
-          type="button"
-          className="context-item danger"
-          onClick={async () => {
-            const id = collectionMenu.id;
-            const col = collections.find((c) => c.id === id);
-            setCollectionMenu(null);
-            if (!col || !await openConfirm({ title: "Delete collection", message: `Delete "${col.name}" and all its requests? This cannot be undone.`, danger: true, confirmLabel: "Delete" })) return;
-            try {
-              await deleteCollection(id);
-              showToast("Collection deleted", col.name);
-            } catch (err) {
-              showToast("Delete failed", String(err), "err");
-            }
-          }}
-        >
-          <Icon name="trash" size={13} />
-          <strong>Delete collection</strong>
-          <span />
-        </button>
-      </div>}
+      </AnimatePresence>
+      <AnimatePresence>
+      {collectionMenu && <ContextMenu
+        x={collectionMenu.x}
+        y={collectionMenu.y}
+        onClose={() => setCollectionMenu(null)}
+        items={[
+          {
+            icon: "settings", label: "Set color…", strong: true,
+            onClick: () => setPickingColor(collectionMenu.id),
+          },
+          {
+            icon: "trash", label: "Delete collection", strong: true, danger: true,
+            onClick: async () => {
+              const id = collectionMenu.id;
+              const col = collections.find((c) => c.id === id);
+              if (!col || !await openConfirm({ title: "Delete collection", message: `Delete "${col.name}" and all its requests? This cannot be undone.`, danger: true, confirmLabel: "Delete" })) return;
+              try {
+                await deleteCollection(id);
+                showToast("Collection deleted", col.name);
+              } catch (err) {
+                showToast("Delete failed", String(err), "err");
+              }
+            },
+          },
+        ]}
+      />}
+      </AnimatePresence>
+      <AnimatePresence>
       {pickingColor && <ColorPicker
         value={collections.find((c) => c.id === pickingColor)?.color}
         onPick={(color) => { void api.colSetColor(pickingColor, color).then(reloadCollections).catch((error) => showToast("Color failed", String(error), "err")); }}
         onClose={() => setPickingColor(null)}
       />}
+      </AnimatePresence>
     </aside>
   );
 }

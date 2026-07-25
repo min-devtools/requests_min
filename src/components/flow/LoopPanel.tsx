@@ -4,6 +4,7 @@ import { useApp } from "../../store";
 import { Icon } from "../../ui/Icon";
 import { CommitNumberInput } from "./nodeBits";
 import { confirmDeleteNode, setLoopCount } from "./nodeActions";
+import { formatNumber } from "../../lib/format";
 
 // Lives in the right dock as the Step detail tab for loop blocks — no modal: the pass count
 // edits inline right here, next to the in/out anchor legend.
@@ -83,11 +84,11 @@ export function LoopPanel({ tabId }: { tabId: string }) {
             disabled={ft.running}
             ariaLabel="Loop body passes"
             invalidTitle="Invalid loop count"
-            invalidMessage={`Enter a whole number from 1 to ${MAX_LOOP_COUNT}.`}
+            invalidMessage={`Enter a whole number from 1 to ${formatNumber(MAX_LOOP_COUNT)}.`}
             onCommit={(count) => setLoopCount(tabId, node.id, count)}
           />
           {step?.remaining != null && (
-            <span className="flow-node-loop-count" title="Passes left">{step.remaining} left</span>
+            <span className="flow-node-loop-count" title="Passes left">{formatNumber(step.remaining)} left</span>
           )}
         </div>
 
@@ -102,7 +103,7 @@ export function LoopPanel({ tabId }: { tabId: string }) {
             <span><strong>Bottom dots are out</strong> — drag one back into the first body block to close the circle; any other output keeps flowing after the loop.</span>
           </div>
           <p className="flow-loop-hint-note">
-            Everything between the loop-back target and this block runs ×{node.config.count} per flow run; downstream {"{{steps.…}}"} refs resolve to the last pass.
+            Everything between the loop-back target and this block runs ×{formatNumber(node.config.count)} per flow run; downstream {"{{steps.…}}"} refs resolve to the last pass.
           </p>
         </div>
       </div>

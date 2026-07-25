@@ -6,6 +6,7 @@ import { dagEdges, loopBodyNodes, topoOrder } from "../../lib/flow/validate";
 import { useApp } from "../../store";
 import { Icon } from "../../ui/Icon";
 import { stepIcon, stepTypeClass } from "./nodeBits";
+import { formatNumber, formatDuration } from "../../lib/format";
 
 type Response = HttpResponse | GrpcResponse;
 
@@ -123,9 +124,9 @@ export function RunReport({ tabId }: { tabId: string }) {
           <span className="flow-report-dot" />
           Run {run.status}
         </span>
-        <span>{run.totalMs != null ? `${run.totalMs} ms` : "In progress"}</span>
+        <span>{run.totalMs != null ? formatDuration(run.totalMs, true) : "In progress"}</span>
         <span className={successCount === freshTotal ? "flow-report-count all-ok" : "flow-report-count"}>
-          {successCount}/{freshTotal} steps successful{staleCount > 0 ? ` · ${staleCount} stale` : ""}
+          {formatNumber(successCount)}/{formatNumber(freshTotal)} steps successful{staleCount > 0 ? ` · ${formatNumber(staleCount)} stale` : ""}
         </span>
         {pageCount > 1 && (
           <span className="flow-report-pager" aria-label="Loop pass pages">
@@ -152,7 +153,7 @@ export function RunReport({ tabId }: { tabId: string }) {
               }}
               onBlur={commitPageText}
             />
-            <span className="flow-report-pager-total">/ {pageCount} passes</span>
+            <span className="flow-report-pager-total">/ {formatNumber(pageCount)} passes</span>
             <button
               type="button"
               aria-label="Next pass"
@@ -194,7 +195,7 @@ export function RunReport({ tabId }: { tabId: string }) {
                 <Icon name={stepIcon(node)} size={13} className={`flow-report-type flow-report-type-${stepTypeClass(node)}`} />
                 <span className="flow-report-key">{node.key}</span>
                 <span className="flow-report-status">{result?.status ?? "idle"}</span>
-                <span>{result?.timeMs != null ? `${result.timeMs} ms` : "—"}</span>
+                <span>{result?.timeMs != null ? formatDuration(result.timeMs, true) : "—"}</span>
                 <span className="flow-report-detail" title={detail}>
                   {result?.error
                     ? detail
