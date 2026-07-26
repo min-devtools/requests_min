@@ -93,9 +93,18 @@ pub fn interpolate(text: &str, ctx: &HashMap<String, String>) -> Result<String, 
         match rest[start + 2..].find("}}") {
             Some(end) => {
                 let name = rest[start + 2..start + 2 + end].trim();
-                match ctx.get(name) {
-                    Some(v) => out.push_str(v),
-                    None => missing.push(name.to_string()),
+                // `$` names are reserved for dynamic built-ins: fresh value per occurrence,
+                // env/secrets never consulted (so user vars can't shadow them).
+                if let Some(bare) = name.strip_prefix('$') {
+                    match crate::dynamic::dynamic_value(bare) {
+                        Some(v) => out.push_str(&v),
+                        None => missing.push(format!("{name} (unknown dynamic variable)")),
+                    }
+                } else {
+                    match ctx.get(name) {
+                        Some(v) => out.push_str(v),
+                        None => missing.push(name.to_string()),
+                    }
                 }
                 rest = &rest[start + 2 + end + 2..];
             }
@@ -342,6 +351,27 @@ mod tests {
     fn interpolate_errors_listing_missing() {
         let err = interpolate("{{a}}/{{b}}", &HashMap::new()).unwrap_err();
         assert!(err.contains("a") && err.contains("b"));
+    }
+
+    #[test]
+    fn interpolate_dynamic_fresh_per_occurrence() {
+        let out = interpolate("{{$uuid}}/{{$uuid}}", &HashMap::new()).unwrap();
+        let (a, b) = out.split_once('/').unwrap();
+        assert_eq!(a.len(), 36);
+        assert_ne!(a, b, "each occurrence must generate its own value");
+    }
+
+    #[test]
+    fn interpolate_unknown_dynamic_errors() {
+        let err = interpolate("{{$nope}}", &HashMap::new()).unwrap_err();
+        assert!(err.contains("$nope") && err.contains("unknown dynamic variable"), "{err}");
+    }
+
+    #[test]
+    fn interpolate_ctx_cannot_shadow_dynamic() {
+        let mut ctx = HashMap::new();
+        ctx.insert("$uuid".into(), "shadowed".into());
+        assert_ne!(interpolate("{{$uuid}}", &ctx).unwrap(), "shadowed");
     }
 
     #[test]

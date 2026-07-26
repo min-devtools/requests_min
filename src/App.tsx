@@ -1,24 +1,48 @@
-import { useEffect } from "react";
+import { memo, useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { Titlebar } from "./components/Titlebar";
-import { Sidebar } from "./components/Sidebar";
-import { TabsBar } from "./components/TabsBar";
-import { Inspector } from "./components/Inspector";
-import { Statusbar } from "./components/Statusbar";
-import { CommandPalette } from "./components/CommandPalette";
-import { Toast } from "./components/Toast";
-import { Dialog } from "./components/Dialog";
-import { PanelResizeHandles } from "./components/ResizeHandles";
-import { WelcomeView } from "./components/views/WelcomeView";
-import { RequestView } from "./components/views/RequestView";
-import { CollectionsView } from "./components/views/CollectionsView";
-import { EnvironmentsView } from "./components/views/EnvironmentsView";
-import { SettingsView } from "./components/views/SettingsView";
-import { HistoryView } from "./components/views/HistoryView";
-import { ImportExportView } from "./components/views/ImportExportView";
-import { GithubSyncView } from "./components/views/GithubSyncView";
-import { FlowsView } from "./components/views/FlowsView";
-import { FlowView } from "./components/views/FlowView";
+import { Titlebar as TitlebarImpl } from "./components/Titlebar";
+import { Sidebar as SidebarImpl } from "./components/Sidebar";
+import { TabsBar as TabsBarImpl } from "./components/TabsBar";
+import { Inspector as InspectorImpl } from "./components/Inspector";
+import { Statusbar as StatusbarImpl } from "./components/Statusbar";
+import { CommandPalette as CommandPaletteImpl } from "./components/CommandPalette";
+import { Toast as ToastImpl } from "./components/Toast";
+import { Dialog as DialogImpl } from "./components/Dialog";
+import { PanelResizeHandles as PanelResizeHandlesImpl } from "./components/ResizeHandles";
+import { WelcomeView as WelcomeViewImpl } from "./components/views/WelcomeView";
+import { RequestView as RequestViewImpl } from "./components/views/RequestView";
+import { CollectionsView as CollectionsViewImpl } from "./components/views/CollectionsView";
+import { EnvironmentsView as EnvironmentsViewImpl } from "./components/views/EnvironmentsView";
+import { SettingsView as SettingsViewImpl } from "./components/views/SettingsView";
+import { HistoryView as HistoryViewImpl } from "./components/views/HistoryView";
+import { ImportExportView as ImportExportViewImpl } from "./components/views/ImportExportView";
+import { GithubSyncView as GithubSyncViewImpl } from "./components/views/GithubSyncView";
+import { FlowsView as FlowsViewImpl } from "./components/views/FlowsView";
+import { FlowView as FlowViewImpl } from "./components/views/FlowView";
+
+// App re-renders on shell state (dock collapse, theme, tab switches). Without memo
+// that re-render cascades into every panel — including motion components whose
+// `layout` props re-measure the DOM — right while the dock CSS transition is
+// already reflowing every frame. Memoized, a dock toggle re-renders App alone.
+const Titlebar = memo(TitlebarImpl);
+const Sidebar = memo(SidebarImpl);
+const TabsBar = memo(TabsBarImpl);
+const Inspector = memo(InspectorImpl);
+const Statusbar = memo(StatusbarImpl);
+const CommandPalette = memo(CommandPaletteImpl);
+const Toast = memo(ToastImpl);
+const Dialog = memo(DialogImpl);
+const PanelResizeHandles = memo(PanelResizeHandlesImpl);
+const WelcomeView = memo(WelcomeViewImpl);
+const RequestView = memo(RequestViewImpl);
+const CollectionsView = memo(CollectionsViewImpl);
+const EnvironmentsView = memo(EnvironmentsViewImpl);
+const SettingsView = memo(SettingsViewImpl);
+const HistoryView = memo(HistoryViewImpl);
+const ImportExportView = memo(ImportExportViewImpl);
+const GithubSyncView = memo(GithubSyncViewImpl);
+const FlowsView = memo(FlowsViewImpl);
+const FlowView = memo(FlowViewImpl);
 import { useApp, type TabDef } from "./store";
 import { runActiveRequest, saveActiveRequest } from "./lib/runRequest";
 import { runActiveFlow } from "./lib/flow/engine";

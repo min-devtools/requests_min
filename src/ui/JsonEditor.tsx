@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { initVimMode } from "monaco-vim";
 import { Icon } from "./Icon";
 import { MONACO_THEME } from "../lib/monaco";
+import { DYNAMIC_VARIABLES } from "../lib/dynamicVariables";
 import { diagnoseJsonWithTemplates, formatJsonWithTemplates, minifyJsonWithTemplates, validateJsonWithTemplates } from "../lib/jsonTemplate";
 import { runActiveRequest } from "../lib/runRequest";
 import { useApp } from "../store";
@@ -82,7 +83,13 @@ export function JsonEditor({ value, onChange, language = "json", variableNames =
         const start = beforeCursor.lastIndexOf("{{");
         if (start === -1 || beforeCursor.slice(start).includes("}}")) return { suggestions: [] };
         const range = new monaco.Range(position.lineNumber, start + 1, position.lineNumber, position.column);
-        return { suggestions: variableNamesRef.current.map((name) => ({ label: name, kind: monaco.languages.CompletionItemKind.Variable, insertText: `{{${name}}}`, range })) };
+        // filterText mirrors the replaced range ("{{name}}"): monaco filters against the text
+        // between range start and the cursor, so labels alone would die on the first "{"
+        return { suggestions: [
+          ...variableNamesRef.current.map((name) => ({ label: name, kind: monaco.languages.CompletionItemKind.Variable, insertText: `{{${name}}}`, filterText: `{{${name}}}`, range })),
+          // dynamic built-ins sort below the environment's own variables ("~" prefix)
+          ...DYNAMIC_VARIABLES.map((v) => ({ label: v.name, kind: monaco.languages.CompletionItemKind.Event, detail: `e.g. ${v.example}`, documentation: v.description, insertText: `{{${v.name}}}`, filterText: `{{${v.name}}}`, sortText: `~${v.name}`, range })),
+        ] };
       },
     });
     markVariables();

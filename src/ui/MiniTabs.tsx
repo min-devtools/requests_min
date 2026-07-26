@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { motion } from "motion/react";
 
 export interface MiniTab {
@@ -14,6 +15,8 @@ export function MiniTabs({
   active: string;
   onChange: (id: string) => void;
 }) {
+  // layoutId is app-global — namespace it so two mounted MiniTabs never fight
+  const ns = useId();
   return (
     <div className="mini-tabs" role="tablist">
       {tabs.map((t) => (
@@ -26,7 +29,15 @@ export function MiniTabs({
           className={t.id === active ? "active" : ""}
           onClick={() => onChange(t.id)}
         >
-          {t.label}
+          {t.id === active && (
+            // the active surface glides between tabs (FLIP, transform-only)
+            <motion.span
+              className="mini-tab-pill"
+              layoutId={`mini-tab-pill-${ns}`}
+              transition={{ type: "spring", stiffness: 500, damping: 35 }}
+            />
+          )}
+          <span className="mini-tab-label">{t.label}</span>
         </motion.button>
       ))}
     </div>

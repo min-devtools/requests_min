@@ -1,4 +1,5 @@
 import { useRef, useState, type ChangeEvent } from "react";
+import { DYNAMIC_VARIABLES, dynamicVariable } from "../lib/dynamicVariables";
 
 type Props = {
   value: string;
@@ -49,7 +50,12 @@ export function EnvInput({ value, onChange, variableNames, className = "", place
     });
   };
 
-  const suggestions = query === null ? [] : variableNames.filter((name) => name.toLowerCase().includes(query.toLowerCase()));
+  // Dynamic ({{$...}}) built-ins join the dropdown once something is typed — a bare "{{"
+  // keeps showing just the environment's own variables instead of 29 extra rows.
+  const suggestions = query === null ? [] : [
+    ...variableNames.filter((name) => name.toLowerCase().includes(query.toLowerCase())),
+    ...(query === "" ? [] : DYNAMIC_VARIABLES.filter((v) => v.name.toLowerCase().includes(query.toLowerCase())).map((v) => v.name)),
+  ];
 
   return (
     <div className={`env-input ${focused ? "editing" : ""} ${className}`}>
@@ -71,7 +77,7 @@ export function EnvInput({ value, onChange, variableNames, className = "", place
       />
       {suggestions.length > 0 && (
         <div className="env-input-suggestions">
-          {suggestions.map((name) => <button key={name} type="button" onMouseDown={(event) => { event.preventDefault(); choose(name); }}>{`{{${name}}}`}</button>)}
+          {suggestions.map((name) => <button key={name} type="button" title={dynamicVariable(name) ? `${dynamicVariable(name)!.description} — e.g. ${dynamicVariable(name)!.example}` : undefined} onMouseDown={(event) => { event.preventDefault(); choose(name); }}>{`{{${name}}}`}</button>)}
         </div>
       )}
     </div>

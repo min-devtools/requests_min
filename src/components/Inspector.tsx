@@ -6,6 +6,7 @@ import { useApp } from "../store";
 import { api, type GrpcResponse, type HttpResponse } from "../lib/api";
 import { saveActiveRequest } from "../lib/runRequest";
 import { buildCurl, buildGrpcurl } from "./views/RequestView";
+import { dynamicVariable, isDynamicName } from "../lib/dynamicVariables";
 import { requestVariableNames, resolveRequestTarget } from "../lib/requestVariables";
 import { JsonTreePanel } from "../ui/JsonTreePanel";
 import { MiniTabs } from "../ui/MiniTabs";
@@ -75,13 +76,17 @@ export function Inspector() {
   const [revealSecrets, setRevealSecrets] = useState(false);
   const request = rt?.request;
   const variableNames = request ? requestVariableNames(request) : [];
-  const unresolved = variableNames.filter((name) => !(name in secrets) && !(name in vars));
+  // `$` names are dynamic built-ins resolved at send time — never from the environment.
+  // A known one is always "resolved"; a typo'd one ({{$uui}}) fails the send, so it counts as unresolved.
+  const unresolved = variableNames.filter((name) => isDynamicName(name)
+    ? !dynamicVariable(name)
+    : !(name in secrets) && !(name in vars));
   const resolvedTarget = request ? resolveRequestTarget(request, vars, secrets, revealSecrets) : "";
   const recentRuns = rt ? history.filter((entry) => entry.collectionId === rt.collectionId && entry.request.name === request?.name).slice(0, 8) : [];
   // the open dock step decides which editor (request vs transform) renders in Step detail
   const panelNode = ft ? ft.flow.nodes.find((node) => node.id === ft.panelNodeId) ?? null : null;
   // flow tabs surface the selected step's resolved input here instead of inside the drawer
-  const flowStepId = ft ? ft.panelNodeId ?? ft.selectedNodeId : null;
+  const flowStepId = ft ? ft.panelNodeId ?? ft.selectedNodeIds[ft.selectedNodeIds.length - 1] ?? null : null;
   const flowStep = ft && flowStepId ? ft.flow.nodes.find((node) => node.id === flowStepId) ?? null : null;
   const flowResult = ft && flowStep ? ft.run?.steps[flowStep.id] ?? null : null;
 
@@ -150,6 +155,15 @@ export function Inspector() {
                 )}
               </div>
               {variableNames.length ? variableNames.map((name) => {
+                if (isDynamicName(name)) {
+                  const known = dynamicVariable(name);
+                  return <div className={`inspector-variable-row ${known ? "ok" : "unresolved"}`} key={name}>
+                    <span className="status-dot" />
+                    <code>{`{{${name}}}`}</code>
+                    <strong>{known ? `e.g. ${known.example}` : "Unknown dynamic variable"}</strong>
+                    <small>{known ? "Auto" : "Missing"}</small>
+                  </div>;
+                }
                 const secret = name in secrets;
                 const resolved = secret || name in vars;
                 const value = secret ? secrets[name] : vars[name];

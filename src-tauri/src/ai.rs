@@ -342,7 +342,9 @@ mod tests {
         std::fs::write(dir.path().join("src/util.ts"), "export const x = 1").unwrap();
         let r = scan_source(dir.path(), 50);
         assert_eq!(r.files.len(), 1);
-        assert!(r.files[0].path.ends_with("src/routes.ts"));
+        // hits stay native paths (ai_generate reads them back), so compare as a
+        // Path — a literal "src/routes.ts" would not match Windows separators
+        assert!(Path::new(&r.files[0].path).ends_with(Path::new("src").join("routes.ts")));
     }
 
     #[test]

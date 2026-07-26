@@ -4,6 +4,7 @@ import { api } from "../../lib/api";
 import { isGrpcurl, parseGrpcurl } from "../../lib/grpcurl";
 import { useApp } from "../../store";
 import { ToolButton } from "../../ui/ToolButton";
+import { MiniTabs } from "../../ui/MiniTabs";
 import { Icon } from "../../ui/Icon";
 import { JsonTreePanel } from "../../ui/JsonTreePanel";
 import { AiImportView } from "./AiImportView";
@@ -222,7 +223,11 @@ export function ImportExportView({ active }: { active: boolean }) {
       {/* SECTION 1: IMPORT (Full Width) */}
       <section className="workspace-card import-card">
         <h3>Import</h3>
-        <div className="mini-tabs">{(["command", "postman", "openapi"] as const).map((x) => <button key={x} className={kind === x ? "active" : ""} onClick={() => { setKind(x); setText(""); setFileName(""); }}>{x === "command" ? "cURL / gRPCURL" : x}</button>)}</div>
+        <MiniTabs
+          tabs={(["command", "postman", "openapi"] as const).map((x) => ({ id: x, label: x === "command" ? "cURL / gRPCURL" : x }))}
+          active={kind}
+          onChange={(id) => { setKind(id as "command" | "postman" | "openapi"); setText(""); setFileName(""); }}
+        />
         {commandImport ? (
           <textarea
             {...dropZoneProps}

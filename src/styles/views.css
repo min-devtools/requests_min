@@ -794,6 +794,20 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
 .flow-running-badge { color: var(--accent-primary); border-color: color-mix(in oklab, var(--accent-primary), transparent 55%); }
 
 .actions-menu { position: relative; display: inline-flex; }
+
+/* Split button (Arrange): main action + direction caret sharing one control */
+.split-btn { position: relative; display: inline-flex; }
+.split-btn .tool-btn:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.split-btn .split-btn-caret {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: -1px;
+  padding-inline: 3px;
+}
+.split-btn-menu { min-width: 160px; }
 .actions-menu > .tool-btn { gap: 6px; }
 .actions-menu-pop {
   position: absolute;
@@ -1111,6 +1125,36 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   border-color: var(--status-danger);
 }
 
+/* Floating multi-select action bar (bottom-center React Flow panel) */
+.flow-selection-panel { margin-bottom: 14px; }
+.flow-selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-panel);
+  box-shadow: 0 10px 30px color-mix(in oklab, var(--surface-app), transparent 45%);
+}
+.flow-selection-count {
+  font-size: 0.8462rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0 6px;
+  white-space: nowrap;
+}
+.flow-selection-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border-default);
+  margin: 0 4px;
+}
+.flow-selection-bar .tool-btn.danger:hover {
+  color: var(--status-danger);
+  border-color: var(--status-danger);
+}
+
 /* Every block shares one chassis — size, surface, status system — and layers its own
    silhouette + accent via --block-accent, so the step type reads at a glance. */
 .flow-node {
@@ -1125,12 +1169,31 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   background: var(--surface-panel);
   box-shadow: 0 8px 24px color-mix(in oklab, var(--surface-app), transparent 62%);
   font-size: 0.9231rem;
-  transition: border-color var(--motion-fast) var(--ease-ui);
+  transition: border-color var(--motion-fast) var(--ease-ui), box-shadow var(--motion-fast) var(--ease-ui), transform var(--motion-fast) var(--ease-ui);
+}
+
+/* blocks answer the cursor: a whisper of lift, nothing that fights the drag */
+.react-flow__node:not(.dragging):hover .flow-node {
+  border-color: color-mix(in oklab, var(--block-accent), var(--border-default) 45%);
+  box-shadow: 0 12px 30px color-mix(in oklab, var(--surface-app), transparent 50%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .react-flow__node:not(.dragging):hover .flow-node { transform: translateY(-1px); }
 }
 
 .react-flow__node.selected .flow-node {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent-primary), transparent 78%);
+  box-shadow:
+    0 0 0 2px color-mix(in oklab, var(--accent-primary), transparent 65%),
+    0 6px 18px color-mix(in oklab, var(--accent-primary), transparent 78%);
+}
+
+/* Shift-drag rubber-band and the group outline both wear the accent */
+.flow-canvas-wrap .react-flow__selection,
+.flow-canvas-wrap .react-flow__nodesselection-rect {
+  background: color-mix(in oklab, var(--accent-primary), transparent 92%);
+  border: 1px dashed var(--accent-primary);
+  border-radius: 4px;
 }
 
 .flow-node-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
@@ -1243,6 +1306,12 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   background: var(--text-muted);
   opacity: 0.55;
 }
+/* result readout ("200 OK · 145 ms") keeps its natural case inside the uppercase status row */
+.flow-readout {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
 .flow-node-foot { margin-top: 8px; display: flex; align-items: center; }
 .flow-node-foot .flow-node-status { margin-top: 0; }
 
@@ -1299,6 +1368,12 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
   border-radius: 5px;
   background: color-mix(in oklab, currentColor, transparent 86%);
   font-weight: 700;
+}
+
+/* transform's step key sits on its own line under the head, like the request blocks' name row */
+.flow-node-transform .flow-node-key {
+  margin-top: 7px;
+  max-width: 246px;
 }
 
 /* gRPC = a connector plug: cyan identity, cable emblem, an equalizer that dances
@@ -1427,13 +1502,11 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
 
 /* transform = a tiny editor window: traffic-light dots, purple ƒ, and a code well
    showing the script's first meaningful line */
-.flow-node-transform { --block-accent: var(--purple); }
-.flow-win-dots { display: inline-flex; gap: 3px; flex: none; }
-.flow-win-dots i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: color-mix(in oklab, var(--block-accent), transparent 55%);
+.flow-node-transform {
+  --block-accent: var(--purple);
+  /* the code well's one-liner would otherwise stretch the block to the chassis max —
+     cap it near a typical request block so the canvas reads as one family */
+  max-width: 235px;
 }
 .flow-node-code {
   margin-top: 7px;
@@ -1795,3 +1868,22 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
 }
 
 .th-remove:hover { color: var(--red); background: var(--pane-3); }
+
+/* motion (JS) owns the palette open/close in this app — the design-system CSS
+   keyframes would run on top of it and fight the spring (visible end-hitch) */
+.command, .palette, .toast, .prompt-dialog { animation: none; }
+
+/* mini-tabs: the active background is a motion pill that glides between tabs,
+   so the static active styles from the design system go transparent here */
+.mini-tabs button { position: relative; }
+.mini-tabs button.active { background: transparent; border-color: transparent; }
+.mini-tabs button > svg,
+.mini-tabs .mini-tab-label { position: relative; z-index: 1; }
+.mini-tab-pill {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 7px;
+  background: var(--pane-2);
+  border: 1px solid var(--line);
+}

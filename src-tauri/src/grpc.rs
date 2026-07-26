@@ -138,12 +138,21 @@ pub fn catalog_for_files(paths: &[String], import_paths: &[String])
     Ok((GrpcCatalog { services, warnings }, service_files))
 }
 
+/// Path text in the `/`-separated shape protox reports import names in. Windows
+/// only: its `\` separators would never match a suffix built from an import name,
+/// so the include-root derivation below would silently never fire there.
+/// Forward slashes stay valid separators for every later filesystem call.
+#[cfg(windows)]
+fn import_style(p: &Path) -> String { p.to_string_lossy().replace('\\', "/") }
+#[cfg(not(windows))]
+fn import_style(p: &Path) -> String { p.to_string_lossy().into_owned() }
+
 /// From `import 'x/y.proto' not found`, find a scanned file ending in `/x/y.proto`
 /// and return the prefix dir — the include root that would make the import resolve.
 fn missing_import_root(msg: &str, entries: &[PathBuf]) -> Option<PathBuf> {
     let name = msg.split("import '").nth(1)?.split('\'').next()?;
     let suffix = format!("/{name}");
-    entries.iter().find_map(|p| p.to_string_lossy().strip_suffix(&suffix).map(PathBuf::from))
+    entries.iter().find_map(|p| import_style(p).strip_suffix(&suffix).map(PathBuf::from))
 }
 
 fn collect_protos(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -657,6 +666,16 @@ mod tests {
         if let Some(p) = f.parent() { inc.push(p.to_path_buf()); }
         let pool = compile_pool(std::slice::from_ref(&f), inc, &entries).unwrap();
         assert!(pool.services().any(|s| s.full_name() == "SlotV2"));
+    }
+
+    #[test]
+    fn missing_import_root_derives_the_prefix_dir_from_a_native_path() {
+        // collect() joins with the platform separator, so on Windows the entry is a
+        // `\` path that the '/'-separated import suffix only matches once normalized
+        let entry: PathBuf = ["proto-root", "app", "v1", "common.proto"].iter().collect();
+        let root = missing_import_root("import 'app/v1/common.proto' not found", &[entry.clone()])
+            .expect("include root must be derived");
+        assert!(root.ends_with("proto-root"), "got {root:?} from {entry:?}");
     }
 
     #[test]
