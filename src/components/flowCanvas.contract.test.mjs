@@ -320,3 +320,10 @@ test("Arrange is a split button with a remembered LR/TB direction and animated l
   assert.match(canvas, /layoutGraph\(current\.flow\.nodes, current\.flow\.edges, direction, measuredSizes\(\)\)/);
   assert.match(canvas, /animateToPositions\(.*, true\)/);
 });
+
+test("multi-select visuals: accent rubber-band and a clear selected ring", async () => {
+  const css = await readFile(new URL("styles/views.css", src), "utf8");
+  assert.match(css, /\.react-flow__selection/);
+  assert.match(css, /\.react-flow__nodesselection-rect/);
+  assert.match(css, /\.react-flow__node\.selected \.flow-node[^}]*box-shadow/s);
+});
