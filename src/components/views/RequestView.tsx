@@ -529,7 +529,7 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
             {editorTab === "body" && (
               <div className="body-editor">
                 {request.http.body.type === "form" ? (
-                  <KvEditor items={request.http.body.fields ?? []} onChange={(fields) => update({ http: { ...request.http!, body: { ...request.http!.body, fields } } })} />
+                  <KvEditor items={request.http.body.fields ?? []} variableNames={variableNames} onChange={(fields) => update({ http: { ...request.http!, body: { ...request.http!.body, fields } } })} />
                 ) : request.http.body.type !== "none" ? (
                     <JsonEditor
                       value={request.http.body.content ?? ""}
@@ -540,11 +540,12 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
                 ) : <div className="empty-note">No body for this request.</div>}
               </div>
             )}
-            {editorTab === "headers" && <KvEditor items={request.http.headers} onChange={(headers) => update({ http: { ...request.http!, headers } })} />}
+            {editorTab === "headers" && <KvEditor items={request.http.headers} variableNames={variableNames} onChange={(headers) => update({ http: { ...request.http!, headers } })} />}
             {editorTab === "params" && (
               <KvEditor
                 items={[...httpPathParams, ...request.http.params]}
                 lockedCount={httpPathParams.length}
+                variableNames={variableNames}
                 onChange={(rows) => update({
                   http: {
                     ...request.http!,
@@ -656,7 +657,7 @@ export function RequestView({ tabId, active, embedded = false }: { tabId: string
                 } : undefined}
               />
             )}
-            {editorTab === "metadata" && <KvEditor items={grpc.metadata} onChange={(metadata) => update({ grpc: { ...grpc, metadata } })} keyPlaceholder="metadata key" />}
+            {editorTab === "metadata" && <KvEditor items={grpc.metadata} variableNames={variableNames} onChange={(metadata) => update({ grpc: { ...grpc, metadata } })} keyPlaceholder="metadata key" />}
             {editorTab === "proto" && (
               <div className="proto-panel">
                 <div className="proto-actions">

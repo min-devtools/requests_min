@@ -149,6 +149,11 @@ body.resizing-x { user-select: none; cursor: col-resize; }
 .kv-editor-head { position: sticky; top: 0; z-index: 2; min-height: 34px; color: var(--text-3); background: var(--editor-bg); border-bottom: 1px solid var(--line); font: .7692rem var(--font-body); letter-spacing: .06em; text-transform: uppercase; }
 .kv-editor-row { min-height: 42px; border-bottom: 1px solid var(--line); }
 .kv-editor-row .path-input { height: 30px; }
+/* EnvInput cells: the wrapper carries .path-input's box (bg/border/height); real padding
+   moves onto the inner input + overlay so typed text and highlight tokens line up */
+.kv-editor-row .env-input.path-input { padding: 0; }
+.kv-editor-row .env-input.path-input > input,
+.kv-editor-row .env-input.path-input .env-input-overlay { padding: 0 9px; }
 .kv-editor-row .tool-btn { width: 28px; height: 28px; }
 .kv-add { width: max-content; height: 30px; display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; padding: 0 10px; border: 1px dashed var(--line-2); border-radius: 8px; color: var(--blue); background: color-mix(in oklab, var(--blue), transparent 94%); }
 .kv-add:hover { border-color: color-mix(in oklab, var(--blue), transparent 50%); background: color-mix(in oklab, var(--blue), transparent 88%); }
