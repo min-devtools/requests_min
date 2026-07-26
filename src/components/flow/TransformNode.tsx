@@ -28,7 +28,6 @@ export function TransformNode({ data, isConnectable }: NodeProps<TransformCanvas
     <div className={`flow-node flow-node-transform status-${data.status}${data.stale ? " is-stale" : ""}${enabled ? "" : " is-off"}`}>
       <Handle type="target" position={Position.Left} className="handle-in" isConnectable={isConnectable} />
       <div className="flow-node-head">
-        <span className="flow-win-dots" aria-hidden><i /><i /><i /></span>
         <span className="flow-node-emblem" aria-hidden>
           <Icon name="braces" size={13} />
         </span>
