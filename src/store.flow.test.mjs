@@ -38,7 +38,7 @@ const flowTab = (value, patch = {}) => ({
   dirty: false,
   run: null,
   running: false,
-  selectedNodeId: null,
+  selectedNodeIds: [],
   panelNodeId: null,
   undoStack: [],
   redoStack: [],
@@ -111,8 +111,8 @@ test("session restore keeps flow instances, dedupes Saved Flows, drops orphans, 
       activeTabId: "flow-orphan",
       requestTabs: {},
       flowTabs: {
-        "flow-a": { flowId: "a", flow: flowAEdited, original: JSON.stringify(flowAOriginal), dirty: false, run: { status: "success" }, running: true, selectedNodeId: "delay" },
-        "flow-b": { flowId: "b", flow: flowB, original: JSON.stringify(flowB), dirty: true, run: { status: "failed" }, running: true, selectedNodeId: "gone" },
+        "flow-a": { flowId: "a", flow: flowAEdited, original: JSON.stringify(flowAOriginal), dirty: false, run: { status: "success" }, running: true, selectedNodeIds: ["delay"] },
+        "flow-b": { flowId: "b", flow: flowB, original: JSON.stringify(flowB), dirty: true, run: { status: "failed" }, running: true, selectedNodeIds: ["gone"] },
         "flow-missing-id": { flow: flow("missing"), original: "" },
       },
     },
@@ -127,7 +127,7 @@ test("session restore keeps flow instances, dedupes Saved Flows, drops orphans, 
   for (const restored of Object.values(state.flowTabs)) {
     assert.equal(restored.run, null);
     assert.equal(restored.running, false);
-    assert.equal(restored.selectedNodeId, null);
+    assert.deepEqual(restored.selectedNodeIds, []);
   }
 });
 
@@ -146,7 +146,7 @@ test("session save excludes flow request adapters and all flow runtime state", a
       "flow-save": flowTab(savedFlow, {
         run: { startedAt: 1, status: "running", steps: {} },
         running: true,
-        selectedNodeId: "node-1",
+        selectedNodeIds: ["node-1"],
       }),
     },
   });
@@ -236,7 +236,7 @@ test("updateFlowTab recomputes dirty and only changes tabs when the title change
   const tabId = useApp.getState().activeTabId;
 
   const initialTabs = useApp.getState().tabs;
-  useApp.getState().updateFlowTab(tabId, { running: true, selectedNodeId: "n1", run: { startedAt: 1, status: "running", steps: {} } });
+  useApp.getState().updateFlowTab(tabId, { running: true, selectedNodeIds: ["n1"], run: { startedAt: 1, status: "running", steps: {} } });
   assert.strictEqual(useApp.getState().tabs, initialTabs);
   assert.equal(useApp.getState().flowTabs[tabId].dirty, false);
 
@@ -299,7 +299,7 @@ test("removing flow nodes cleans only their request editor adapters", async () =
       "flowreq:another-flow:first": requestTab("Other flow"),
       "request-1": requestTab("Regular"),
     },
-    flowTabs: { "flow-cleanup": flowTab(opened) },
+    flowTabs: { "flow-cleanup": flowTab(opened, { selectedNodeIds: ["first", "second"], panelNodeId: "first" }) },
   });
 
   useApp.getState().updateFlowTab("flow-cleanup", { flow: { ...opened, nodes: [second] } });
@@ -309,6 +309,9 @@ test("removing flow nodes cleans only their request editor adapters", async () =
     "flowreq:flow-cleanup:second",
     "request-1",
   ]);
+  // selection keeps survivors only; the open panel of a removed node closes
+  assert.deepEqual(useApp.getState().flowTabs["flow-cleanup"].selectedNodeIds, ["second"]);
+  assert.equal(useApp.getState().flowTabs["flow-cleanup"].panelNodeId, null);
 });
 
 test("flow undo/redo restores graph snapshots and blocks while running", async () => {

@@ -159,7 +159,7 @@ export function FlowView({ tabId, active }: { tabId: string; active: boolean }) 
     node.config.ms = ms;
     updateFlowTab(tabId, {
       flow: { ...current.flow, nodes: [...current.flow.nodes, node] },
-      selectedNodeId: node.id,
+      selectedNodeIds: [node.id],
     });
   };
 
@@ -177,7 +177,7 @@ export function FlowView({ tabId, active }: { tabId: string; active: boolean }) 
     node.config.count = count;
     updateFlowTab(tabId, {
       flow: { ...current.flow, nodes: [...current.flow.nodes, node] },
-      selectedNodeId: node.id,
+      selectedNodeIds: [node.id],
     });
   };
 
@@ -192,7 +192,7 @@ export function FlowView({ tabId, active }: { tabId: string; active: boolean }) 
     );
     updateFlowTab(tabId, {
       flow: { ...current.flow, nodes: [...current.flow.nodes, node] },
-      selectedNodeId: node.id,
+      selectedNodeIds: [node.id],
       // open its editor in the dock right away
       panelNodeId: node.id,
       dockTab: "step",

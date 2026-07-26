@@ -40,7 +40,8 @@ export interface FlowTabState {
   dirty: boolean;
   run: FlowRun | null;
   running: boolean;
-  selectedNodeId: string | null;
+  /** recency-ordered multi-selection on the canvas; last element = most recent pick */
+  selectedNodeIds: string[];
   /** node whose detail drawer is open; selection alone never opens the drawer */
   panelNodeId: string | null;
   /** which dock tab shows for the open step — canvas click → "step" editor, report row → "result" (session-only) */
@@ -241,7 +242,7 @@ const loadSession = (): { tabs: TabDef[]; activeTabId: string; requestTabs: Reco
         dirty: computeFlowDirty({ flow: ft.flow, original }),
         run: null,
         running: false,
-        selectedNodeId: null,
+        selectedNodeIds: [],
         panelNodeId: null,
         undoStack: [],
         redoStack: [],
@@ -445,7 +446,7 @@ export const useApp = create<AppState>((set, get) => ({
       dirty: false,
       run: null,
       running: false,
-      selectedNodeId: null,
+      selectedNodeIds: [],
       panelNodeId: null,
       undoStack: [],
       redoStack: [],
@@ -545,7 +546,9 @@ export const useApp = create<AppState>((set, get) => ({
           if (requestTabs === s.requestTabs) requestTabs = { ...s.requestTabs };
           delete requestTabs[editorId];
         }
-        if (next.selectedNodeId && !remainingNodeIds.has(next.selectedNodeId)) next.selectedNodeId = null;
+        if (next.selectedNodeIds.some((id) => !remainingNodeIds.has(id))) {
+          next.selectedNodeIds = next.selectedNodeIds.filter((id) => remainingNodeIds.has(id));
+        }
         if (next.panelNodeId && !remainingNodeIds.has(next.panelNodeId)) next.panelNodeId = null;
       }
       return { flowTabs: { ...s.flowTabs, [tabId]: next }, requestTabs, tabs };

@@ -202,6 +202,26 @@ export function removeGraphElements(
   };
 }
 
+/**
+ * Folds React Flow select/remove changes into the store's recency-ordered selection.
+ * Returns the SAME array reference when nothing changed so callers can skip the write.
+ */
+export function nextSelection(
+  current: string[],
+  changes: readonly { type: string; id?: string; selected?: boolean }[],
+): string[] {
+  let next = current;
+  for (const change of changes) {
+    if (!change.id) continue;
+    if (change.type === "select" && change.selected) {
+      if (!next.includes(change.id)) next = [...next, change.id];
+    } else if (change.type === "select" || change.type === "remove") {
+      if (next.includes(change.id)) next = next.filter((id) => id !== change.id);
+    }
+  }
+  return next;
+}
+
 export interface FlowClipboard {
   nodes: FlowNode[];
   edges: FlowEdge[];

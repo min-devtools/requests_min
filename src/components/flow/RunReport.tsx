@@ -111,7 +111,7 @@ export function RunReport({ tabId }: { tabId: string }) {
     // no result, so their rows open the Step detail tab — where their values now edit inline
     const hasResult = isRequestNode(node) || isTransformNode(node);
     updateFlowTab(tabId, {
-      selectedNodeId: node.id,
+      selectedNodeIds: [node.id],
       panelNodeId: node.id,
       dockTab: hasResult ? "result" : "step",
     });

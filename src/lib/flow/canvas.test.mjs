@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   autoLayoutNodes,
+  nextSelection,
   commitNodePositions,
   copyGraphElements,
   createDelayFlowNode,
@@ -254,4 +255,21 @@ test("autoLayoutNodes arranges flows containing a loop instead of bailing on the
     { id: "y", source: "b", target: "a" },
   ]);
   assert.deepEqual(cyclic.map((n) => n.position), [a.position, b.position]);
+});
+
+test("nextSelection appends new picks in recency order and drops deselects/removes", () => {
+  assert.deepEqual(nextSelection([], [{ type: "select", id: "a", selected: true }]), ["a"]);
+  assert.deepEqual(
+    nextSelection(["a"], [{ type: "select", id: "b", selected: true }, { type: "select", id: "c", selected: true }]),
+    ["a", "b", "c"],
+  );
+  assert.deepEqual(nextSelection(["a", "b"], [{ type: "select", id: "a", selected: false }]), ["b"]);
+  assert.deepEqual(nextSelection(["a", "b"], [{ type: "remove", id: "b" }]), ["a"]);
+});
+
+test("nextSelection returns the same reference when nothing changed", () => {
+  const current = ["a", "b"];
+  assert.equal(nextSelection(current, [{ type: "position", id: "a" }]), current);
+  assert.equal(nextSelection(current, [{ type: "select", id: "a", selected: true }]), current);
+  assert.equal(nextSelection(current, [{ type: "remove", id: "zz" }]), current);
 });

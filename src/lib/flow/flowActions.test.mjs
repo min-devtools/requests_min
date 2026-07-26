@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const src = new URL("./", import.meta.url);
@@ -20,14 +21,14 @@ const flowTab = (value, original = JSON.stringify(value)) => ({
   dirty: JSON.stringify(value) !== original,
   run: null,
   running: false,
-  selectedNodeId: null,
+  selectedNodeIds: [],
 });
 
 async function importActions() {
   let output;
   try {
     const result = await build({
-      entryPoints: [new URL("flowActions.ts", src).pathname],
+      entryPoints: [fileURLToPath(new URL("flowActions.ts", src))],
       bundle: true,
       platform: "node",
       format: "esm",

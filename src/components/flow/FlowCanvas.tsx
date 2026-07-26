@@ -26,6 +26,7 @@ import {
   commitNodePositions,
   copyGraphElements,
   createRequestFlowNode,
+  nextSelection,
   parseRequestDropPayload,
   pasteGraphElements,
   removeGraphElements,
@@ -159,10 +160,10 @@ function Canvas({
     node,
     ft.run?.steps[node.id]?.status ?? "idle",
     ft.run?.steps[node.id]?.stale ?? false,
-    ft.selectedNodeId === node.id,
+    ft.selectedNodeIds.includes(node.id),
     ft.run?.steps[node.id]?.remaining ?? null,
     onRunNode,
-  )), [ft.flow.nodes, ft.run, ft.selectedNodeId, onRunNode, tabId]);
+  )), [ft.flow.nodes, ft.run, ft.selectedNodeIds, onRunNode, tabId]);
   const storeEdges = useMemo<CanvasEdge[]>(() => ft.flow.edges.map((edge) => {
     // a wire flashes only when execution actually crosses it: the engine stamps each step
     // start with its feeding block, so loop wires pulse once per pass — not a constant glow
@@ -269,7 +270,7 @@ function Canvas({
           nodes: [...current.flow.nodes, ...pasted.nodes],
           edges: [...current.flow.edges, ...pasted.edges],
         },
-        selectedNodeId: pasted.nodes[0]?.id ?? current.selectedNodeId,
+        selectedNodeIds: pasted.nodes.map((node) => node.id),
       });
     };
     document.addEventListener("keydown", onKey);
@@ -282,7 +283,7 @@ function Canvas({
     const allowedChanges = running
       ? changes.filter((change) => change.type === "select" || change.type === "dimensions")
       : changes;
-    setNodes((current) => applyNodeChanges(allowedChanges, current));
+    setNodes((local) => applyNodeChanges(allowedChanges, local));
 
     if (!current) return;
     const removedNodeIds = new Set(
@@ -290,13 +291,7 @@ function Canvas({
         ? []
         : changes.filter((change) => change.type === "remove").map((change) => change.id),
     );
-    let selectedNodeId = current.selectedNodeId;
-    for (const change of changes) {
-      if (change.type !== "select") continue;
-      if (change.selected) selectedNodeId = change.id;
-      else if (selectedNodeId === change.id) selectedNodeId = null;
-    }
-    if (selectedNodeId && removedNodeIds.has(selectedNodeId)) selectedNodeId = null;
+    const selection = nextSelection(current.selectedNodeIds, allowedChanges);
 
     if (removedNodeIds.size > 0) {
       const graph = removeGraphElements(
@@ -305,15 +300,17 @@ function Canvas({
         removedNodeIds,
         new Set(),
       );
-      updateFlowTab(tabId, {
-        flow: { ...current.flow, ...graph },
-        selectedNodeId,
-      });
-    } else if (selectedNodeId !== current.selectedNodeId) {
-      // clicking a request/transform block opens (or retargets) its detail dock; a delay/nothing leaves the dock as-is
-      const selected = selectedNodeId ? current.flow.nodes.find((node) => node.id === selectedNodeId) : undefined;
-      const panelNodeId = selected && opensDock(selected) ? selected.id : current.panelNodeId;
-      updateFlowTab(tabId, { selectedNodeId, panelNodeId, dockTab: "step" });
+      updateFlowTab(tabId, { flow: { ...current.flow, ...graph }, selectedNodeIds: selection });
+    } else if (selection !== current.selectedNodeIds) {
+      // exactly one selected block opens/retargets the dock; a multi-selection closes it so the
+      // canvas stays front-and-center; an emptied selection leaves the dock as it was
+      const single = selection.length === 1
+        ? current.flow.nodes.find((node) => node.id === selection[0])
+        : undefined;
+      const panelNodeId = selection.length >= 2 ? null
+        : single && opensDock(single) ? single.id
+        : current.panelNodeId;
+      updateFlowTab(tabId, { selectedNodeIds: selection, panelNodeId, dockTab: "step" });
     }
   }, [tabId, updateFlowTab]);
 
@@ -407,7 +404,7 @@ function Canvas({
       });
       updateFlowTab(tabId, {
         flow: { ...current.flow, nodes: [...current.flow.nodes, node] },
-        selectedNodeId: node.id,
+        selectedNodeIds: [node.id],
         // open the new block's detail dock right away instead of waiting for a click
         panelNodeId: node.id,
         dockTab: "step",
@@ -443,12 +440,12 @@ function Canvas({
         event.preventDefault();
         event.dataTransfer.dropEffect = "copy";
       }}
-      onPaneClick={() => updateFlowTab(tabId, { selectedNodeId: null })}
+      onPaneClick={() => updateFlowTab(tabId, { selectedNodeIds: [] })}
       onNodeContextMenu={(event, canvasNode) => {
         event.preventDefault();
         const current = useApp.getState().flowTabs[tabId];
         if (!current) return;
-        if (current.selectedNodeId !== canvasNode.id) updateFlowTab(tabId, { selectedNodeId: canvasNode.id });
+        if (!current.selectedNodeIds.includes(canvasNode.id)) updateFlowTab(tabId, { selectedNodeIds: [canvasNode.id] });
         setNodeMenu({ x: event.clientX, y: event.clientY, nodeId: canvasNode.id });
       }}
       onNodeDoubleClick={(_, canvasNode) => {
@@ -456,7 +453,7 @@ function Canvas({
         const current = useApp.getState().flowTabs[tabId];
         const flowNode = current?.flow.nodes.find((item) => item.id === canvasNode.id);
         if (flowNode && opensDock(flowNode)) {
-          updateFlowTab(tabId, { panelNodeId: flowNode.id, selectedNodeId: flowNode.id, dockTab: "step" });
+          updateFlowTab(tabId, { panelNodeId: flowNode.id, selectedNodeIds: [flowNode.id], dockTab: "step" });
         }
       }}
       nodesDraggable={!ft.running}

@@ -37,7 +37,7 @@ test("the Step Result tab renders the run response in the inspector dock", async
   ]);
 
   assert.doesNotMatch(panel, /Resolved input|flow-resolved/);
-  assert.match(inspector, /ft\.panelNodeId \?\? ft\.selectedNodeId/);
+  assert.match(inspector, /ft\.panelNodeId \?\? ft\.selectedNodeIds\[ft\.selectedNodeIds\.length - 1\]/);
   // dock tab is store-driven so report rows can jump straight to the result view
   assert.match(inspector, /const dockTab = ft\?\.dockTab \?\? "step"/);
   assert.match(inspector, />Step Result</);
