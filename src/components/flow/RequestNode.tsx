@@ -9,6 +9,8 @@ export interface RequestNodeData extends Record<string, unknown> {
   status: StepStatus;
   stale: boolean;
   tabId: string;
+  /** "200 OK · 145 ms"-style summary of the last run, shown in place of the status word. */
+  readout: string | null;
   onRun?: (nodeId: string) => void;
 }
 
@@ -55,7 +57,7 @@ export function RequestNode({ data, isConnectable }: NodeProps<RequestCanvasNode
       <div className="flow-node-sub">{request.name}</div>
       <div className="flow-node-target" title={target}>{target || "No target"}</div>
       <div className="flow-node-foot">
-        <StatusLine status={data.status} stale={data.stale} />
+        <StatusLine status={data.status} stale={data.stale} readout={data.readout} />
         {grpc && (
           <span className="flow-stream" title="gRPC stream" aria-hidden><i /><i /><i /></span>
         )}

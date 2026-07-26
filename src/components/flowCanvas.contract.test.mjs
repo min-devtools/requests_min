@@ -327,3 +327,23 @@ test("multi-select visuals: accent rubber-band and a clear selected ring", async
   assert.match(css, /\.react-flow__nodesselection-rect/);
   assert.match(css, /\.react-flow__node\.selected \.flow-node[^}]*box-shadow/s);
 });
+
+test("block faces read out the last result — code, reason, latency — instead of a bare status word", async () => {
+  const [readout, bits, request, transform, canvas, css] = await Promise.all([
+    readFile(new URL("lib/flow/readout.ts", src), "utf8"),
+    readFile(new URL("components/flow/nodeBits.tsx", src), "utf8"),
+    readFile(new URL("components/flow/RequestNode.tsx", src), "utf8"),
+    readFile(new URL("components/flow/TransformNode.tsx", src), "utf8"),
+    readFile(new URL("components/flow/FlowCanvas.tsx", src), "utf8"),
+    readFile(new URL("styles/views.css", src), "utf8"),
+  ]);
+  assert.match(readout, /export function stepReadout/);
+  assert.match(readout, /500: "Internal Server Error"/);
+  // the status line swaps the word for the readout when one exists
+  assert.match(bits, /readout \? <span className="flow-readout">\{readout\}<\/span> : status/);
+  assert.match(request, /readout=\{data\.readout\}/);
+  assert.match(transform, /readout=\{data\.readout\}/);
+  // the canvas computes it once per step result
+  assert.match(canvas, /readout: stepReadout\(step\)/);
+  assert.match(css, /\.flow-readout \{/);
+});

@@ -57,12 +57,14 @@ export function NodeToggle({ enabled, stepKey, onChange }: {
   );
 }
 
-/** Bottom status readout: a state-colored dot next to the status word; hues come from the status-* classes. */
-export function StatusLine({ status, stale }: { status: StepStatus; stale: boolean }) {
+/** Bottom status readout: a state-colored dot next to the status word; hues come from the
+    status-* classes. With a result readout ("200 OK · 145 ms") the word gives way to the data. */
+export function StatusLine({ status, stale, readout }: { status: StepStatus; stale: boolean; readout?: string | null }) {
   return (
     <span className="flow-node-status">
       <i className="flow-status-dot" aria-hidden />
-      {status}{stale ? " · stale" : ""}
+      {readout ? <span className="flow-readout">{readout}</span> : status}
+      {stale ? " · stale" : ""}
     </span>
   );
 }

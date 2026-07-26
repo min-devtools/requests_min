@@ -39,7 +39,8 @@ import {
   type LayoutDirection,
   type NodeSize,
 } from "../../lib/flow/canvas";
-import type { FlowEdge, FlowNode } from "../../lib/flow/types";
+import { stepReadout } from "../../lib/flow/readout";
+import type { FlowEdge, FlowNode, StepResult } from "../../lib/flow/types";
 import { isLoopNode, isRequestNode, isTransformNode } from "../../lib/flow/types";
 import { themeBase } from "../../lib/themes";
 import { useApp } from "../../store";
@@ -111,20 +112,20 @@ const PASTE_OFFSET = 40;
 const toCanvasNode = (
   tabId: string,
   node: FlowNode,
-  status: "idle" | "running" | "success" | "failed" | "skipped",
-  stale: boolean,
+  step: StepResult | undefined,
   selected: boolean,
-  remaining: number | null,
   onRunNode?: (nodeId: string) => void,
 ): CanvasNode => {
+  const status = step?.status ?? "idle";
+  const stale = step?.stale ?? false;
   if (node.type === "request") {
-    return { id: node.id, type: "request", position: node.position, selected, data: { node, status, stale, tabId, onRun: onRunNode } };
+    return { id: node.id, type: "request", position: node.position, selected, data: { node, status, stale, tabId, readout: stepReadout(step), onRun: onRunNode } };
   }
   if (node.type === "transform") {
-    return { id: node.id, type: "transform", position: node.position, selected, data: { node, status, stale, tabId } };
+    return { id: node.id, type: "transform", position: node.position, selected, data: { node, status, stale, tabId, readout: stepReadout(step) } };
   }
   if (node.type === "loop") {
-    return { id: node.id, type: "loop", position: node.position, selected, data: { node, status, stale, tabId, remaining } };
+    return { id: node.id, type: "loop", position: node.position, selected, data: { node, status, stale, tabId, remaining: step?.remaining ?? null } };
   }
   return { id: node.id, type: "delay", position: node.position, selected, data: { node, status, stale, tabId } };
 };
@@ -170,10 +171,8 @@ function Canvas({
   const storeNodes = useMemo<CanvasNode[]>(() => ft.flow.nodes.map((node) => toCanvasNode(
     tabId,
     node,
-    ft.run?.steps[node.id]?.status ?? "idle",
-    ft.run?.steps[node.id]?.stale ?? false,
+    ft.run?.steps[node.id],
     ft.selectedNodeIds.includes(node.id),
-    ft.run?.steps[node.id]?.remaining ?? null,
     onRunNode,
   )), [ft.flow.nodes, ft.run, ft.selectedNodeIds, onRunNode, tabId]);
   const storeEdges = useMemo<CanvasEdge[]>(() => ft.flow.edges.map((edge) => {

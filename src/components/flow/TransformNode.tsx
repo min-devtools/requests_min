@@ -10,6 +10,8 @@ export interface TransformNodeData extends Record<string, unknown> {
   status: StepStatus;
   stale: boolean;
   tabId: string;
+  /** "done · 3 ms"-style summary of the last run, shown in place of the status word. */
+  readout: string | null;
 }
 
 export type TransformCanvasNode = Node<TransformNodeData, "transform">;
@@ -52,7 +54,7 @@ export function TransformNode({ data, isConnectable }: NodeProps<TransformCanvas
         <span className="flow-node-fn" aria-hidden>ƒ</span>
         <span className="flow-node-code-line">{codePreview(data.node.config.code)}</span>
       </div>
-      <StatusLine status={data.status} stale={data.stale} />
+      <StatusLine status={data.status} stale={data.stale} readout={data.readout} />
       <Handle type="source" position={Position.Right} className="handle-out" isConnectable={isConnectable} />
     </div>
   );
