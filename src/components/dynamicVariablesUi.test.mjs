@@ -31,6 +31,19 @@ test("Inspector shows known $ variables as Auto and typo'd ones as unresolved", 
   assert.match(inspector, /Unknown dynamic variable/);
 });
 
+test("KvEditor cells (headers/params/form/metadata) are EnvInputs when variableNames is passed", async () => {
+  const editor = await readFile(new URL("ui/KvEditor.tsx", root), "utf8");
+  const view = await readFile(new URL("components/views/RequestView.tsx", root), "utf8");
+
+  // key/value cells upgrade to EnvInput (suggestions + token highlight); locked path-param keys stay plain
+  assert.match(editor, /variableNames\?: string\[\]/);
+  assert.match(editor, /<EnvInput className="path-input"/);
+  assert.match(editor, /locked\s*\n?\s*\? <input className="path-input"/);
+  // every request-scoped KvEditor gets the environment's variable names
+  const wired = view.match(/<KvEditor[\s\S]*?variableNames=\{variableNames\}/g) ?? [];
+  assert.equal(wired.length, 4, `headers, params, form fields and gRPC metadata all pass variableNames (got ${wired.length})`);
+});
+
 test("Rust interpolate routes $ names to the dynamic registry, never to env/secrets", async () => {
   const collection = await readFile(new URL("../../src-tauri/src/collection.rs", import.meta.url), "utf8");
 

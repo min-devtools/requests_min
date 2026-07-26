@@ -191,6 +191,25 @@ mod tests {
     }
 
     #[test]
+    fn prepare_resolves_dynamic_vars_in_headers_params_and_path() {
+        let ctx = std::collections::HashMap::new();
+        let part = HttpPart {
+            method: "GET".into(),
+            url: "http://h/users/:id".into(),
+            path_params: vec![KV { key: "id".into(), value: "{{$uuid}}".into(), enabled: Some(true) }],
+            params: vec![KV { key: "t".into(), value: "{{$timestamp}}".into(), enabled: Some(true) }],
+            headers: vec![KV { key: "X-Request-Id".into(), value: "{{$uuid}}".into(), enabled: Some(true) }],
+            ..Default::default()
+        };
+        let p = prepare_http(&part, &ctx).unwrap();
+        assert!(!p.url.contains("%7B%7B") && !p.url.contains("{{"), "url fully resolved: {}", p.url);
+        let ts = p.url.split("t=").nth(1).unwrap();
+        assert!(!ts.is_empty() && ts.chars().all(|c| c.is_ascii_digit()), "query param resolved: {ts}");
+        let rid = &p.headers.iter().find(|(k, _)| k == "X-Request-Id").unwrap().1;
+        assert_eq!(rid.len(), 36, "header resolved to a uuid: {rid}");
+    }
+
+    #[test]
     fn prepare_replaces_enabled_path_params_before_appending_query() {
         let mut ctx = std::collections::HashMap::new();
         ctx.insert("baseUrl".into(), "http://h".into());
