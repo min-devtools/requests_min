@@ -202,6 +202,73 @@ export function removeGraphElements(
   };
 }
 
+export interface NodeSize { width: number; height: number }
+/** Pre-measure fallback footprint for a canvas block. */
+export const DEFAULT_NODE_SIZE: NodeSize = { width: 220, height: 88 };
+
+const nodeCenter = (
+  node: FlowNode,
+  axis: "x" | "y",
+  sizes: ReadonlyMap<string, NodeSize>,
+): number => {
+  const size = sizes.get(node.id) ?? DEFAULT_NODE_SIZE;
+  return axis === "x" ? node.position.x + size.width / 2 : node.position.y + size.height / 2;
+};
+
+const placeCenter = (
+  node: FlowNode,
+  axis: "x" | "y",
+  center: number,
+  sizes: ReadonlyMap<string, NodeSize>,
+): { x: number; y: number } => {
+  const size = sizes.get(node.id) ?? DEFAULT_NODE_SIZE;
+  return axis === "x"
+    ? { x: Math.round(center - size.width / 2), y: node.position.y }
+    : { x: node.position.x, y: Math.round(center - size.height / 2) };
+};
+
+/** Align the picked blocks' centers on one coordinate ("y" = one row, "x" = one column). */
+export function alignNodes(
+  nodes: readonly FlowNode[],
+  ids: ReadonlySet<string>,
+  axis: "x" | "y",
+  sizes: ReadonlyMap<string, NodeSize>,
+): FlowNode[] {
+  const picked = nodes.filter((node) => ids.has(node.id));
+  if (picked.length < 2) return [...nodes];
+  const target = picked.reduce((sum, node) => sum + nodeCenter(node, axis, sizes), 0) / picked.length;
+  return nodes.map((node) => {
+    if (!ids.has(node.id)) return node;
+    const position = placeCenter(node, axis, target, sizes);
+    return position.x === node.position.x && position.y === node.position.y
+      ? node
+      : { ...node, position };
+  });
+}
+
+/** Spread the picked blocks so center gaps are equal along one axis; the outermost two stay put. */
+export function distributeNodes(
+  nodes: readonly FlowNode[],
+  ids: ReadonlySet<string>,
+  axis: "x" | "y",
+  sizes: ReadonlyMap<string, NodeSize>,
+): FlowNode[] {
+  const picked = nodes.filter((node) => ids.has(node.id));
+  if (picked.length < 3) return [...nodes];
+  const sorted = [...picked].sort((a, b) => nodeCenter(a, axis, sizes) - nodeCenter(b, axis, sizes));
+  const first = nodeCenter(sorted[0], axis, sizes);
+  const step = (nodeCenter(sorted[sorted.length - 1], axis, sizes) - first) / (sorted.length - 1);
+  const targets = new Map(sorted.map((node, index) => [node.id, first + step * index]));
+  return nodes.map((node) => {
+    const center = targets.get(node.id);
+    if (center === undefined) return node;
+    const position = placeCenter(node, axis, center, sizes);
+    return position.x === node.position.x && position.y === node.position.y
+      ? node
+      : { ...node, position };
+  });
+}
+
 /**
  * Folds React Flow select/remove changes into the store's recency-ordered selection.
  * Returns the SAME array reference when nothing changed so callers can skip the write.
@@ -277,4 +344,17 @@ export function pasteGraphElements(
     target: idMap.get(edge.target)!,
   }));
   return { nodes, edges };
+}
+
+/** Copy + paste in one move: clones the picked subgraph with fresh ids/keys at an offset. */
+export function duplicateGraphElements(
+  nodes: readonly FlowNode[],
+  edges: readonly FlowEdge[],
+  ids: ReadonlySet<string>,
+  makeId: (prefix: "n" | "e") => string,
+  offset: { x: number; y: number },
+): FlowClipboard | null {
+  const clipboard = copyGraphElements(nodes, edges, ids);
+  if (!clipboard) return null;
+  return pasteGraphElements(clipboard, new Set(nodes.map((node) => node.key)), makeId, offset);
 }

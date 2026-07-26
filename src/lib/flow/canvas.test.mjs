@@ -4,6 +4,10 @@ import test from "node:test";
 import {
   autoLayoutNodes,
   nextSelection,
+  alignNodes,
+  distributeNodes,
+  duplicateGraphElements,
+  DEFAULT_NODE_SIZE,
   commitNodePositions,
   copyGraphElements,
   createDelayFlowNode,
@@ -272,4 +276,55 @@ test("nextSelection returns the same reference when nothing changed", () => {
   assert.equal(nextSelection(current, [{ type: "position", id: "a" }]), current);
   assert.equal(nextSelection(current, [{ type: "select", id: "a", selected: true }]), current);
   assert.equal(nextSelection(current, [{ type: "remove", id: "zz" }]), current);
+});
+
+const bareNode = (id, x, y) => ({ id, key: id, type: "delay", position: { x, y }, config: { ms: 1 } });
+const sizesOf = (entries) => new Map(entries);
+
+test("alignNodes equalizes centers on one axis and leaves outsiders alone", () => {
+  const nodes = [bareNode("a", 0, 0), bareNode("b", 300, 100), bareNode("c", 600, 999)];
+  const sizes = sizesOf([["a", { width: 100, height: 40 }], ["b", { width: 100, height: 60 }]]);
+  const aligned = alignNodes(nodes, new Set(["a", "b"]), "y", sizes);
+  // centers: a=20, b=130 → target 75 → a.y=55, b.y=45
+  assert.equal(aligned[0].position.y, 55);
+  assert.equal(aligned[1].position.y, 45);
+  assert.equal(aligned[0].position.x, 0);
+  assert.equal(aligned[2], nodes[2]); // untouched node keeps identity
+});
+
+test("alignNodes needs two picked nodes and falls back to DEFAULT_NODE_SIZE", () => {
+  const nodes = [bareNode("a", 0, 0), bareNode("b", 0, 100)];
+  assert.deepEqual(alignNodes(nodes, new Set(["a"]), "y", new Map()), nodes);
+  assert.ok(DEFAULT_NODE_SIZE.width > 0 && DEFAULT_NODE_SIZE.height > 0);
+  const aligned = alignNodes(nodes, new Set(["a", "b"]), "x", new Map());
+  assert.equal(aligned[0].position.x, aligned[1].position.x); // same column via default size
+});
+
+test("distributeNodes equalizes gaps between the outermost centers", () => {
+  const nodes = [bareNode("a", 0, 0), bareNode("b", 40, 0), bareNode("c", 400, 0)];
+  const sizes = sizesOf([["a", { width: 100, height: 40 }], ["b", { width: 100, height: 40 }], ["c", { width: 100, height: 40 }]]);
+  const spread = distributeNodes(nodes, new Set(["a", "b", "c"]), "x", sizes);
+  // centers: 50, 90, 450 → first/last fixed, middle center → 250 → b.x = 200
+  assert.equal(spread[0].position.x, 0);
+  assert.equal(spread[1].position.x, 200);
+  assert.equal(spread[2].position.x, 400);
+  assert.deepEqual(distributeNodes(nodes, new Set(["a", "b"]), "x", sizes), nodes); // <3 picked = no-op copy
+});
+
+test("duplicateGraphElements clones picked nodes with fresh ids/keys and internal edges", () => {
+  const nodes = [bareNode("a", 0, 0), bareNode("b", 100, 0), bareNode("c", 200, 0)];
+  const edges = [
+    { id: "e1", source: "a", target: "b" },
+    { id: "e2", source: "b", target: "c" },
+  ];
+  let n = 0;
+  const dup = duplicateGraphElements(nodes, edges, new Set(["a", "b"]), (prefix) => `${prefix}-dup-${++n}`, { x: 40, y: 40 });
+  assert.equal(dup.nodes.length, 2);
+  assert.equal(dup.edges.length, 1); // only the a→b edge is internal
+  assert.notEqual(dup.nodes[0].id, "a");
+  assert.notEqual(dup.nodes[0].key, "a"); // collision-safe re-key
+  assert.equal(dup.nodes[0].position.x, 40);
+  assert.equal(dup.edges[0].source, dup.nodes[0].id);
+  assert.equal(dup.edges[0].target, dup.nodes[1].id);
+  assert.equal(duplicateGraphElements(nodes, edges, new Set(), () => "x", { x: 0, y: 0 }), null);
 });
