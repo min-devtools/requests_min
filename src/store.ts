@@ -118,6 +118,8 @@ interface AppState {
   toggleWorkspaceNav: () => void;
   requestHorizontal: boolean; // response beside the editor (Postman-style) vs below it
   toggleRequestLayout: () => void;
+  flowArrangeDir: "LR" | "TB"; // last-used Arrange direction for flow canvases
+  setFlowArrangeDir: (dir: "LR" | "TB") => void;
   vimMode: boolean; // vim keybindings in the Monaco editors
   toggleVimMode: () => void;
   commandOpen: boolean;
@@ -332,6 +334,11 @@ export const useApp = create<AppState>((set, get) => ({
     localStorage.setItem("requestsmin:request-horizontal", requestHorizontal ? "1" : "0");
     return { requestHorizontal };
   }),
+  flowArrangeDir: localStorage.getItem("requestsmin:flow-arrange-dir") === "TB" ? "TB" : "LR",
+  setFlowArrangeDir: (dir) => {
+    localStorage.setItem("requestsmin:flow-arrange-dir", dir);
+    set({ flowArrangeDir: dir });
+  },
   commandOpen: false,
   setCommandOpen: (v) => set({ commandOpen: v }),
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { AnimatePresence } from "motion/react";
 import {
   Background,
@@ -30,11 +30,13 @@ import {
   createRequestFlowNode,
   distributeNodes,
   duplicateGraphElements,
+  layoutGraph,
   nextSelection,
   parseRequestDropPayload,
   pasteGraphElements,
   removeGraphElements,
   type FlowClipboard,
+  type LayoutDirection,
   type NodeSize,
 } from "../../lib/flow/canvas";
 import type { FlowEdge, FlowNode } from "../../lib/flow/types";
@@ -139,10 +141,12 @@ function Canvas({
   tabId,
   active,
   onRunNode,
+  arrangeApi,
 }: {
   tabId: string;
   active: boolean;
   onRunNode?: (nodeId: string) => void;
+  arrangeApi?: MutableRefObject<((direction: LayoutDirection) => void) | null>;
 }) {
   const ft = useApp((state) => state.flowTabs[tabId]);
   const updateFlowTab = useApp((state) => state.updateFlowTab);
@@ -262,6 +266,18 @@ function Canvas({
       if (thenFit) void fitView({ padding: 0.2, duration: 300 });
     });
   }, [tabId, getNodes, fitView, updateFlowTab]);
+
+  // The toolbar's Arrange button lives outside the provider; it drives layout through this ref
+  // so measured block sizes and the tween/commit path stay owned by the canvas.
+  useEffect(() => {
+    if (!arrangeApi) return;
+    arrangeApi.current = (direction) => {
+      const current = useApp.getState().flowTabs[tabId];
+      if (!current || current.running || current.flow.nodes.length === 0) return;
+      animateToPositions(layoutGraph(current.flow.nodes, current.flow.edges, direction, measuredSizes()), true);
+    };
+    return () => { arrangeApi.current = null; };
+  }, [arrangeApi, tabId, animateToPositions, measuredSizes]);
 
   const duplicateBlocks = useCallback((ids: readonly string[]) => {
     const current = useApp.getState().flowTabs[tabId];
@@ -596,6 +612,7 @@ export function FlowCanvas(props: {
   tabId: string;
   active: boolean;
   onRunNode?: (nodeId: string) => void;
+  arrangeApi?: MutableRefObject<((direction: LayoutDirection) => void) | null>;
 }) {
   return (
     <ReactFlowProvider>

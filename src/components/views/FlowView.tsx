@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { createDelayFlowNode, createLoopFlowNode, createTransformFlowNode, layoutGraph } from "../../lib/flow/canvas";
+import { createDelayFlowNode, createLoopFlowNode, createTransformFlowNode, type LayoutDirection } from "../../lib/flow/canvas";
 import { runFlow } from "../../lib/flow/engine";
 import { fuzzyMatch, highlight } from "../../lib/fuzzy";
 import { useApp } from "../../store";
@@ -143,7 +143,33 @@ export function FlowView({ tabId, active }: { tabId: string; active: boolean }) 
   const toggleRight = useApp((state) => state.toggleRight);
   const isCanvasFullscreen = leftCollapsed && rightCollapsed;
 
+  const arrangeApi = useRef<((direction: LayoutDirection) => void) | null>(null);
+  const arrangeDir = useApp((state) => state.flowArrangeDir);
+  const setFlowArrangeDir = useApp((state) => state.setFlowArrangeDir);
+  const [arrangeMenu, setArrangeMenu] = useState(false);
+  const arrangeWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!arrangeMenu) return;
+    const onDown = (event: PointerEvent) => {
+      if (arrangeWrapRef.current && !arrangeWrapRef.current.contains(event.target as Node)) setArrangeMenu(false);
+    };
+    const onBlur = () => setArrangeMenu(false);
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [arrangeMenu]);
+
   if (!ft) return null;
+
+  const runArrange = (direction: LayoutDirection) => {
+    setArrangeMenu(false);
+    if (direction !== arrangeDir) setFlowArrangeDir(direction);
+    arrangeApi.current?.(direction);
+  };
 
   const addDelay = async () => {
     const ms = await promptDelayMs("Add delay", 1000);
@@ -199,15 +225,6 @@ export function FlowView({ tabId, active }: { tabId: string; active: boolean }) 
     });
   };
 
-  const arrange = () => {
-    const current = useApp.getState().flowTabs[tabId];
-    if (!current || current.running) return;
-    const nodes = layoutGraph(current.flow.nodes, current.flow.edges, "LR", new Map());
-    if (nodes !== current.flow.nodes) {
-      updateFlowTab(tabId, { flow: { ...current.flow, nodes } });
-    }
-  };
-
   return (
     <section className={`content flow-view ${active ? "active" : ""}`}>
       <div className="flow-toolbar">
@@ -225,9 +242,40 @@ export function FlowView({ tabId, active }: { tabId: string; active: boolean }) 
             else addTransform();
           }}
         />
-        <button type="button" className="tool-btn icon-only" onClick={arrange} disabled={ft.running || ft.flow.nodes.length === 0} title="Arrange">
-          <Icon name="wand" />
-        </button>
+        <div className="split-btn" ref={arrangeWrapRef}>
+          <button
+            type="button"
+            className="tool-btn icon-only"
+            onClick={() => runArrange(arrangeDir)}
+            disabled={ft.running || ft.flow.nodes.length === 0}
+            title={`Arrange (${arrangeDir === "LR" ? "left → right" : "top → bottom"})`}
+          >
+            <Icon name="wand" />
+          </button>
+          <button
+            type="button"
+            className="tool-btn icon-only split-btn-caret"
+            onClick={() => setArrangeMenu((open) => !open)}
+            disabled={ft.running || ft.flow.nodes.length === 0}
+            aria-haspopup="menu"
+            aria-expanded={arrangeMenu}
+            title="Arrange direction"
+          >
+            <Icon name="chevron-down" size={12} />
+          </button>
+          {arrangeMenu && (
+            <div className="actions-menu-pop split-btn-menu" role="menu">
+              <div role="menuitem" className={`actions-menu-item ${arrangeDir === "LR" ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); runArrange("LR"); }}>
+                <Icon name="chevron-right" size={14} />
+                <span>Left → right</span>
+              </div>
+              <div role="menuitem" className={`actions-menu-item ${arrangeDir === "TB" ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); runArrange("TB"); }}>
+                <Icon name="chevron-down" size={14} />
+                <span>Top → bottom</span>
+              </div>
+            </div>
+          )}
+        </div>
         <button
           type="button"
           className="tool-btn icon-only"
@@ -248,7 +296,7 @@ export function FlowView({ tabId, active }: { tabId: string; active: boolean }) 
       </div>
       <div className="flow-body">
         <div className="flow-canvas-wrap">
-          <FlowCanvas tabId={tabId} active={active}
+          <FlowCanvas tabId={tabId} active={active} arrangeApi={arrangeApi}
             onRunNode={(nodeId) => void runFlow(tabId, nodeId)}
           />
           {ft.flow.nodes.length === 0 && (

@@ -303,3 +303,20 @@ test("a floating selection bar offers group copy/duplicate/delete and align/dist
   assert.match(actions, /Delete \$\{nodeIds\.length\} steps\?/);
   assert.match(icon, /duplicate: CopyPlus/);
 });
+
+test("Arrange is a split button with a remembered LR/TB direction and animated layout", async () => {
+  const [view, canvas, store] = await Promise.all([
+    readFile(new URL("components/views/FlowView.tsx", src), "utf8"),
+    readFile(new URL("components/flow/FlowCanvas.tsx", src), "utf8"),
+    readFile(new URL("store.ts", src), "utf8"),
+  ]);
+  assert.match(store, /flowArrangeDir/);
+  assert.match(store, /requestsmin:flow-arrange-dir/);
+  assert.match(view, /arrangeApi\.current\?\.\(/);
+  assert.match(view, /Left → right/);
+  assert.match(view, /Top → bottom/);
+  // the canvas owns arrange execution: measured sizes → layoutGraph → tweened commit + fitView
+  assert.match(canvas, /arrangeApi/);
+  assert.match(canvas, /layoutGraph\(current\.flow\.nodes, current\.flow\.edges, direction, measuredSizes\(\)\)/);
+  assert.match(canvas, /animateToPositions\(.*, true\)/);
+});
