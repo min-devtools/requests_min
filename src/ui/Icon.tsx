@@ -1,6 +1,10 @@
 import type { CSSProperties } from "react";
 import {
   Activity,
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignHorizontalDistributeCenter,
+  AlignVerticalDistributeCenter,
   Boxes,
   Braces,
   Cable,
@@ -11,6 +15,7 @@ import {
   ChevronsDown,
   ChevronsUp,
   Copy,
+  CopyPlus,
   Code2,
   Database,
   Download,
@@ -60,6 +65,8 @@ import {
 
 const ICONS = {
   activity: Activity,
+  "align-h": AlignCenterVertical,
+  "align-v": AlignCenterHorizontal,
   braces: Braces,
   cable: Cable,
   check: Check,
@@ -71,7 +78,10 @@ const ICONS = {
   copy: Copy,
   code: Code2,
   database: Database,
+  "dist-h": AlignHorizontalDistributeCenter,
+  "dist-v": AlignVerticalDistributeCenter,
   download: Download,
+  duplicate: CopyPlus,
   eye: Eye,
   flow: Workflow,
   folder: FolderOpen,

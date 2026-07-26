@@ -23,14 +23,19 @@ import {
 import "@xyflow/react/dist/style.css";
 import { api } from "../../lib/api";
 import {
+  DEFAULT_NODE_SIZE,
+  alignNodes,
   commitNodePositions,
   copyGraphElements,
   createRequestFlowNode,
+  distributeNodes,
+  duplicateGraphElements,
   nextSelection,
   parseRequestDropPayload,
   pasteGraphElements,
   removeGraphElements,
   type FlowClipboard,
+  type NodeSize,
 } from "../../lib/flow/canvas";
 import type { FlowEdge, FlowNode } from "../../lib/flow/types";
 import { isLoopNode, isRequestNode, isTransformNode } from "../../lib/flow/types";
@@ -40,6 +45,9 @@ import { Icon } from "../../ui/Icon";
 import { ContextMenu } from "../../ui/ContextMenu";
 import { DelayNode, type DelayCanvasNode } from "./DelayNode";
 import { LoopNode, type LoopCanvasNode } from "./LoopNode";
+import { confirmDeleteBlocks } from "./nodeActions";
+import { runPositionTween, type TweenTarget } from "./positionTween";
+import { SelectionBar } from "./SelectionBar";
 import { RequestNode, type RequestCanvasNode } from "./RequestNode";
 import { TransformNode, type TransformCanvasNode } from "./TransformNode";
 
@@ -219,6 +227,70 @@ function Canvas({
       clipboard.nodes.length === 1 ? `"${clipboard.nodes[0].key}" — ⌘V to paste.` : "⌘V to paste.",
     );
   }, [tabId, showToast]);
+
+  const TWEEN_MS = 300;
+  const tweenCancel = useRef<(() => void) | null>(null);
+  useEffect(() => () => tweenCancel.current?.(), []);
+
+  const measuredSizes = useCallback((): Map<string, NodeSize> => new Map(getNodes().map((node) => [node.id, {
+    width: node.measured?.width ?? DEFAULT_NODE_SIZE.width,
+    height: node.measured?.height ?? DEFAULT_NODE_SIZE.height,
+  }])), [getNodes]);
+
+  // Slide blocks to their target spots, then commit ONE store patch (a single undo step).
+  const animateToPositions = useCallback((targetNodes: FlowNode[], thenFit: boolean) => {
+    const current = useApp.getState().flowTabs[tabId];
+    if (!current || current.running) return;
+    tweenCancel.current?.();
+    const targetById = new Map(targetNodes.map((node) => [node.id, node.position]));
+    const targets: TweenTarget[] = getNodes().flatMap((node) => {
+      const to = targetById.get(node.id);
+      if (!to || (to.x === node.position.x && to.y === node.position.y)) return [];
+      return [{ id: node.id, from: { ...node.position }, to: { ...to } }];
+    });
+    if (targets.length === 0) return;
+    tweenCancel.current = runPositionTween(targets, TWEEN_MS, (positions) => {
+      setNodes((local) => local.map((node) => {
+        const position = positions.get(node.id);
+        return position ? { ...node, position } : node;
+      }));
+    }, () => {
+      tweenCancel.current = null;
+      const fresh = useApp.getState().flowTabs[tabId];
+      if (!fresh) return;
+      updateFlowTab(tabId, { flow: { ...fresh.flow, nodes: commitNodePositions(fresh.flow.nodes, targetNodes) } });
+      if (thenFit) void fitView({ padding: 0.2, duration: 300 });
+    });
+  }, [tabId, getNodes, fitView, updateFlowTab]);
+
+  const duplicateBlocks = useCallback((ids: readonly string[]) => {
+    const current = useApp.getState().flowTabs[tabId];
+    if (!current || current.running || ids.length === 0) return;
+    const pasted = duplicateGraphElements(
+      current.flow.nodes, current.flow.edges, new Set(ids), nextElementId, { x: PASTE_OFFSET, y: PASTE_OFFSET },
+    );
+    if (!pasted) return;
+    updateFlowTab(tabId, {
+      flow: {
+        ...current.flow,
+        nodes: [...current.flow.nodes, ...pasted.nodes],
+        edges: [...current.flow.edges, ...pasted.edges],
+      },
+      selectedNodeIds: pasted.nodes.map((node) => node.id),
+    });
+  }, [tabId, updateFlowTab]);
+
+  const alignSelection = useCallback((axis: "x" | "y") => {
+    const current = useApp.getState().flowTabs[tabId];
+    if (!current || current.running) return;
+    animateToPositions(alignNodes(current.flow.nodes, new Set(current.selectedNodeIds), axis, measuredSizes()), false);
+  }, [tabId, animateToPositions, measuredSizes]);
+
+  const distributeSelection = useCallback((axis: "x" | "y") => {
+    const current = useApp.getState().flowTabs[tabId];
+    if (!current || current.running) return;
+    animateToPositions(distributeNodes(current.flow.nodes, new Set(current.selectedNodeIds), axis, measuredSizes()), false);
+  }, [tabId, animateToPositions, measuredSizes]);
 
   // While a wire is being dragged, compatible handle anchors pulse (see .is-linking-* CSS).
   const [linking, setLinking] = useState<"source" | "target" | null>(null);
@@ -487,6 +559,14 @@ function Canvas({
     >
       <Background gap={16} />
       <Controls showInteractive={false} />
+      <SelectionBar
+        tabId={tabId}
+        onCopy={() => copyBlocks(new Set(useApp.getState().flowTabs[tabId]?.selectedNodeIds ?? []))}
+        onDuplicate={() => duplicateBlocks(useApp.getState().flowTabs[tabId]?.selectedNodeIds ?? [])}
+        onDelete={() => void confirmDeleteBlocks(tabId, useApp.getState().flowTabs[tabId]?.selectedNodeIds ?? [])}
+        onAlign={alignSelection}
+        onDistribute={distributeSelection}
+      />
       <AnimatePresence>
         {nodeMenu && (
           <ContextMenu

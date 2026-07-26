@@ -273,3 +273,28 @@ test("⌘A selects every block and Esc clears the selection (canvas only, not in
   assert.match(canvas, /event\.key === "Escape"/);
   assert.match(canvas, /selectedNodeIds: \[\]/);
 });
+
+test("a floating selection bar offers group copy/duplicate/delete and align/distribute", async () => {
+  const [bar, canvas, actions, icon] = await Promise.all([
+    readFile(new URL("components/flow/SelectionBar.tsx", src), "utf8"),
+    readFile(new URL("components/flow/FlowCanvas.tsx", src), "utf8"),
+    readFile(new URL("components/flow/nodeActions.ts", src), "utf8"),
+    readFile(new URL("ui/Icon.tsx", src), "utf8"),
+  ]);
+  // bar appears only for a 2+ selection while idle, animated via AnimatePresence
+  assert.match(bar, /count >= 2 && !running/);
+  assert.match(bar, /AnimatePresence/);
+  assert.match(bar, /\{count\} selected/);
+  // distribute needs three blocks
+  assert.match(bar, /disabled=\{count < 3\}/);
+  // canvas wires the bar to shared group handlers and mounts it as a React Flow panel
+  assert.match(canvas, /<SelectionBar/);
+  assert.match(canvas, /duplicateGraphElements\(/);
+  assert.match(canvas, /alignNodes\(/);
+  assert.match(canvas, /distributeNodes\(/);
+  assert.match(canvas, /runPositionTween\(/);
+  // group delete confirms with a count and reuses one removal path
+  assert.match(actions, /export async function confirmDeleteBlocks/);
+  assert.match(actions, /Delete \$\{nodeIds\.length\} steps\?/);
+  assert.match(icon, /duplicate: CopyPlus/);
+});

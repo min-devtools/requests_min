@@ -2,20 +2,33 @@ import { removeGraphElements } from "../../lib/flow/canvas";
 import { MAX_LOOP_COUNT } from "../../lib/flow/types";
 import { useApp } from "../../store";
 
-/** Confirm-then-delete for a flow node; also drops every edge touching it. */
-export async function confirmDeleteNode(tabId: string, nodeId: string, key: string): Promise<void> {
-  const confirmed = await useApp.getState().openConfirm({
-    title: "Delete step",
-    message: `Delete step "${key}"? Its connections are removed too.`,
+/** Confirm-then-delete for one or many flow blocks; also drops every edge touching them. */
+export async function confirmDeleteBlocks(tabId: string, nodeIds: readonly string[]): Promise<void> {
+  const state = useApp.getState();
+  const current = state.flowTabs[tabId];
+  if (!current || current.running || nodeIds.length === 0) return;
+  const single = nodeIds.length === 1
+    ? current.flow.nodes.find((node) => node.id === nodeIds[0])
+    : undefined;
+  const confirmed = await state.openConfirm({
+    title: nodeIds.length === 1 ? "Delete step" : "Delete steps",
+    message: single
+      ? `Delete step "${single.key}"? Its connections are removed too.`
+      : `Delete ${nodeIds.length} steps? Their connections are removed too.`,
     danger: true,
     confirmLabel: "Delete",
   });
   if (!confirmed) return;
-  const current = useApp.getState().flowTabs[tabId];
-  if (!current || current.running) return;
-  const graph = removeGraphElements(current.flow.nodes, current.flow.edges, new Set([nodeId]), new Set());
-  // updateFlowTab clears selectedNodeId/panelNodeId itself when their node disappears
-  useApp.getState().updateFlowTab(tabId, { flow: { ...current.flow, ...graph } });
+  const fresh = useApp.getState().flowTabs[tabId];
+  if (!fresh || fresh.running) return;
+  const graph = removeGraphElements(fresh.flow.nodes, fresh.flow.edges, new Set(nodeIds), new Set());
+  // updateFlowTab clears selection/panel ids itself when their nodes disappear
+  useApp.getState().updateFlowTab(tabId, { flow: { ...fresh.flow, ...graph } });
+}
+
+/** Confirm-then-delete for a flow node; also drops every edge touching it. */
+export async function confirmDeleteNode(tabId: string, nodeId: string, _key: string): Promise<void> {
+  await confirmDeleteBlocks(tabId, [nodeId]);
 }
 
 /** Modal prompt for a delay duration (used when adding a block); null means cancelled or invalid. */
