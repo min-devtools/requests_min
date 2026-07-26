@@ -61,14 +61,19 @@ test("flow canvas copy-pastes selected blocks with ⌘C/⌘V via a shared clipbo
   assert.match(helper, /stepKeyFor\(node\.key, keys\)/);
 });
 
-test("flow blocks open a right-click context menu with a copy option", async () => {
+test("flow blocks open a right-click context menu with group-aware actions", async () => {
   const canvas = await readFile(new URL("components/flow/FlowCanvas.tsx", src), "utf8");
   assert.match(canvas, /onNodeContextMenu/);
   assert.match(canvas, /setNodeMenu\(\{ x: event\.clientX, y: event\.clientY, nodeId: canvasNode\.id \}\)/);
-  assert.match(canvas, /className="index-context-menu"/);
-  assert.match(canvas, /<strong>Copy block<\/strong><kbd>⌘C<\/kbd>/);
-  // the menu's copy and ⌘C share one path
-  assert.match(canvas, /copyBlocks\(new Set\(\[nodeMenu\.nodeId\]\)\)/);
+  assert.match(canvas, /<ContextMenu/);
+  // right-clicking inside a 2+ selection targets the whole group; outside it, just that block
+  assert.match(canvas, /selection\.includes\(nodeMenu\.nodeId\) && selection\.length > 1/);
+  assert.match(canvas, /label: `Copy \$\{many \? `\$\{menuIds\.length\} blocks` : "block"\}`/);
+  assert.match(canvas, /label: `Duplicate/);
+  assert.match(canvas, /danger: true/);
+  // menu copy and ⌘C share one path; delete confirms via the shared blocks helper
+  assert.match(canvas, /copyBlocks\(new Set\(menuIds\)\)/);
+  assert.match(canvas, /confirmDeleteBlocks\(tabId, menuIds\)/);
 });
 
 test("Add loop action creates a loop block whose count edits inline in the step detail tab", async () => {

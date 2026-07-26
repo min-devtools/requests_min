@@ -568,16 +568,25 @@ function Canvas({
         onDistribute={distributeSelection}
       />
       <AnimatePresence>
-        {nodeMenu && (
-          <ContextMenu
-            x={nodeMenu.x}
-            y={nodeMenu.y}
-            onClose={() => setNodeMenu(null)}
-            items={[
-              { icon: "copy", label: "Copy block", strong: true, kbd: "⌘C", onClick: () => copyBlocks(new Set([nodeMenu.nodeId])) },
-            ]}
-          />
-        )}
+        {nodeMenu && (() => {
+          const selection = useApp.getState().flowTabs[tabId]?.selectedNodeIds ?? [];
+          const menuIds = selection.includes(nodeMenu.nodeId) && selection.length > 1
+            ? selection
+            : [nodeMenu.nodeId];
+          const many = menuIds.length > 1;
+          return (
+            <ContextMenu
+              x={nodeMenu.x}
+              y={nodeMenu.y}
+              onClose={() => setNodeMenu(null)}
+              items={[
+                { icon: "copy", label: `Copy ${many ? `${menuIds.length} blocks` : "block"}`, strong: true, kbd: "⌘C", onClick: () => copyBlocks(new Set(menuIds)) },
+                { icon: "duplicate", label: `Duplicate ${many ? `${menuIds.length} blocks` : "block"}`, onClick: () => duplicateBlocks(menuIds) },
+                { icon: "trash", label: `Delete ${many ? `${menuIds.length} blocks` : "block"}…`, danger: true, onClick: () => void confirmDeleteBlocks(tabId, menuIds) },
+              ]}
+            />
+          );
+        })()}
       </AnimatePresence>
     </ReactFlow>
   );
