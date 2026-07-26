@@ -7,8 +7,9 @@ import type {
   RequestFlowNode,
   TransformFlowNode,
 } from "./types.ts";
+import dagre from "@dagrejs/dagre";
 import { DEFAULT_TRANSFORM_CODE } from "./transform.ts";
-import { dagEdges, loopBackEdgeMap, stepKeyFor, topoOrder } from "./validate.ts";
+import { dagEdges, loopBackEdgeMap, stepKeyFor } from "./validate.ts";
 
 export interface RequestDropPayload {
   kind: "request";
@@ -110,61 +111,66 @@ export function createLoopFlowNode(
   };
 }
 
-const LAYOUT_COL = 300;
-const LAYOUT_ROW = 150;
-const LAYOUT_MARGIN = 60;
+export type LayoutDirection = "LR" | "TB";
 
-/** Arrange nodes in dependency columns: depth = longest path from a root. */
-export function autoLayoutNodes(
+const LAYOUT_NODE_SEP = 48;   // gap between blocks sharing a rank
+const LAYOUT_RANK_SEP = 90;   // gap between successive ranks
+const LAYOUT_MARGIN = 60;
+const LOOP_LANE_GAP = 60;     // clearance pushing loop blocks off the chain lane
+
+/** Layered auto-layout via dagre; direction picks the main axis (LR or TB). */
+export function layoutGraph(
   nodes: readonly FlowNode[],
   edges: readonly FlowEdge[],
+  direction: LayoutDirection,
+  sizes: ReadonlyMap<string, NodeSize>,
 ): FlowNode[] {
+  if (nodes.length === 0) return [];
   // loop back-edges close circles on purpose; layout walks the acyclic remainder, same as
-  // the engine — otherwise any flow with a loop bails here and Arrange silently no-ops
+  // the engine — otherwise any flow with a loop would knot the layered ranking
   const layoutEdges = dagEdges({ nodes, edges });
-  const order = topoOrder(nodes, layoutEdges);
-  if (!order) return [...nodes];
+  const graph = new dagre.graphlib.Graph();
+  graph.setGraph({
+    rankdir: direction,
+    nodesep: LAYOUT_NODE_SEP,
+    ranksep: LAYOUT_RANK_SEP,
+    marginx: LAYOUT_MARGIN,
+    marginy: LAYOUT_MARGIN,
+  });
+  graph.setDefaultEdgeLabel(() => ({}));
+  for (const node of nodes) graph.setNode(node.id, { ...(sizes.get(node.id) ?? DEFAULT_NODE_SIZE) });
+  for (const edge of layoutEdges) graph.setEdge(edge.source, edge.target);
+  dagre.layout(graph);
 
-  const depth = new Map(order.map((id) => [id, 0]));
-  for (const id of order) {
-    for (const edge of layoutEdges) {
-      if (edge.source !== id || !depth.has(edge.target)) continue;
-      depth.set(edge.target, Math.max(depth.get(edge.target)!, depth.get(id)! + 1));
-    }
-  }
-
-  // A loop step drops below its column's chain row, so the loop-back wire routes UNDER the
-  // blocks instead of cutting straight through the single-line chain
-  const deferredLoopIds = new Set(
+  // A looped-back loop block leaves the chain lane so its back wire routes outside the
+  // blocks: below the chain when arranging LR, to the right of it when arranging TB
+  const loopIds = new Set(
     [...loopBackEdgeMap({ nodes, edges })]
       .filter(([, backs]) => backs.length > 0)
       .map(([id]) => id),
   );
-
-  const rowsPerColumn = new Map<number, number>();
-  const positions = new Map<string, { x: number; y: number }>();
-  for (const id of order) {
-    if (deferredLoopIds.has(id)) continue;
-    const column = depth.get(id)!;
-    const row = rowsPerColumn.get(column) ?? 0;
-    rowsPerColumn.set(column, row + 1);
-    positions.set(id, { x: LAYOUT_MARGIN + column * LAYOUT_COL, y: LAYOUT_MARGIN + row * LAYOUT_ROW });
-  }
-  for (const id of order) {
-    if (!deferredLoopIds.has(id)) continue;
-    const column = depth.get(id)!;
-    // at least one row below the chain, even when the loop is alone in its column
-    const row = Math.max(1, rowsPerColumn.get(column) ?? 0);
-    rowsPerColumn.set(column, row + 1);
-    positions.set(id, { x: LAYOUT_MARGIN + column * LAYOUT_COL, y: LAYOUT_MARGIN + row * LAYOUT_ROW });
+  let laneEdge = -Infinity;
+  for (const node of nodes) {
+    if (loopIds.has(node.id)) continue;
+    const placed = graph.node(node.id);
+    laneEdge = Math.max(laneEdge, direction === "LR" ? placed.y + placed.height / 2 : placed.x + placed.width / 2);
   }
 
   let changed = false;
   const nextNodes = nodes.map((node) => {
-    const position = positions.get(node.id)!;
-    if (node.position.x === position.x && node.position.y === position.y) return node;
+    const placed = graph.node(node.id);
+    // dagre reports centers; flow nodes store top-left corners
+    let x = placed.x - placed.width / 2;
+    let y = placed.y - placed.height / 2;
+    if (loopIds.has(node.id) && laneEdge > -Infinity) {
+      if (direction === "LR") y = Math.max(y, laneEdge + LOOP_LANE_GAP);
+      else x = Math.max(x, laneEdge + LOOP_LANE_GAP);
+    }
+    x = Math.round(x);
+    y = Math.round(y);
+    if (node.position.x === x && node.position.y === y) return node;
     changed = true;
-    return { ...node, position };
+    return { ...node, position: { x, y } };
   });
   return changed ? nextNodes : [...nodes];
 }

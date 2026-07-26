@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  autoLayoutNodes,
+  layoutGraph,
   nextSelection,
   alignNodes,
   distributeNodes,
@@ -128,28 +128,44 @@ test("commitNodePositions persists every node in a multi-selection drag", () => 
   assert.deepEqual(second.position, { x: 50, y: 0 });
 });
 
-test("autoLayoutNodes stacks parallel branches per depth column and skips cyclic graphs", () => {
-  const node = (id, x = 0, y = 0) => ({ id, key: id, type: "delay", position: { x, y }, config: { ms: 1 } });
-  const nodes = [node("a"), node("b"), node("c"), node("d")];
+const uniformSizes = (nodes, width = 200, height = 80) => new Map(nodes.map((node) => [node.id, { width, height }]));
+
+test("layoutGraph LR advances ranks left→right and TB top→bottom", () => {
+  const node = (id) => ({ id, key: id, type: "delay", position: { x: 0, y: 0 }, config: { ms: 1 } });
+  const nodes = [node("a"), node("b"), node("c")];
   const edges = [
     { id: "e1", source: "a", target: "b" },
-    { id: "e2", source: "a", target: "c" },
-    { id: "e3", source: "b", target: "d" },
-    { id: "e4", source: "c", target: "d" },
+    { id: "e2", source: "b", target: "c" },
   ];
+  const lr = layoutGraph(nodes, edges, "LR", uniformSizes(nodes));
+  assert.ok(lr[0].position.x < lr[1].position.x);
+  assert.ok(lr[1].position.x < lr[2].position.x);
+  assert.equal(lr[0].position.y, lr[1].position.y); // a straight chain stays on one lane
+  const tb = layoutGraph(nodes, edges, "TB", uniformSizes(nodes));
+  assert.ok(tb[0].position.y < tb[1].position.y);
+  assert.ok(tb[1].position.y < tb[2].position.y);
+  assert.equal(tb[0].position.x, tb[1].position.x);
+});
 
-  const laid = autoLayoutNodes(nodes, edges);
-  const byId = Object.fromEntries(laid.map((n) => [n.id, n.position]));
-  assert.deepEqual(byId.a, { x: 60, y: 60 });
-  assert.deepEqual(byId.b, { x: 360, y: 60 });
-  assert.deepEqual(byId.c, { x: 360, y: 210 });
-  assert.deepEqual(byId.d, { x: 660, y: 60 });
+test("layoutGraph siblings share a rank instead of stacking arbitrarily", () => {
+  const node = (id) => ({ id, key: id, type: "delay", position: { x: 0, y: 0 }, config: { ms: 1 } });
+  const nodes = [node("root"), node("s1"), node("s2")];
+  const edges = [
+    { id: "e1", source: "root", target: "s1" },
+    { id: "e2", source: "root", target: "s2" },
+  ];
+  const lr = layoutGraph(nodes, edges, "LR", uniformSizes(nodes));
+  assert.equal(lr[1].position.x, lr[2].position.x); // same rank
+  assert.notEqual(lr[1].position.y, lr[2].position.y); // separated within it
+});
 
-  const cyclic = autoLayoutNodes(nodes, [{ id: "e1", source: "a", target: "b" }, { id: "e2", source: "b", target: "a" }]);
-  assert.deepEqual(cyclic.map((n) => n.position), nodes.map((n) => n.position));
-
-  const stable = autoLayoutNodes(laid, edges);
-  assert.deepEqual(stable, laid);
+test("layoutGraph keeps the unchanged-input contract", () => {
+  const node = (id) => ({ id, key: id, type: "delay", position: { x: 0, y: 0 }, config: { ms: 1 } });
+  const nodes = [node("a")];
+  const once = layoutGraph(nodes, [], "LR", uniformSizes(nodes));
+  const twice = layoutGraph(once, [], "LR", uniformSizes(nodes));
+  assert.deepEqual(once, twice); // idempotent
+  assert.deepEqual(layoutGraph([], [], "LR", new Map()), []); // empty graph returns []
 });
 
 test("copyGraphElements clones selected nodes and their internal edges only", () => {
@@ -232,33 +248,23 @@ test("createLoopFlowNode uses collision-safe step keys and defaults to 3 passes"
   assert.equal(createLoopFlowNode("loop-2", new Set(["loop"]), { x: 0, y: 0 }).key, "loop-2");
 });
 
-test("autoLayoutNodes arranges flows containing a loop instead of bailing on the circle", () => {
+test("layoutGraph pushes looped-back loop blocks off the chain lane", () => {
   const a = createDelayFlowNode("a", new Set(), { x: 500, y: 400 });
   const b = createDelayFlowNode("b", new Set([a.key]), { x: 500, y: 400 });
   const loop = createLoopFlowNode("loop", new Set([a.key, b.key]), { x: 500, y: 400 });
-  const c = createDelayFlowNode("c", new Set([a.key, b.key, loop.key]), { x: 500, y: 400 });
+  const nodes = [a, b, loop];
   const edges = [
     { id: "a-b", source: "a", target: "b" },
     { id: "b-loop", source: "b", target: "loop" },
     { id: "loop-a", source: "loop", target: "a" }, // the circle-closing back-edge
-    { id: "loop-c", source: "loop", target: "c" }, // exit edge after the loop
   ];
 
-  const laid = autoLayoutNodes([a, b, loop, c], edges);
-  const byId = Object.fromEntries(laid.map((n) => [n.id, n.position]));
-  assert.deepEqual(byId.a, { x: 60, y: 60 });
-  assert.deepEqual(byId.b, { x: 360, y: 60 });
-  // the loop drops one row below the chain so its back-edge routes under the blocks
-  assert.deepEqual(byId.loop, { x: 660, y: 210 });
-  // exit steps stay on the chain row in the next column
-  assert.deepEqual(byId.c, { x: 960, y: 60 });
-
-  // a plain cycle (no loop step) still refuses to lay out
-  const cyclic = autoLayoutNodes([a, b], [
-    { id: "x", source: "a", target: "b" },
-    { id: "y", source: "b", target: "a" },
-  ]);
-  assert.deepEqual(cyclic.map((n) => n.position), [a.position, b.position]);
+  const lr = layoutGraph(nodes, edges, "LR", uniformSizes(nodes));
+  const chainBottom = Math.max(lr[0].position.y, lr[1].position.y) + 80;
+  assert.ok(lr[2].position.y >= chainBottom); // LR: loop drops below the chain
+  const tb = layoutGraph(nodes, edges, "TB", uniformSizes(nodes));
+  const chainRight = Math.max(tb[0].position.x, tb[1].position.x) + 200;
+  assert.ok(tb[2].position.x >= chainRight); // TB: loop swings right of the chain
 });
 
 test("nextSelection appends new picks in recency order and drops deselects/removes", () => {

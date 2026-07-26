@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { autoLayoutNodes, createDelayFlowNode, createLoopFlowNode, createTransformFlowNode } from "../../lib/flow/canvas";
+import { createDelayFlowNode, createLoopFlowNode, createTransformFlowNode, layoutGraph } from "../../lib/flow/canvas";
 import { runFlow } from "../../lib/flow/engine";
 import { fuzzyMatch, highlight } from "../../lib/fuzzy";
 import { useApp } from "../../store";
@@ -202,7 +202,7 @@ export function FlowView({ tabId, active }: { tabId: string; active: boolean }) 
   const arrange = () => {
     const current = useApp.getState().flowTabs[tabId];
     if (!current || current.running) return;
-    const nodes = autoLayoutNodes(current.flow.nodes, current.flow.edges);
+    const nodes = layoutGraph(current.flow.nodes, current.flow.edges, "LR", new Map());
     if (nodes !== current.flow.nodes) {
       updateFlowTab(tabId, { flow: { ...current.flow, nodes } });
     }
