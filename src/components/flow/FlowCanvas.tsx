@@ -232,15 +232,35 @@ function Canvas({
   useEffect(() => {
     if (!active) return;
     const onKey = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) return;
-      const key = event.key.toLowerCase();
-      if (key !== "c" && key !== "v") return;
       const el = document.activeElement as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+
+      if (event.key === "Escape") {
+        // one Esc dismisses everything transient: the block menu and the selection
+        setNodeMenu(null);
+        const current = useApp.getState().flowTabs[tabId];
+        if (!current || current.selectedNodeIds.length === 0) return;
+        event.preventDefault();
+        setNodes((local) => local.map((node) => (node.selected ? { ...node, selected: false } : node)));
+        updateFlowTab(tabId, { selectedNodeIds: [] });
+        return;
+      }
+
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+      if (key !== "c" && key !== "v" && key !== "a") return;
       const selection = window.getSelection();
       if (selection && !selection.isCollapsed) return;
       const current = useApp.getState().flowTabs[tabId];
       if (!current) return;
+
+      if (key === "a") {
+        if (current.flow.nodes.length === 0) return;
+        event.preventDefault();
+        setNodes((local) => local.map((node) => (node.selected ? node : { ...node, selected: true })));
+        updateFlowTab(tabId, { selectedNodeIds: current.flow.nodes.map((node) => node.id) });
+        return;
+      }
 
       if (key === "c") {
         const selectedIds = new Set(getNodes().filter((node) => node.selected).map((node) => node.id));

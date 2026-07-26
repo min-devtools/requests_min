@@ -265,3 +265,11 @@ test("steps hanging off a loop body wait for the loop, not for the body's first 
   // an unexplained skip must not be reported as a green run
   assert.match(engine, /step\.status === "skipped" && !step\.disabled/);
 });
+
+test("⌘A selects every block and Esc clears the selection (canvas only, not in inputs)", async () => {
+  const canvas = await readFile(new URL("components/flow/FlowCanvas.tsx", src), "utf8");
+  assert.match(canvas, /key !== "c" && key !== "v" && key !== "a"/);
+  assert.match(canvas, /selectedNodeIds: current\.flow\.nodes\.map\(\(node\) => node\.id\)/);
+  assert.match(canvas, /event\.key === "Escape"/);
+  assert.match(canvas, /selectedNodeIds: \[\]/);
+});
