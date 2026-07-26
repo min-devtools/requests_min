@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const src = new URL("./", import.meta.url);
@@ -70,7 +71,7 @@ async function importStore({ session, invoke } = {}) {
   globalThis.__TAURI_INTERNALS__ = tauriInternals;
 
   bundledStore ??= build({
-    entryPoints: [new URL("store.ts", src).pathname],
+    entryPoints: [fileURLToPath(new URL("store.ts", src))],
     bundle: true,
     platform: "node",
     format: "esm",
