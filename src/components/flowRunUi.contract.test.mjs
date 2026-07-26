@@ -21,7 +21,8 @@ test("flow toolbar keeps per-node runs plus arrange, and no duplicate run button
   const view = await read("components/views/FlowView.tsx");
 
   assert.match(view, /onRunNode=\{\(nodeId\) => void runFlow\(tabId, nodeId\)\}/);
-  assert.match(view, /autoLayoutNodes\(current\.flow\.nodes, current\.flow\.edges\)/);
+  // arrange execution moved into the canvas (measured sizes + tween); the toolbar drives it via ref
+  assert.match(view, /arrangeApi\.current\?\.\(direction\)/);
   assert.doesNotMatch(view, /cancelFlow/);
   assert.doesNotMatch(view, /"tool-btn" onClick=\{\(\) => void runFlow\(tabId\)\}/);
 });
