@@ -33,7 +33,6 @@ export function TransformNode({ data, isConnectable }: NodeProps<TransformCanvas
           <Icon name="braces" size={13} />
         </span>
         <span className="flow-node-kind">Transform</span>
-        <span className="flow-node-key">{data.node.key}</span>
         <NodeActions items={[
           {
             icon: "trash",
@@ -49,6 +48,7 @@ export function TransformNode({ data, isConnectable }: NodeProps<TransformCanvas
           onChange={(next) => setNodeEnabled(data.tabId, data.node.id, next)}
         />
       </div>
+      <div className="flow-node-key">{data.node.key}</div>
       {/* mini editor window: purple ƒ watermark + the script's first meaningful line */}
       <div className="flow-node-code" title="Click to edit in the dock">
         <span className="flow-node-fn" aria-hidden>ƒ</span>
