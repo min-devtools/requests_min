@@ -102,6 +102,12 @@ pub fn prepare_http(part: &HttpPart, ctx: &HashMap<String, String>) -> Result<Pr
         }
         _ => None,
     };
+    // body's content-type overrides any hand-typed Content-Type header (same precedent as auth above),
+    // instead of being appended separately — reqwest's RequestBuilder::header() appends rather than
+    // replaces, so sending both caused duplicate Content-Type headers on the wire.
+    if let Some((ct, _)) = &body {
+        set_header(&mut headers, "content-type", ct.clone());
+    }
 
     Ok(PreparedHttp { method, url: url.to_string(), headers, body })
 }
@@ -138,7 +144,7 @@ pub async fn http_request(env: Option<String>, request: Request, cookies: tauri:
     let method = reqwest::Method::from_bytes(prepared.method.as_bytes()).map_err(|e| e.to_string())?;
     let mut rb = client.request(method, &prepared.url);
     for (k, v) in &prepared.headers { rb = rb.header(k, v); }
-    if let Some((ct, content)) = prepared.body { rb = rb.header("content-type", ct).body(content); }
+    if let Some((_, content)) = prepared.body { rb = rb.body(content); }
 
     let t0 = Instant::now();
     let resp = rb.send().await.map_err(|e| e.to_string())?;
@@ -253,6 +259,21 @@ mod tests {
         let auth: Vec<_> = p.headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("authorization")).collect();
         assert_eq!(auth.len(), 1, "exactly one Authorization header is sent");
         assert_eq!(auth[0].1, "Bearer FRESH");
+    }
+
+    #[test]
+    fn body_content_type_overrides_hand_typed_header() {
+        let ctx = std::collections::HashMap::new();
+        let part = HttpPart {
+            method: "POST".into(), url: "http://h/x".into(),
+            headers: vec![KV { key: "Content-Type".into(), value: "text/plain".into(), enabled: Some(true) }],
+            body: serde_json::json!({"type":"json","content":"{}"}),
+            ..Default::default()
+        };
+        let p = prepare_http(&part, &ctx).unwrap();
+        let ct: Vec<_> = p.headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("content-type")).collect();
+        assert_eq!(ct.len(), 1, "exactly one Content-Type header is sent");
+        assert_eq!(ct[0].1, "application/json");
     }
 
     #[test]
