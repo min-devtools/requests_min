@@ -93,7 +93,7 @@ test("saved requests expose open and delete actions from their context menus", a
 
   assert.match(sidebar, /onContextMenu=\{\(event\) => openRequestMenu\(event, c\.id, r\)\}/);
   assert.match(tabs, /onContextMenu=\{\(event\) => \{ if \(!rt\?\.collectionId \|\| !rt\.relPath\) return;/);
-  assert.match(menu, /<strong>Open request<\/strong>/);
+  assert.match(menu, /\{ icon: "request", label: "Open request", strong: true/);
   assert.match(store, /deleteRequest: \(collectionId: string, relPath: string\) => Promise<void>/);
   assert.match(store, /deleteCollection: \(id: string\) => Promise<void>/);
   assert.match(store, /await api\.colDelete\(id\)/);
@@ -128,8 +128,8 @@ test("Collections is a request manager without duplicate sync or import panels",
   assert.match(view, /<RequestContextMenu/);
   assert.doesNotMatch(view, /GitHub sync/);
   assert.doesNotMatch(view, /<h3>Import<\/h3>/);
-  assert.match(menu, /<strong>Rename request<\/strong>/);
-  assert.match(menu, /<strong>Duplicate request<\/strong>/);
+  assert.match(menu, /\{ icon: "pencil", label: "Rename request", strong: true/);
+  assert.match(menu, /\{ icon: "copy", label: "Duplicate request", strong: true/);
   assert.match(store, /renameRequest: \(collectionId: string, relPath: string, name: string\) => Promise<void>/);
   assert.match(store, /duplicateRequest: \(collectionId: string, relPath: string, name: string\) => Promise<void>/);
 });
@@ -223,7 +223,7 @@ test("response metadata uses theme-aware semantic colors", async () => {
   assert.match(styles, /color-mix\(in oklab/);
 });
 
-test("right dock keeps unique context actions and copies live HTTP and gRPC commands", async () => {
+test("right dock keeps request context while global request actions stay in the titlebar", async () => {
   const [inspector, requestView, styles] = await Promise.all([
     readFile(new URL("components/Inspector.tsx", root), "utf8"),
     readFile(new URL("components/views/RequestView.tsx", root), "utf8"),
@@ -232,10 +232,10 @@ test("right dock keeps unique context actions and copies live HTTP and gRPC comm
 
   assert.match(inspector, /className="inspector-environment"/);
   assert.match(inspector, /Environment/);
-  assert.match(inspector, /saveActiveRequest/);
-  assert.match(inspector, /buildCurl\(request\)/);
-  assert.match(inspector, /buildGrpcurl\(request\)/);
-  assert.match(inspector, /Copy \{request\.protocol === "grpc" \? "grpcurl" : "cURL"\}/);
+  assert.doesNotMatch(inspector, /saveActiveRequest/);
+  assert.doesNotMatch(inspector, /buildCurl\(request\)/);
+  assert.doesNotMatch(inspector, /buildGrpcurl\(request\)/);
+  assert.doesNotMatch(inspector, /Copy \{request\.protocol === "grpc" \? "grpcurl" : "cURL"\}/);
   assert.match(inspector, /Recent runs/);
   assert.match(requestView, /export function buildCurl/);
   assert.match(requestView, /export function buildGrpcurl/);
@@ -403,4 +403,3 @@ test("queryToParams in RequestView URL-decodes query string values like datetime
   assert.match(view, /decodeURIComponent\(s\.replace\(/);
   assert.match(view, /safeDecode\(seg\.slice\(eq \+ 1\)\)/);
 });
-

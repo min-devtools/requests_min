@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { ToolButton } from "../ui/ToolButton";
 import { Icon } from "../ui/Icon";
 import { useApp } from "../store";
 import { api, type GrpcResponse, type HttpResponse } from "../lib/api";
-import { saveActiveRequest } from "../lib/runRequest";
-import { buildCurl, buildGrpcurl } from "./views/RequestView";
 import { dynamicVariable, isDynamicName } from "../lib/dynamicVariables";
 import { requestVariableNames, resolveRequestTarget } from "../lib/requestVariables";
+import { requestReadiness } from "../lib/requestReadiness";
 import { JsonTreePanel } from "../ui/JsonTreePanel";
 import { MiniTabs } from "../ui/MiniTabs";
 import { DelayPanel } from "./flow/DelayPanel";
@@ -82,6 +80,7 @@ export function Inspector() {
     ? !dynamicVariable(name)
     : !(name in secrets) && !(name in vars));
   const resolvedTarget = request ? resolveRequestTarget(request, vars, secrets, revealSecrets) : "";
+  const readiness = request ? requestReadiness(request, unresolved.length) : null;
   const recentRuns = rt ? history.filter((entry) => entry.collectionId === rt.collectionId && entry.request.name === request?.name).slice(0, 8) : [];
   // the open dock step decides which editor (request vs transform) renders in Step detail
   const panelNode = ft ? ft.flow.nodes.find((node) => node.id === ft.panelNodeId) ?? null : null;
@@ -100,17 +99,6 @@ export function Inspector() {
       .then(([nextVars, nextSecrets]) => { setVars(nextVars); setSecrets(nextSecrets); })
       .catch(() => { setVars({}); setSecrets({}); });
   }, [activeEnv, envVersion]);
-
-  const copyCommand = async () => {
-    if (!request || request.protocol === "ws") return;
-    try {
-      const command = request.protocol === "grpc" ? buildGrpcurl(request) : buildCurl(request);
-      await navigator.clipboard.writeText(command);
-      showToast("Copied", `${request.protocol === "grpc" ? "grpcurl" : "cURL"} command copied.`);
-    } catch (error) {
-      showToast("Copy failed", String(error), "err");
-    }
-  };
 
   const envSection = (
     <section className="inspector-environment">
@@ -136,13 +124,6 @@ export function Inspector() {
         {rt && request ? (
           <div className="inspector-command-body">
             {unresolved.length > 0 && <div className="inspector-variable-warning">{formatNumber(unresolved.length)} unresolved variable{unresolved.length === 1 ? "" : "s"}</div>}
-
-            <section className="inspector-actions">
-              <div className="inspector-secondary-actions">
-                <ToolButton variant="primary" onClick={() => void saveActiveRequest()}><Icon name="save" /> Save</ToolButton>
-                {request.protocol !== "ws" && <ToolButton onClick={() => void copyCommand()}><Icon name="copy" /> Copy {request.protocol === "grpc" ? "grpcurl" : "cURL"}</ToolButton>}
-              </div>
-            </section>
 
             <section className="inspector-variables">
               <div className="inspector-section-heading">
@@ -180,7 +161,7 @@ export function Inspector() {
               <div className="inspector-section-label">Resolved preview</div>
               <div className="inspector-preview-meta">
                 <span>{request.http?.method ?? request.protocol.toUpperCase()}</span>
-                <small>{unresolved.length ? `${formatNumber(unresolved.length)} unresolved` : "Ready"}</small>
+                <small className={`readiness-${readiness?.tone ?? "idle"}`}>{readiness?.label}</small>
               </div>
               <code className="inspector-preview-target">{resolvedTarget || "No target configured"}</code>
             </section>

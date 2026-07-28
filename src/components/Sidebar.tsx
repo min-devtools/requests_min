@@ -200,11 +200,11 @@ export function Sidebar() {
             <span>Workspace</span><Icon name="chevron-down" size={12} />
           </button>
           <div className="group-content">{WORKSPACE_NAV.map((item) => (
-            <div key={item.kind} className={`nav-item ${activeKind === item.kind ? "active" : ""}`} onClick={() => openTab(item.kind)}>
+            <button key={item.kind} type="button" className={`nav-item ${activeKind === item.kind ? "active" : ""}`} onClick={() => openTab(item.kind)}>
               <Icon name={item.icon} className="soft-blue" />
               <span>{item.label}</span>
               <span />
-            </div>
+            </button>
           ))}</div>
         </div>
 

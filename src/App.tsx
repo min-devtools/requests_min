@@ -79,6 +79,8 @@ export default function App() {
     toggleLeft: s.toggleLeft, toggleRight: s.toggleRight, setCommandOpen: s.setCommandOpen,
     newRequestTab: s.newRequestTab, confirmCloseTab: s.confirmCloseTab, openTab: s.openTab,
   })));
+  const activeKind = tabs.find((tab) => tab.id === activeTabId)?.kind;
+  const inspectorAvailable = activeKind === "request" || activeKind === "flow";
 
   useEffect(() => {
     document.body.dataset.theme = theme;
@@ -86,13 +88,14 @@ export default function App() {
     document.body.classList.toggle("compact", compact);
     document.body.classList.toggle("left-collapsed", leftCollapsed);
     document.body.classList.toggle("right-collapsed", rightCollapsed);
+    document.body.classList.toggle("inspector-unavailable", !inspectorAvailable);
     // flow tabs host the full step editor in the dock — pin a min dock width so it can't collapse the editor UI
-    document.body.classList.toggle("flow-active", tabs.find((tab) => tab.id === activeTabId)?.kind === "flow");
+    document.body.classList.toggle("flow-active", activeKind === "flow");
     document.documentElement.style.setProperty("--ui-font-size", `${uiFontSize}px`);
     document.documentElement.style.setProperty("--font-body", uiFont ? `"${uiFont}", var(--font-body-default)` : "var(--font-body-default)");
     document.documentElement.style.setProperty("--font-mono", editorFont ? `"${editorFont}", var(--font-mono-default)` : "var(--font-mono-default)");
     retintMonaco(themeBase(theme));
-  }, [theme, compact, uiFontSize, uiFont, editorFont, leftCollapsed, rightCollapsed, tabs, activeTabId]);
+  }, [theme, compact, uiFontSize, uiFont, editorFont, leftCollapsed, rightCollapsed, inspectorAvailable, activeKind]);
 
   useEffect(() => {
     const preventFileDrop = (e: DragEvent) => {
@@ -141,7 +144,14 @@ export default function App() {
         }
       }
       if (mod && key === "b") { e.preventDefault(); toggleLeft(); }
-      if (mod && key === "r") { e.preventDefault(); toggleRight(); }
+      if (mod && key === "r") {
+        const state = useApp.getState();
+        const kind = state.tabs.find((tab) => tab.id === state.activeTabId)?.kind;
+        if (kind === "request" || kind === "flow") {
+          e.preventDefault();
+          toggleRight();
+        }
+      }
       if (mod && e.key === ",") { e.preventDefault(); openTab("settings"); }
       if (mod && key >= "1" && key <= "9") {
         const tab = useApp.getState().tabs[Number(key) - 1];
@@ -180,7 +190,7 @@ export default function App() {
       <button type="button" className={`tool-btn panel-toggle panel-corner left ${leftCollapsed ? "" : "active"}`} title="Toggle sidebar (⌘B)" aria-label="Toggle sidebar" onClick={toggleLeft}>
         <Icon name="panel-left" />
       </button>
-      <button type="button" className={`tool-btn panel-toggle panel-corner right ${rightCollapsed ? "" : "active"}`} title="Toggle inspector (⌘R)" aria-label="Toggle inspector" onClick={toggleRight}>
+      <button type="button" className={`tool-btn panel-toggle panel-corner right ${rightCollapsed || !inspectorAvailable ? "" : "active"}`} title="Toggle inspector (⌘R)" aria-label="Toggle inspector" disabled={!inspectorAvailable} onClick={toggleRight}>
         <Icon name="panel-right" />
       </button>
       <CommandPalette />

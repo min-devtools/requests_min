@@ -1,5 +1,6 @@
 import { api } from "./api";
 import { useApp } from "../store";
+import { requestTargetConfigured } from "./requestReadiness";
 
 export async function runActiveRequest() {
   const s = useApp.getState();
@@ -12,6 +13,10 @@ export async function runActiveRequest() {
 
   if (rt.request.protocol === "ws") {
     s.showToast("WebSocket", "Use the connect / send controls in the request editor.", "warn");
+    return;
+  }
+  if (!requestTargetConfigured(rt.request)) {
+    s.showToast("Request incomplete", "Configure the request target before sending.", "warn");
     return;
   }
 

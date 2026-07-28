@@ -116,6 +116,9 @@ const filtered = useMemo<Array<Command & { labelIdx: number[]; recent: boolean }
           <motion.div
             key="command-palette-modal"
             className="palette"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Command palette"
             initial={{ opacity: 0, y: -12, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -12, scale: 0.98 }}
@@ -124,6 +127,10 @@ const filtered = useMemo<Array<Command & { labelIdx: number[]; recent: boolean }
             <input
               ref={inputRef}
               value={input}
+              role="combobox"
+              aria-controls="command-palette-results"
+              aria-expanded="true"
+              aria-autocomplete="list"
               placeholder="Run command, open collection, switch environment..."
               onChange={(e) => { setInput(e.target.value); setCursor(0); }}
               onKeyDown={(e) => {
@@ -135,11 +142,11 @@ const filtered = useMemo<Array<Command & { labelIdx: number[]; recent: boolean }
                 if (e.key === "Escape") setCommandOpen(false);
               }}
             />
-            <div className="cmd-list">
+            <div id="command-palette-results" className="cmd-list" role="listbox">
               {filtered.map((cmd, i) => (
                 <Fragment key={cmd.label}>
                   {(i === 0 || filtered[i - 1].recent !== cmd.recent) && <div className="cmd-group">{cmd.recent ? "Recents" : "Commands"}</div>}
-                  <div className={`cmd ${i === cursor ? "active" : ""}`} onMouseEnter={() => setCursor(i)} onClick={() => runCommand(cmd)}>
+                  <div className={`cmd ${i === cursor ? "active" : ""}`} role="option" aria-selected={i === cursor} onMouseEnter={() => setCursor(i)} onClick={() => runCommand(cmd)}>
                     <Icon name={cmd.icon} size={15} />
                     <span>{renderHL(cmd.label, cmd.labelIdx)}</span>
                     {cmd.kbd ? <span className="kbd">{cmd.kbd}</span> : <span />}

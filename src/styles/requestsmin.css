@@ -212,7 +212,7 @@ body.resizing-x { user-select: none; cursor: col-resize; }
 .json-response-paths .path-copy, .json-response-paths .path-remove { display: inline-flex; align-items: center; justify-content: center; width: 24px; padding: 0; color: var(--text-3); }
 .json-response-paths .path-copy:hover { color: var(--blue); background: color-mix(in oklab, var(--blue), transparent 85%); }
 .json-response-paths .path-remove:hover { color: var(--red); background: color-mix(in oklab, var(--red), transparent 85%); }
-.response-empty { height: 100%; display: grid; place-items: center; color: var(--text-3); font: 0.9231rem var(--font-mono); }
+.response-empty { height: 100%; display: grid; place-items: center; color: var(--text-2); font: 0.9231rem var(--font-mono); }
 
 .env-table { width: 100%; border-collapse: collapse; }
 .env-table th, .env-table td { height: 40px; padding: 0 10px; border-bottom: 1px solid var(--line); text-align: left; }
@@ -439,6 +439,9 @@ body.resizing-x { user-select: none; cursor: col-resize; }
 .inspector-preview-meta { display: flex; align-items: center; justify-content: space-between; }
 .inspector-preview-meta span { color: var(--blue); font: 700 0.7692rem/1 var(--font-mono); }
 .inspector-preview-meta small { color: var(--green); font-size: 0.6923rem; }
+.inspector-preview-meta small.readiness-idle { color: var(--text-2); }
+.inspector-preview-meta small.readiness-error { color: var(--red); }
+.inspector-preview-meta small.readiness-ready { color: var(--green); }
 .inspector-preview-target { display: block; padding: 10px; color: var(--text); background: var(--pane-2); border: 1px solid var(--line); border-radius: 7px; font: 0.7692rem/1.5 var(--font-mono); overflow-wrap: anywhere; white-space: pre-wrap; }
 
 .inspector-secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 14px; }
@@ -457,7 +460,7 @@ body.resizing-x { user-select: none; cursor: col-resize; }
 .inspector-run-row strong.warn { color: var(--orange); }
 .inspector-run-row strong.err { color: var(--red); }
 .inspector-run-row span { color: var(--text-2); }.inspector-run-row time { color: var(--text-3); }
-.inspector-empty { color: var(--text-3); font-size: 0.8462rem; line-height: 1.45; }
+.inspector-empty { color: var(--text-2); font-size: 0.8462rem; line-height: 1.45; }
 .inspector-idle { display: grid; justify-items: start; gap: 8px; margin: 22px 14px; padding: 18px; color: var(--text-3); border: 1px dashed var(--line-2); border-radius: 10px; }
 .inspector-idle strong { color: var(--text); }.inspector-idle span { line-height: 1.45; }.inspector-idle .tool-btn { margin-top: 5px; }
 
@@ -660,6 +663,33 @@ body.flow-active.left-collapsed:not(.right-collapsed):not(.inspector-unavailable
 /* keep the drag handle glued to the floored edge, not the raw (possibly-smaller) stored width */
 body.flow-active:not(.right-collapsed):not(.inspector-unavailable) .resize-handle.right {
   right: max(440px, var(--right-w));
+}
+
+@media (max-width: 1180px) {
+  body:not(.left-collapsed):not(.right-collapsed):not(.inspector-unavailable) .main,
+  body.flow-active:not(.left-collapsed):not(.right-collapsed):not(.inspector-unavailable) .main {
+    grid-template-columns: 220px minmax(520px, 1fr) 0;
+  }
+
+  body.left-collapsed:not(.right-collapsed):not(.inspector-unavailable) .main,
+  body.flow-active.left-collapsed:not(.right-collapsed):not(.inspector-unavailable) .main {
+    grid-template-columns: 48px minmax(620px, 1fr) 0;
+  }
+
+  body:not(.right-collapsed):not(.inspector-unavailable) .main > .inspector {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    display: flex;
+    width: min(440px, calc(100vw - 220px));
+    box-shadow: -16px 0 32px color-mix(in oklab, var(--window), transparent 55%);
+  }
+
+  body:not(.right-collapsed):not(.inspector-unavailable) .resize-handle.right {
+    display: none;
+  }
 }
 
 .inspector .inspector-scroll:has(.inspector-flow) {

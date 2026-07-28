@@ -326,10 +326,10 @@ function Canvas({
         // one Esc dismisses everything transient: the block menu and the selection
         setNodeMenu(null);
         const current = useApp.getState().flowTabs[tabId];
-        if (!current || current.selectedNodeIds.length === 0) return;
+        if (!current || (current.selectedNodeIds.length === 0 && !current.panelNodeId)) return;
         event.preventDefault();
         setNodes((local) => local.map((node) => (node.selected ? { ...node, selected: false } : node)));
-        updateFlowTab(tabId, { selectedNodeIds: [] });
+        updateFlowTab(tabId, { selectedNodeIds: [], panelNodeId: null });
         return;
       }
 
@@ -547,7 +547,7 @@ function Canvas({
         event.preventDefault();
         event.dataTransfer.dropEffect = "copy";
       }}
-      onPaneClick={() => updateFlowTab(tabId, { selectedNodeIds: [] })}
+      onPaneClick={() => updateFlowTab(tabId, { selectedNodeIds: [], panelNodeId: null })}
       onNodeContextMenu={(event, canvasNode) => {
         event.preventDefault();
         const current = useApp.getState().flowTabs[tabId];

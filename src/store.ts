@@ -199,6 +199,11 @@ const sanitizeForStorage = (r: Request): Request => {
   return c;
 };
 
+const sanitizeOriginalForStorage = (original: string): string => {
+  try { return JSON.stringify(sanitizeForStorage(JSON.parse(original) as Request)); }
+  catch { return ""; }
+};
+
 // ponytail: keep stored responses small so history doesn't blow localStorage quotas
 const sanitizeHistoryResponse = (response: HttpResponse | GrpcResponse | null): HttpResponse | GrpcResponse | null => {
   if (!response) return null;
@@ -739,7 +744,10 @@ const saveSession = () => {
     requestTabs: Object.fromEntries(Object.entries(s.requestTabs)
       .filter(([id]) => !id.startsWith("flowreq:"))
       .map(([id, rt]) => [id, {
-        collectionId: rt.collectionId, relPath: rt.relPath, request: rt.request, original: rt.original,
+        collectionId: rt.collectionId,
+        relPath: rt.relPath,
+        request: sanitizeForStorage(rt.request),
+        original: sanitizeOriginalForStorage(rt.original),
       }])),
     flowTabs: Object.fromEntries(Object.entries(s.flowTabs).map(([id, ft]) => [id, {
       flowId: ft.flowId, flow: ft.flow, original: ft.original,
