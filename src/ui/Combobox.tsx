@@ -35,7 +35,7 @@ export function Combobox({ value, options, placeholder, onChange, disabled = fal
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActive((index) => Math.max(index - 1, 0));
-    } else if (event.key === "Enter" && open && filtered[active]) {
+    } else if (event.key === "Enter" && !event.metaKey && !event.ctrlKey && open && filtered[active]) {
       event.preventDefault();
       choose(filtered[active]);
     } else if (event.key === "Escape") {

@@ -42,12 +42,14 @@ test("Flow clears stale step details when selection is dismissed", async () => {
 });
 
 test("workspace navigation and command results expose keyboard semantics", async () => {
-  const [sidebar, palette] = await Promise.all([
+  const [sidebar, palette, css] = await Promise.all([
     source("components/Sidebar.tsx"),
     source("components/CommandPalette.tsx"),
+    source("styles/requestsmin.css"),
   ]);
 
   assert.match(sidebar, /<button key=\{item\.kind\} type="button" className=\{`nav-item/);
+  assert.match(css, /button\.nav-item\s*\{[^}]*width:\s*100%[^}]*border:\s*0[^}]*appearance:\s*none[^}]*background:\s*transparent[^}]*font:\s*inherit[^}]*text-align:\s*left/s);
   assert.match(palette, /role="dialog"/);
   assert.match(palette, /role="listbox"/);
   assert.match(palette, /role="option"/);

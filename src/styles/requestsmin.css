@@ -8,6 +8,15 @@
   flex: none;
 }
 
+button.nav-item {
+  width: 100%;
+  border: 0;
+  appearance: none;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+
 .page-head {
   display: flex;
   align-items: flex-start;
