@@ -11,6 +11,7 @@ const toRecord = (rows: Row[]): Record<string, string> =>
   Object.fromEntries(rows.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r.value]));
 
 export function EnvironmentsView({ active }: { active: boolean }) {
+  const envVersion = useApp((s) => s.envVersion); // inline edits from the inspector land here too
   const { activeEnv, setActiveEnv, openDialog, openConfirm, showToast, bumpEnv } = useApp(useShallow((s) => ({
     activeEnv: s.activeEnv, setActiveEnv: s.setActiveEnv, openDialog: s.openDialog,
     openConfirm: s.openConfirm, showToast: s.showToast, bumpEnv: s.bumpEnv,
@@ -33,7 +34,7 @@ export function EnvironmentsView({ active }: { active: boolean }) {
     if (!env) { setVars([]); setSecrets([]); return; }
     api.envRead(env).then((v) => setVars(toRows(v))).catch(() => setVars([]));
     api.secretRead(env).then((v) => setSecrets(toRows(v))).catch(() => setSecrets([]));
-  }, [env]);
+  }, [env, envVersion]);
 
   const newEnv = async () => {
     const name = await openDialog({ title: "New environment", message: "e.g. Development, Staging, Production" });

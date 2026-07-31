@@ -444,6 +444,9 @@ body.resizing-x { user-select: none; cursor: col-resize; }
 .inspector-variable-row strong { grid-column: 2 / 4; color: var(--text); font: 500 0.7692rem/1.4 var(--font-mono); overflow-wrap: anywhere; white-space: pre-wrap; }
 .inspector-variable-row.unresolved strong { color: var(--red); }
 .inspector-variable-row small { grid-column: 3; grid-row: 1; color: var(--text-3); font-size: 0.6923rem; text-align: right; }
+.inspector-variable-row.editable { cursor: text; }
+.inspector-variable-row.editable:hover { background: color-mix(in oklab, var(--line), transparent 60%); }
+.inspector-variable-edit { grid-column: 2 / 4; width: 100%; padding: 2px 5px; border: 1px solid var(--accent); border-radius: 4px; background: var(--bg); color: var(--text); font: 500 0.7692rem/1.4 var(--font-mono); outline: none; }
 .inspector-preview { display: grid; gap: 10px; }
 .inspector-preview-meta { display: flex; align-items: center; justify-content: space-between; }
 .inspector-preview-meta span { color: var(--blue); font: 700 0.7692rem/1 var(--font-mono); }

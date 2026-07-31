@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Icon } from "../ui/Icon";
 import { useApp } from "../store";
@@ -42,10 +42,10 @@ const relativeTime = (timestamp: number) => {
 export function Inspector() {
   const {
     activeEnv, setActiveEnv, envVersion, history,
-    openTab, showToast, updateFlowTab,
+    openTab, showToast, updateFlowTab, bumpEnv,
   } = useApp(useShallow((s) => ({
     activeEnv: s.activeEnv, setActiveEnv: s.setActiveEnv, envVersion: s.envVersion, history: s.history,
-    openTab: s.openTab, showToast: s.showToast, updateFlowTab: s.updateFlowTab,
+    openTab: s.openTab, showToast: s.showToast, updateFlowTab: s.updateFlowTab, bumpEnv: s.bumpEnv,
   })));
   const activeTab = useApp((s) => s.tabs.find((tab) => tab.id === s.activeTabId));
   // live tab state — the inspector previews the request as it's typed, so this re-renders per edit by design
@@ -72,6 +72,10 @@ export function Inspector() {
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [envs, setEnvs] = useState<string[]>([]);
   const [revealSecrets, setRevealSecrets] = useState(false);
+  // clicking a variable row edits its value in place; the draft lives here until Enter/blur commits it
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const cancelled = useRef(false); // Escape blurs the input — this stops the blur handler from saving anyway
   const request = rt?.request;
   const variableNames = request ? requestVariableNames(request) : [];
   // `$` names are dynamic built-ins resolved at send time — never from the environment.
@@ -99,6 +103,28 @@ export function Inspector() {
       .then(([nextVars, nextSecrets]) => { setVars(nextVars); setSecrets(nextSecrets); })
       .catch(() => { setVars({}); setSecrets({}); });
   }, [activeEnv, envVersion]);
+
+  const startEdit = (name: string, value: string) => {
+    if (!activeEnv) { showToast("No environment", "Pick an environment before editing variables."); return; }
+    cancelled.current = false;
+    setEditing(name);
+    setDraft(value);
+  };
+
+  // writes the single edited key back into the whole env/secret map, then bumps so every reader re-reads
+  const commitEdit = async (name: string, secret: boolean) => {
+    setEditing(null);
+    if (cancelled.current || !activeEnv) return;
+    const current = secret ? secrets[name] : vars[name];
+    if (draft === (current ?? "") && name in (secret ? secrets : vars)) return;
+    try {
+      if (secret) await api.secretWrite(activeEnv, { ...secrets, [name]: draft });
+      else await api.envWrite(activeEnv, { ...vars, [name]: draft });
+      bumpEnv();
+    } catch {
+      showToast("Save failed", `Could not write ${name} to ${activeEnv}.`);
+    }
+  };
 
   const envSection = (
     <section className="inspector-environment">
@@ -148,10 +174,20 @@ export function Inspector() {
                 const secret = name in secrets;
                 const resolved = secret || name in vars;
                 const value = secret ? secrets[name] : vars[name];
-                return <div className={`inspector-variable-row ${resolved ? value ? "ok" : "empty" : "unresolved"}`} key={name}>
+                return <div className={`inspector-variable-row editable ${resolved ? value ? "ok" : "empty" : "unresolved"}`} key={name}
+                  onClick={() => editing === name || startEdit(name, value ?? "")}>
                   <span className="status-dot" />
                   <code>{`{{${name}}}`}</code>
-                  <strong>{!resolved ? "Unresolved" : secret && !revealSecrets ? "••••••••" : value || "(empty)"}</strong>
+                  {editing === name ? (
+                    <input className="inspector-variable-edit" autoFocus value={draft}
+                      placeholder={`Value for ${name}`}
+                      onChange={(event) => setDraft(event.target.value)}
+                      onBlur={() => void commitEdit(name, secret)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.blur();
+                        if (event.key === "Escape") { cancelled.current = true; event.currentTarget.blur(); }
+                      }} />
+                  ) : <strong>{!resolved ? "Unresolved" : secret && !revealSecrets ? "••••••••" : value || "(empty)"}</strong>}
                   <small>{secret ? "Secret" : resolved ? "Environment" : "Missing"}</small>
                 </div>;
               }) : <div className="inspector-empty">This request does not use environment variables.</div>}

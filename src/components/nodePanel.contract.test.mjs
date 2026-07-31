@@ -6,11 +6,12 @@ const src = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, src), "utf8");
 
 test("the step editor lives in the right dock as a tab", async () => {
-  const [panel, flowView, inspector, requestView] = await Promise.all([
+  const [panel, flowView, inspector, requestView, miniTabs] = await Promise.all([
     read("components/flow/NodePanel.tsx"),
     read("components/views/FlowView.tsx"),
     read("components/Inspector.tsx"),
     read("components/views/RequestView.tsx"),
+    read("ui/MiniTabs.tsx"),
   ]);
 
   assert.match(panel, /`flowreq:\${tabId}:\${node\.id}`/);
@@ -19,8 +20,9 @@ test("the step editor lives in the right dock as a tab", async () => {
   assert.doesNotMatch(flowView, /NodePanel/);
   assert.match(flowView, /className="flow-body"/);
   assert.match(inspector, /<NodePanel tabId=\{activeTabId\} \/>/);
-  // dock tab switcher uses the shared .mini-tabs pill style (matches sibling apps)
-  assert.match(inspector, /className="mini-tabs" role="tablist"/);
+  // dock tab switcher uses the shared .mini-tabs pill style (matches sibling apps), now via the MiniTabs component
+  assert.match(inspector, /<MiniTabs\b/);
+  assert.match(miniTabs, /className="mini-tabs" role="tablist"/);
   // opening a step reveals/widens the dock; the tab itself is store-driven (canvas → step, report → result)
   assert.match(inspector, /if \(!ft\?\.panelNodeId\) return;\s*const state = useApp\.getState\(\)/);
   assert.match(requestView, /embedded\?: boolean/);
@@ -40,7 +42,7 @@ test("the Step Result tab renders the run response in the inspector dock", async
   assert.match(inspector, /ft\.panelNodeId \?\? ft\.selectedNodeIds\[ft\.selectedNodeIds\.length - 1\]/);
   // dock tab is store-driven so report rows can jump straight to the result view
   assert.match(inspector, /const dockTab = ft\?\.dockTab \?\? "step"/);
-  assert.match(inspector, />Step Result</);
+  assert.match(inspector, /\{ id: "result", label: "Step Result" \}/);
   assert.match(inspector, /<JsonTreePanel value=\{stepResponseBody\(flowResult\.response\)\} \/>/);
   assert.doesNotMatch(inspector, /New request/);
 });

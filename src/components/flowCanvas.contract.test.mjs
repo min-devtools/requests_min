@@ -91,7 +91,7 @@ test("Add loop action creates a loop block whose count edits inline in the step 
   assert.match(canvas, /loop: LoopNode/);
   // no pencil on the block face: the pass count edits inline in the step detail tab
   assert.doesNotMatch(node, /pencil|editLoopNode/);
-  assert.match(node, /run body ×\{data\.node\.config\.count\}/);
+  assert.match(node, /run body ×\{formatNumber\(data\.node\.config\.count\)\}/);
   assert.match(actions, /export async function promptLoopCount/);
   assert.match(actions, /export function setLoopCount/);
   assert.match(helper, /export function createLoopFlowNode/);

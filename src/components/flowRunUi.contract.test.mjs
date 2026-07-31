@@ -64,7 +64,7 @@ test("run report paginates loop passes with a jump-to-page input", async () => {
   assert.match(report, /aria-label="Previous pass"/);
   assert.match(report, /aria-label="Next pass"/);
   assert.match(report, /goToPage\(parsed - 1\)/); // typing a page number jumps straight to it
-  assert.match(report, /\/ \{pageCount\} passes/);
+  assert.match(report, /\/ \{formatNumber\(pageCount\)\} passes/);
   assert.match(css, /\.flow-report-pager input/);
 });
 
