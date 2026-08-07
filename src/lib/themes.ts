@@ -32,7 +32,7 @@ export const THEMES: ThemeDef[] = [
 
 // Persisted ids from older builds — same palette under a former name.
 // Still valid (themes.css keeps their selectors) but hidden from the picker.
-const LEGACY_IDS: Record<string, string> = {
+export const LEGACY_IDS: Record<string, string> = {
   "default-dark": "dark",
   "bearded-solarized": "bearded-solarized-dark",
   "slate-neutral-dark-schematic": "slate-neutral-dark",

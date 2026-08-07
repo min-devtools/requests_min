@@ -173,7 +173,7 @@ test("theme picker uses named palettes and retints Monaco from the active palett
   assert.match(themes, /Catppuccin Mocha/);
   assert.match(themes, /Tokyo Night/);
   assert.match(themes, /Bearded Arc/);
-  assert.match(settings, /<optgroup label="Dark">/);
+  assert.match(settings, /<ThemeGrid value=\{theme\} onChange=\{setTheme\} \/>/);
   assert.match(store, /setTheme: \(theme: string\) => void/);
   assert.match(app, /retintMonaco\(themeBase\(theme\)\)/);
   assert.match(monaco, /export function retintMonaco\(theme: "dark" \| "light"\)/);

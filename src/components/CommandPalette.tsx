@@ -4,8 +4,8 @@ import { useShallow } from "zustand/react/shallow";
 import { useApp } from "../store";
 import { Icon, type IconName } from "../ui/Icon";
 import { fuzzyMatch, highlight } from "../lib/fuzzy";
-import { THEMES } from "../lib/themes";
 import { ToolButton } from "../ui/ToolButton";
+import { ThemeGrid } from "../ui/ThemeGrid";
 
 interface Command { icon: IconName; label: string; kbd?: string; action: () => void }
 
@@ -183,10 +183,9 @@ const filtered = useMemo<Array<Command & { labelIdx: number[]; recent: boolean }
           >
             <strong>Theme picker</strong>
             <p className="prompt-dialog-msg">Changes apply immediately and are saved for this device.</p>
-            <select className="side-search" style={{ width: "100%" }} value={theme} autoFocus onChange={(event) => setTheme(event.target.value)}>
-              <optgroup label="Dark">{THEMES.filter((item) => item.base === "dark").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>
-              <optgroup label="Light">{THEMES.filter((item) => item.base === "light").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>
-            </select>
+            <div className="theme-picker-scroll">
+              <ThemeGrid value={theme} onChange={(id) => setTheme(id)} />
+            </div>
             <div className="prompt-dialog-foot"><ToolButton variant="primary" onClick={() => setThemePicker(false)}>Done</ToolButton></div>
           </motion.div>
         </motion.div>

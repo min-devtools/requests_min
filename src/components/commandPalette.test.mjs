@@ -10,9 +10,7 @@ test("Command Palette opens a live-preview theme picker", async () => {
   assert.match(command, /label: "Theme picker"/);
   assert.match(command, /setThemePicker\(true\)/);
   assert.match(command, /className="modal"/);
-  assert.match(command, /value=\{theme\}/);
-  assert.match(command, /onChange=\{\(event\) => setTheme\(event\.target\.value\)\}/);
-  assert.match(command, /THEMES\.filter\(\(item\) => item\.base === "dark"\)/);
+  assert.match(command, /<ThemeGrid value=\{theme\} onChange=\{\(id\) => setTheme\(id\)\} \/>/);
   assert.doesNotMatch(command, /<ToolButton variant="primary" autoFocus onClick=\{\(\) => setThemePicker\(false\)\}>Done<\/ToolButton>/);
 });
 

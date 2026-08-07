@@ -5,7 +5,8 @@ import { ToolButton } from "../../ui/ToolButton";
 import { useApp } from "../../store";
 import { api, type GhStatus } from "../../lib/api";
 import { DEFAULT_REPO } from "../../lib/ghSync";
-import { THEMES, themeBase } from "../../lib/themes";
+import { themeBase } from "../../lib/themes";
+import { ThemeGrid } from "../../ui/ThemeGrid";
 
 export function SettingsView({ active }: { active: boolean }) {
   const { theme, setTheme, compact, toggleCompact, vimMode, toggleVimMode, uiFontSize, changeUiFontSize, resetUiFontSize, uiFont, editorFont, setUiFont, setEditorFont, aiEndpoint, aiModel, aiApiKey, setAiSettings, showToast } = useApp(useShallow((s) => ({
@@ -62,10 +63,8 @@ export function SettingsView({ active }: { active: boolean }) {
           <div className="settings-row">
             <span className="settings-icon"><Icon name={themeBase(theme) === "dark" ? "moon" : "sun"} size={15} /></span>
             <div className="settings-copy"><strong>Theme</strong><span>Palette applies across the workspace and JSON editor.</span></div>
-            <div className="settings-control">
-              <select className="settings-select" value={theme} onChange={(event) => setTheme(event.target.value)}><optgroup label="Dark">{THEMES.filter((item) => item.base === "dark").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup><optgroup label="Light">{THEMES.filter((item) => item.base === "light").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup></select>
-            </div>
           </div>
+          <ThemeGrid value={theme} onChange={setTheme} />
           <div className="settings-row">
             <span className="settings-icon"><Icon name="braces" size={15} /></span>
             <div className="settings-copy"><strong>Interface font size</strong><span>Scales all interface text in 0.5px steps. Current: {uiFontSize}px.</span></div>
