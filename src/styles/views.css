@@ -1846,16 +1846,8 @@ body.light .docs-preview-editor { color: var(--editor-fg); }
 
 .condition-row input:disabled { opacity: 0.45; }
 
-.combobox-empty {
-  padding: 8px 10px;
-  color: var(--text-3);
-  font-size: 0.9231rem;
-}
-
 /* Documents: head / table / pagination footer */
 .docs-view { grid-template-rows: 38px minmax(0, 1fr) 34px; }
-
-.sort-arrow { color: var(--blue); font-size: 0.7692rem; }
 
 .mapping-view { grid-template-rows: 38px minmax(0, 1fr); }
 

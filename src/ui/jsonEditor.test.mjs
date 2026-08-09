@@ -41,3 +41,9 @@ test("JsonEditor paints template-aware JSON diagnostics itself (worker squiggles
   assert.match(monacoLib, /validate: false/);
 });
 
+test("retintMonaco waits for the theme tokens instead of baking the black fallbacks", async () => {
+  const monacoLib = await readFile(new URL("lib/monaco.ts", root), "utf8");
+  assert.match(monacoLib, /if \(!style\.getPropertyValue\("--editor-bg"\)\.trim\(\) && attempt < 60\)/);
+  assert.match(monacoLib, /requestAnimationFrame\(\(\) => retintMonaco\(theme, attempt \+ 1\)\)/);
+});
+

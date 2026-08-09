@@ -22,8 +22,16 @@ const value = (style: CSSStyleDeclaration, name: string, fallback: string) =>
   style.getPropertyValue(name).trim() || fallback;
 const bare = (color: string) => color.startsWith("#") ? color.slice(1) : color;
 
-export function retintMonaco(theme: "dark" | "light") {
+export function retintMonaco(theme: "dark" | "light", attempt = 0) {
   const style = getComputedStyle(document.body);
+  // Cold start in the packaged webview can run this before the app stylesheet has applied
+  // (index.html blocks on a remote Google Fonts sheet first). Every var then reads empty and
+  // the editor bakes the near-black fallbacks below — and stays that way, because nothing
+  // retints again until the theme/font/panel state changes. Wait for the tokens instead.
+  if (!style.getPropertyValue("--editor-bg").trim() && attempt < 60) {
+    requestAnimationFrame(() => retintMonaco(theme, attempt + 1));
+    return;
+  }
   const color = (name: string, fallback: string) => value(style, name, fallback);
   monaco.editor.defineTheme(MONACO_THEME, {
     base: theme === "dark" ? "vs-dark" : "vs",

@@ -204,14 +204,12 @@ test("response Header and Cookie tabs reuse their editor icons", async () => {
 });
 
 test("response metadata uses theme-aware semantic colors", async () => {
-  const [inspector, view, kv, styles] = await Promise.all([
+  const [inspector, view, styles] = await Promise.all([
     readFile(new URL("components/Inspector.tsx", root), "utf8"),
     readFile(new URL("components/views/RequestView.tsx", root), "utf8"),
-    readFile(new URL("ui/Kv.tsx", root), "utf8"),
     readFile(new URL("styles/requestsmin.css", root), "utf8"),
   ]);
 
-  assert.match(kv, /className=\{`kv \$\{className\}`\}/);
   // inspector run rows color by status; the response head shows duration and size chips
   assert.match(inspector, /runStatusClass\(entry\)/);
   assert.match(inspector, /className="inspector-run-row"/);

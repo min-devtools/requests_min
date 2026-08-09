@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "node --experimental-strip-types --test \"src/**/*.test.mjs\""
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",

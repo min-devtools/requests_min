@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { CONN_COLORS, connStyle, type ConnColor } from "../lib/connColor";
+import { useModalFocus } from "./useModalFocus";
 
 /** Modal grid of the eight collection colors. Picking one selects and closes in a single click. */
 export function ColorPicker({
@@ -12,6 +13,9 @@ export function ColorPicker({
   onPick: (color: ConnColor | null) => void;
   onClose: () => void;
 }) {
+  const paneRef = useRef<HTMLDivElement>(null);
+  useModalFocus(paneRef, true);
+
   // capture phase so the picker eats Esc before app-level global shortcuts see it
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -41,6 +45,7 @@ export function ColorPicker({
     >
       <motion.div
         key="color-picker-content"
+        ref={paneRef}
         className="prompt-dialog"
         role="dialog"
         aria-modal="true"

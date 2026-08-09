@@ -9,7 +9,11 @@ function project(value: string, paths: string[]): string {
   return JSON.stringify(normalizeJsonMany(JSON.parse(value), paths), null, 2);
 }
 
+// Monaco locks the UI on multi-MB documents — show a capped prefix instead
+const MAX_VIEW_CHARS = 2_000_000;
+
 export function JsonResponseViewer({ value }: { value: string }) {
+  const capped = value.length > MAX_VIEW_CHARS;
   const uiFontSize = useApp((state) => state.uiFontSize);
   const editorFont = useApp((state) => state.editorFont);
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
@@ -23,16 +27,20 @@ export function JsonResponseViewer({ value }: { value: string }) {
   const [sel, setSel] = useState(-1);
 
   const known = useMemo(() => {
+    if (capped) return [];
     try { return collectPaths(JSON.parse(value)); } catch { return []; }
-  }, [value]);
+  }, [value, capped]);
   const matches = useMemo(() => rankPaths(known, draft), [known, draft]);
   const suggesting = open && matches.length > 0;
 
   const active = paths.filter((p) => enabled.has(p));
   const display = useMemo(() => {
+    if (capped) {
+      return `// response too large (${(value.length / 1_000_000).toFixed(1)} MB) — showing first ${MAX_VIEW_CHARS / 1_000_000} MB\n${value.slice(0, MAX_VIEW_CHARS)}`;
+    }
     if (!normalize || active.length === 0) return value;
     try { return project(value, active); } catch { return value; }
-  }, [value, normalize, active.join("\n")]);
+  }, [value, normalize, active.join("\n"), capped]);
 
   const addPath = () => {
     const path = draft.trim();

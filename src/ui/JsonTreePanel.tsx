@@ -4,6 +4,7 @@ import { findMarks, filterJsonFields, jsonChildPath, jsonContainerPaths, jsonFie
 import { useApp } from "../store";
 import { Icon } from "./Icon";
 import { ToolButton } from "./ToolButton";
+import { useMarkNav } from "./useMarkNav";
 import { formatNumber } from "../lib/format";
 
 interface JsonNodeProps {
@@ -151,6 +152,7 @@ export function JsonTreePanel({ value }: { value: unknown }) {
   const [query, setQuery] = useState("");
   const [caseSensitive, setCaseSensitive] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const treeRef = useRef<HTMLDivElement>(null);
 
   const isString = typeof value === "string";
   const containers = useMemo(() => (value !== null && value !== undefined && !isString ? jsonContainerPaths(value) : []), [value, isString]);
@@ -176,6 +178,9 @@ export function JsonTreePanel({ value }: { value: unknown }) {
     for (const path of forceExpand) next.delete(path);
     return next;
   }, [q, filtered, userCollapsed]);
+
+  // ⏎ steps through the marks the tree just painted, in document order
+  const nav = useMarkNav(treeRef, searchOpen && !!q, [q, caseSensitive, collapsed, value]);
 
   const toggle = (path: string) => {
     setUserCollapsed((current) => {
@@ -223,7 +228,13 @@ export function JsonTreePanel({ value }: { value: unknown }) {
         placeholder="Find in value…"
         spellCheck={false}
         onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Escape") closeSearch(); }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") closeSearch();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            nav.step(e.shiftKey ? -1 : 1);
+          }
+        }}
       />
       <button
         type="button"
@@ -233,7 +244,27 @@ export function JsonTreePanel({ value }: { value: unknown }) {
       >
         Aa
       </button>
-      <span className="match-count">{q ? `${formatNumber(filtered.length)}/${formatNumber(allFields.length)}` : ""}</span>
+      <span className="match-count">{nav.label}</span>
+      <button
+        type="button"
+        className="find-step"
+        title="Previous match (⇧↵)"
+        aria-label="Previous match"
+        disabled={!nav.count}
+        onClick={() => nav.step(-1)}
+      >
+        <Icon name="chevron-up" size={13} />
+      </button>
+      <button
+        type="button"
+        className="find-step"
+        title="Next match (↵)"
+        aria-label="Next match"
+        disabled={!nav.count}
+        onClick={() => nav.step(1)}
+      >
+        <Icon name="chevron-down" size={13} />
+      </button>
     </div>
   );
 
@@ -252,7 +283,7 @@ export function JsonTreePanel({ value }: { value: unknown }) {
             </div>
           )}
         </div>
-        <div className="json-tree-view json-tree-raw">
+        <div className="json-tree-view json-tree-raw" ref={treeRef}>
           <div className="json-tree-content">
             <div className="json-tree-line">
               <span className="json-tree-raw-text">{highlightText(text, q, caseSensitive)}</span>
@@ -307,7 +338,7 @@ export function JsonTreePanel({ value }: { value: unknown }) {
           </ToolButton>
         </div>
       </div>
-      <div className="json-tree-view" role="tree" aria-label="JSON tree">
+      <div className="json-tree-view" role="tree" aria-label="JSON tree" ref={treeRef}>
         <div className="json-tree-content">
           <JsonNode
             value={value}

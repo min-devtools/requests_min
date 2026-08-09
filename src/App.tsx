@@ -116,10 +116,16 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Monaco's own addCommand bindings (e.g. ⌘↵ in the body editor) call preventDefault
+      // before this bubbles to document — skip so we don't double-fire the same shortcut.
+      if (e.defaultPrevented) return;
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
       if (mod && key === "k") { e.preventDefault(); setCommandOpen(true); }
-      if (e.metaKey && key === "n") { e.preventDefault(); newRequestTab(); }
+      // ⌘N always. Ctrl+N only outside Monaco — inside it, Vim mode owns Ctrl+N.
+      // Dropping ctrlKey entirely would leave Windows/Linux with no New-request key.
+      const inEditor = !!(e.target as HTMLElement | null)?.closest?.(".monaco-editor");
+      if ((e.metaKey || (e.ctrlKey && !inEditor)) && key === "n") { e.preventDefault(); newRequestTab(); }
       if (mod && e.key === "Enter") {
         e.preventDefault();
         const activeTabKind = useApp.getState().tabs.find((tab) => tab.id === useApp.getState().activeTabId)?.kind;
@@ -167,7 +173,7 @@ export default function App() {
         if (next) activateTab(next.id);
       }
       if (mod && (e.key === "+" || e.key === "=")) { e.preventDefault(); useApp.getState().changeUiFontSize(1); }
-      if (mod && e.key === "-") { e.preventDefault(); useApp.getState().changeUiFontSize(-1); }
+      if (mod && (e.key === "-" || e.key === "_")) { e.preventDefault(); useApp.getState().changeUiFontSize(-1); }
       if (e.key === "Escape") setCommandOpen(false);
     };
     document.addEventListener("keydown", onKey);

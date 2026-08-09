@@ -15,9 +15,14 @@ test("Cmd/Ctrl+Enter runs the active flow and otherwise runs the active request"
   );
 });
 
-test("New request is Command+N only so Vim Ctrl+N stays available", async () => {
+test("New request takes Ctrl+N only outside Monaco so Vim Ctrl+N stays available", async () => {
   const app = await appSource();
 
-  assert.match(app, /if \(e\.metaKey && key === "n"\) \{ e\.preventDefault\(\); newRequestTab\(\); \}/);
+  assert.match(app, /const inEditor = !!\(e\.target as HTMLElement \| null\)\?\.closest\?\.\("\.monaco-editor"\)/);
+  assert.match(
+    app,
+    /if \(\(e\.metaKey \|\| \(e\.ctrlKey && !inEditor\)\) && key === "n"\) \{ e\.preventDefault\(\); newRequestTab\(\); \}/,
+  );
+  // a bare `mod` would swallow Vim's Ctrl+N inside the editor
   assert.doesNotMatch(app, /if \(mod && key === "n"\)/);
 });
